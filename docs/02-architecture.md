@@ -63,6 +63,11 @@ between a view definition and a class of bugs. RLS also maps one-to-one onto the
 Also: a paused project resumes on demand in ~1 minute, so the worst case is one slow load, not
 data loss. This must be set up in milestone 0 — do not discover it the night of a game.
 
+**Staying inside 500MB:** detailed game data is purged on a schedule and only small immutable
+result snapshots are kept forever ([03](03-data-model.md#retention-and-archiving)). A finished
+game's permanent footprint is a few hundred bytes per player, so a group playing weekly for a
+decade uses a rounding error of the free tier. The bulk — the event log — never accumulates.
+
 If the pause ever becomes a real problem, Firebase remains a viable migration; keep the data
 access behind a thin repository layer so the swap is contained.
 
@@ -90,10 +95,15 @@ no privileges of its own. Everything therefore rests on RLS. Non-negotiable rule
    has RLS off.
 2. Anonymous share-link access goes through a `SECURITY DEFINER` RPC that takes the token and
    returns the game, rather than a policy that exposes the token column to `anon`.
-3. Share tokens are 128-bit random, revocable, and never derived from the game id.
+3. Share tokens are 128-bit random, revocable, and never derived from the game id. The RPC returns
+   a different projection depending on whether the game is live or finished
+   ([03](03-data-model.md#share_links-5)).
 4. Writes are restricted to the host (see [08 Q1](08-gaps-and-open-questions.md#q1) if you want
-   players to add their own buy-ins).
-5. No service-role key anywhere in the client or in the repo.
+   players to add their own buy-ins). The one exception is the `take_over_host` RPC, which any
+   group member may call — see [03](03-data-model.md#host-takeover).
+5. Permanent result snapshots are writable by nobody: only the `finalize_game()` function, running
+   as the table owner, may insert them.
+6. No service-role key anywhere in the client or in the repo.
 
 ## Offline-first
 
@@ -111,14 +121,21 @@ Design:
 - Because mutations are **events, not state overwrites** ([03](03-data-model.md#event-sourcing)),
   two devices editing the same game concurrently merge cleanly instead of clobbering each other.
   `+1 buy-in` from two phones is unambiguous in a way that "set count = 3" is not.
-- A persistent, quiet connection indicator: `לא מחובר · 3 שינויים ממתינים`. Never a blocking
-  error dialog.
+- A **persistent sync indicator in the top corner** of every screen that touches game data —
+  synced, syncing, offline with a pending count, or failed
+  ([04](04-ux-spec.md#sync-indicator)). Never a blocking error dialog.
 - **Warn before the host closes the tab with unsynced events**, and warn on the settlement screen
   if anything is still pending.
+- Each successful push stamps `games.host_last_synced_at`. That timestamp is what the host-takeover
+  warning shows to whoever is about to seize control
+  ([04](04-ux-spec.md#host-takeover-warning)) — it is the only place in the app where another
+  person's sync state is actionable information.
 
 Ordering: events carry a client timestamp and a per-device sequence number; the server assigns
 authoritative ordering on arrival. For this domain (counters and independent row edits), exact
-global ordering doesn't affect the result.
+global ordering doesn't affect the result. This is also why a host takeover is safe: events pushed
+late by the *previous* host are still accepted and merged, because they're append-only and
+idempotent rather than state overwrites.
 
 ## Realtime
 
@@ -135,12 +152,37 @@ Fall back to polling every 15s if the WebSocket fails (some restrictive networks
 | Local DB | Dexie (IndexedDB) | Outbox + cached games |
 | PWA | `vite-plugin-pwa` (Workbox) | Service worker, offline shell, install prompt |
 | Backend SDK | `@supabase/supabase-js` | |
-| Dates | `date-fns` with `he` locale | Small; avoid dragging in a heavy i18n stack |
-| i18n | Single `he.ts` string file, no i18n library in v1 | One language; keep strings centralised so English is a later drop-in |
+| Dates | `date-fns` with per-locale imports | Small; locale swapped with the app language |
+| i18n | `i18next` + `react-i18next`, Hebrew only at launch | See below — more languages are planned, so the plumbing goes in from day one |
 | Tests | Vitest (money math), Playwright (one full game flow) | |
 
-Money is stored and computed in **agorot (integers)**, never floats. Formatted for display only.
-See [05](05-settlement.md#rounding-and-precision).
+Money is stored and computed as **integers in the currency's minor unit**, never floats, and
+formatted for display only. Nothing user-facing ever names the minor unit — the UI says shekels.
+See [03](03-data-model.md#money-representation) and
+[05](05-settlement.md#rounding-and-precision).
+
+## Internationalisation
+
+Hebrew ships first, English and others follow. That changes very little about what gets built now,
+but the few things it does change are expensive to retrofit:
+
+- **A real i18n library from day one**, not a bare object of strings. `i18next` gives
+  pluralisation (Hebrew has its own rules), interpolation, and lazy-loaded language bundles for
+  free, and costs a few kilobytes.
+- **Direction is derived from the locale.** `<html dir>` and `lang` are set at runtime; no
+  component may assume RTL, and layout uses logical properties exclusively
+  ([04](04-ux-spec.md#rtl-and-hebrew)).
+- **No string concatenation.** Every user-visible sentence is a template with named parameters, so
+  word order can differ per language.
+- **Currency and number formatting via `Intl`**, keyed on the active locale and the game's currency
+  code — never a hardcoded `₪`.
+- **Dates and relative times** through the locale-aware formatter, including the audit log's
+  timestamps.
+- A lint rule banning literal user-facing strings in components. Cheap to add now, miserable to
+  retrofit across a finished app.
+
+The share-text templates ([07](07-hebrew-glossary.md#share-text-templates)) are translatable
+resources too, not string literals in the share module.
 
 ## Repository layout
 
@@ -157,18 +199,21 @@ See [05](05-settlement.md#rounding-and-precision).
       groups/
       share/
     core/
-      money.ts       # agorot arithmetic + he-IL formatting
+      money.ts       # minor-unit integer arithmetic + Intl formatting
       settlement.ts  # pure, dependency-free, heavily tested
       events.ts      # event types + reducers (state = fold(events))
       offline/       # Dexie outbox, sync engine
     data/            # Supabase repository layer (the swappable seam)
-    i18n/he.ts
+    i18n/
+      index.ts       # i18next setup, locale → direction
+      locales/he.json
   supabase/
     migrations/      # SQL, version controlled
+    functions/       # finalize_game, purge_expired_game_data, take_over_host, share RPCs
     policies.sql
   .github/workflows/
     deploy.yml       # build + deploy to Pages
-    keepalive.yml    # anti-pause ping
+    maintenance.yml  # anti-pause ping + retention purge
 ```
 
 `core/settlement.ts` and `core/events.ts` must be pure functions with no imports from React or
@@ -177,6 +222,9 @@ Supabase. They are the parts that must be provably correct.
 ## CI/CD
 
 - `deploy.yml` — typecheck, lint, unit tests, build, deploy to Pages on default branch.
-- `keepalive.yml` — every 3 days, ping Supabase.
+- `maintenance.yml` — every 3 days: ping Supabase to stop the free project pausing, then call
+  `purge_expired_game_data()` to apply the retention policy
+  ([03](03-data-model.md#retention-and-archiving)). One cron does both jobs; no server needed.
+  It logs how many rows it deleted, so a runaway purge is visible in the Actions history.
 - Supabase URL and anon key come from repo variables at build time (public by design).
 - A migration check so the SQL in `supabase/migrations` is the single source of schema truth.
