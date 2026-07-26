@@ -41,7 +41,7 @@ symbol is hardcoded, because other currencies are expected
 |---|---|---|---|
 | Host / manager | מנהל המשחק | Creator by default; transferable | Everything: add/remove players, buy-ins, settle, end game, share, hand over management |
 | Player (registered) | שחקן | Signed-in user listed in the game | View live. Counts toward their statistics. May seize the host role in an emergency (below) |
-| Guest player | אורח | A name with no account | Appears in the game, no login. Can later claim the profile |
+| Guest player | אורח | A name with no account | Appears in the game, no login. Can ask to join a game; nothing else |
 | Viewer | צופה | Added in-app or arrived via the share link | Read-only, live |
 
 Rules:
@@ -124,8 +124,9 @@ row anatomy, interaction and states: [04 — UX spec](04-ux-spec.md#player-row-a
     e.g. `הכריש (mor_l)`. Their account identity is never overwritten, because a row that owes
     money has to be unambiguous. Statistics always follow the account, never the nickname.
 - **Duplicate names** (#9): a second `מור` becomes `מור (1)`, a third `מור (2)`. Uniqueness is per
-  game, applied to the rendered name, and the suffix goes on the *new* entry. If a guest name
-  collides with a registered player's, offer `זה אותו בן אדם?` and link them instead of suffixing.
+  game, applied to the rendered name, and the suffix goes on the *new* entry. A guest whose name
+  matches a registered player is suffixed like anyone else — the app never guesses that two rows
+  are the same person.
 - **Cash paid at the table is edited directly on the row** (#18) — tap the `💵` figure, no menu
   needed. Details in [§6.4](#64-cash-paid-at-the-table-18).
 - Add / remove players and viewers mid-game (#14). Removing a player who already has buy-ins
@@ -188,7 +189,7 @@ The share link's behaviour depends on the game's state:
 
 | Game state | What the link does |
 |---|---|
-| Live | **Joins the game as a viewer** — live, read-only, no edit path. Signed-in visitors are recorded in the viewer list so the host sees who's watching, and can be promoted to a player with one tap |
+| Live | **Joins the game as a viewer** — live, read-only, no edit path. Signed-in visitors are recorded in the viewer list so the host sees who's watching. Anyone holding the link can **request to join as a player**; only the host approves |
 | Finished | **Settlement view only** — results and the transfer list. No live controls, no audit log, no player management |
 | Purged or revoked | A plain "no longer available" page |
 
@@ -200,17 +201,23 @@ Plus:
 - **Payment shortcuts** (#23) — `wa.me` links and copy-to-clipboard. Honest constraints in
   [05](05-settlement.md#payment-links--reality-check-23).
 
-Links are unguessable, revocable and optionally expiring.
+Links carry a 256-bit token in the URL fragment, are stored only as a hash, are revocable, and
+expire on their own: **7 days for anyone outside the group, 30 days for group members**. Group
+members never lose access to their own history — after 30 days they open the game from the app,
+which needs no link. Full design: [03](03-data-model.md#link-security).
 
 ### 6.9 Accounts (#3, #21)
 
 - Google sign-in and email (magic link preferred over passwords on mobile).
 - Guests need no account (#21).
-- **Claim profile**: when a guest later signs up, the host (or the guest, via a claim link) can
-  link `אורח: רני` to the new account, and every past guest game merges into that person's
-  statistics retroactively — including games whose detailed data has already been purged, because
-  the claim targets the permanent result snapshots. Claiming is one-way and host-confirmed, so
-  nobody can absorb someone else's history by signing up with the same name.
+- **What a guest can do**: one thing only — open a share link to a live game and **ask to join**
+  (`בקש להצטרף למשחק`). Only the host can approve, and approval is what creates their row. Guests
+  never edit anything.
+- **A guest's past games do not merge into a later account.** Statistics begin when the account
+  does. This drops the "claim profile" idea from the original brief (#21) in favour of a much
+  simpler model: no retroactive rewriting of permanent results, and no question of who's allowed to
+  approve a claim two years later. Flagged in [08](08-gaps-and-open-questions.md) in case the merge
+  was actually wanted.
 
 ### 6.10 Statistics (#10, #11, #12, #24)
 
@@ -247,7 +254,10 @@ closing the app with unsynced changes, and a host takeover
 - **A "mark as paid" checkbox on transfers.** Whoever receives money won't come back into the app
   to tick a box, so the list would be permanently half-empty and would misrepresent who has
   actually settled.
-- **Multi-currency UI.** Stored properly, not exposed yet.
+- **Multi-currency UI.** Stored properly, not exposed yet. When it arrives, currency is a *label*
+  only: changing it re-labels amounts and never converts them.
+- **Chip denomination entry** (counting by colour: 5 black × 25 + 3 red × 10). Planned for later,
+  not now.
 - **Push notifications**, native app wrappers, tournament mode.
 
 ## 8. Data retention
@@ -258,8 +268,8 @@ are kept forever and keep feeding statistics, even for games that are explicitly
 | Data | Kept |
 |---|---|
 | Result snapshots (per game and per player) and the transfer list | Forever |
-| Full game detail — players, buy-ins, settings | 12 months after the game ends |
-| Activity log | 90 days after the game ends |
+| Full game detail — players, buy-ins, settings | 90 days after the game ends |
+| Activity log | 30 days after the game ends |
 
 A purged game still appears in history as a results card. Deleting a game removes the details
 immediately and keeps the statistics, and the confirmation says so in plain words. Export is
@@ -291,7 +301,7 @@ Your original numbered list, mapped to where each item is specified.
 | 18 | Cash paid at table, pay from pot | §6.4, [05](05-settlement.md#the-pot-as-a-settlement-node) |
 | 19 | Minimum-transfer settlement | [05](05-settlement.md#minimum-transfer-algorithm-19) |
 | 20 | Pot verification banner | §6.5 |
-| 21 | Guests + claim profile | §6.9 |
+| 21 | Guests + join requests | §6.9 |
 | 22 | Confirm end, reopen 24h, audit log | §6.7, §6.11 |
 | 23 | Payment links | [05](05-settlement.md#payment-links--reality-check-23) |
 | 24 | Extra statistics | [06](06-statistics.md#fun-statistics) |

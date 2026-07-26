@@ -51,7 +51,8 @@ Each is justified in the linked document.
    Security maps exactly onto the host/player/viewer model. Free projects pause after 7 days idle —
    handled by a scheduled ping. → [02](docs/02-architecture.md#database-choice)
 3. **Detail expires, results are forever.** Immutable per-game result snapshots feed every
-   statistic, so purging old data — or deleting a game outright — never changes a number.
+   statistic, so purging old data — or deleting a game outright — never changes a number. Full
+   detail lives 90 days, the activity log 30.
    → [03](docs/03-data-model.md#retention-and-archiving)
 4. **Buy-in `+` is one tap with undo, not tap-then-confirm.** The undo states the change in
    buy-ins, chips and money, and upgrades into a batch bar listing every row when several change at
@@ -67,16 +68,21 @@ Each is justified in the linked document.
    the cash on the table" falls out of the settlement algorithm with no special case.
    → [05](docs/05-settlement.md#the-pot-as-a-settlement-node)
 9. **Statistics never cross a group.** → [06](docs/06-statistics.md#scoping)
-10. **Hebrew first, built for more languages.** Real i18n plumbing from day one; direction derived
-    from the locale, currency from the game.
+10. **Writes are host-only, permanently.** Guests can do exactly one thing — ask to join a game,
+    which only the host can approve. → [03](docs/03-data-model.md#row-level-security)
+11. **Share links are 256-bit tokens, stored hashed, carried in the URL fragment**, valid 7 days
+    for anyone outside the group and 30 days for members.
+    → [03](docs/03-data-model.md#link-security)
+12. **Hebrew first, built for more languages.** Real i18n plumbing from day one; direction derived
+    from the locale, currency from the game — and currency is a label that is never converted.
     → [02](docs/02-architecture.md#internationalisation)
 
-## Still open
+## Open questions
 
-Full list in [08 Part C](docs/08-gaps-and-open-questions.md#part-c--still-open). The ones that
-change real work:
+All the substantive decisions are made. Two minor ones remain, both listed with a recommendation in
+[08 Part C](docs/08-gaps-and-open-questions.md#part-c--still-open). The full record of what's been
+decided and closed is in the same document, so nothing gets reopened by accident.
 
-- Can non-host players add their **own** buy-ins, or is the host the only writer?
-- Are the retention windows (90 days for the activity log, 12 months for full detail) right?
-- Is a nickname per game or per group?
-- Who approves a guest's profile claim when the host is long gone?
+One flag worth reading: dropping the "claim profile" feature means a guest's earlier games no longer
+merge into their account when they sign up. That was item #21 in the original brief, so it's called
+out explicitly in [08](docs/08-gaps-and-open-questions.md) in case the merge was actually wanted.

@@ -10,9 +10,11 @@ Only games that reached `finished` are ever counted.
 ## Inclusion rule (#10)
 
 A signed-in user is included wherever they have a `player_results` row carrying their `user_id` —
-i.e. being added to a game is enough; no separate opt-in. Guest rows carry no `user_id` and appear
-only inside that game, until claimed (#21), at which point the claim updates the permanent rows
-and their whole history merges retroactively.
+i.e. being added to a game is enough; no separate opt-in.
+
+Guest rows carry no `user_id` and count toward nobody's statistics, ever. If a guest later signs up,
+their earlier games stay guest games: **statistics begin when the account begins**, and permanent
+results are never rewritten after the fact.
 
 ## Scoping
 
@@ -30,9 +32,10 @@ Games with no group contribute to your personal totals only.
 A `stats_visibility = private` flag on the profile keeps someone off the group leaderboard while
 still counting them, anonymously, in table-level aggregates.
 
-**Currency:** all figures are shown in the group's currency. If a group ever mixes currencies,
-money stats are reported per currency and never summed — an exchange rate is not something this
-app should be guessing.
+**Currency is a label, not a conversion.** The app never converts between currencies and never
+fetches a rate. Amounts are summed as raw numbers and displayed with the group's current symbol. If
+a group's history spans more than one label, a single line says so —
+`המשחקים כוללים יותר ממטבע אחד — הסכומים לא הומרו` — so the total is never silently misleading.
 
 ---
 
@@ -53,7 +56,7 @@ app should be guessing.
 | Profit per hour (#24) | תשואה לשעה | `Σ net / Σ (minutes_played / 60)` — uses per-player minutes, so someone who joined for the last 40 minutes isn't measured against a 5-hour session |
 | Streak (#24) | רצף | Current consecutive games with `net > 0` (🔥) or `net < 0` (🧊), plus the all-time longest of each |
 | Average buy-ins | ממוצע קניות | `avg(buys_count)` |
-| Spent on shared costs | הוצאות משותפות | `Σ shared_costs_share_minor` — kept out of the poker figures entirely |
+| Shared costs | הוצאות משותפות | `Σ shared_costs_share_minor` — one number, kept out of the poker figures entirely. Deliberately not itemised: the stat is "you've put ₪340 into shared costs", not what it was spent on |
 
 Worked check on your example: lost ₪100 five times, won ₪100 once →
 `Σ net = −400` ✓, win rate `1/6 = 17%`, ROI `−400/600 = −67%`.
@@ -78,7 +81,7 @@ Per table / group (#11):
 - Average game duration
 - **Total unaccounted / house loss** — the accumulated 🔴 discrepancies (#20). Amusing and
   occasionally revealing
-- Total spent on shared costs
+- Total shared costs, as a single figure
 - Most common weekday, longest session
 
 ## Fun statistics

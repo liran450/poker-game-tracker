@@ -73,7 +73,10 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Retry | נסה שוב |
 | Hand over management | העבר ניהול |
 | Take over management | קח ניהול |
-| Claim profile | חבר את הפרופיל שלי |
+| Revoke link | בטל קישור |
+| New link | צור קישור חדש |
+| Request to join | בקש להצטרף למשחק |
+| Approve request | אשר בקשה |
 | Games (tab) | משחקים |
 | Statistics (tab) | סטטיסטיקה |
 | Profile (tab) | פרופיל |
@@ -90,7 +93,6 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Batch snackbar total | `סה"כ · +200 ז'יטונים · +₪100` |
 | Duplicate name (#9) | `השם כבר קיים במשחק — נוסף בתור "מור (1)"` |
 | Nickname helper | `הכינוי יוצג לצד שם המשתמש` |
-| Same person? | `זה אותו בן אדם? אפשר לחבר את האורח לחשבון קיים` |
 | Slide to end | `החלק לסיום המשחק` |
 | Players still open | `יש 2 שחקנים שעדיין לא נסגרו` |
 | Settlement incomplete | `שויך ₪430 מתוך ₪480 · חסר ₪50` |
@@ -107,6 +109,12 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Share link, live game | `כל מי שיש לו את הקישור יוכל להצטרף לצפייה בזמן אמת — בלי לערוך` |
 | Share link, finished game | `הקישור מציג את סיכום ההעברות בלבד` |
 | Link no longer valid | `הקישור כבר לא פעיל` |
+| Link expiry | `פג תוקף: 7 ימים לאורחים · 30 יום לחברי החבורה` |
+| Members keep access | `חברי החבורה תמיד יכולים לפתוח את המשחק מהאפליקציה` |
+| Join request sent | `הבקשה נשלחה למנהל המשחק` |
+| Pending requests | `2 בקשות הצטרפות` |
+| Approve / reject | `אשר` · `דחה` |
+| Mixed currencies | `המשחקים כוללים יותר ממטבע אחד — הסכומים לא הומרו` |
 | Delete game | `הנתונים המפורטים יימחקו. הסטטיסטיקה תישמר.` |
 | Log purged | `יומן הפעילות של משחק זה כבר לא זמין` |
 | Small sample | `נתונים חלקיים` |

@@ -81,10 +81,10 @@ Supabase Auth with two providers:
 
 Guests (#21) are just rows with `user_id = null` and a name. They never touch auth.
 
-**Claiming a guest profile**: host-confirmed. The guest's future account is linked to the
-existing `game_players` rows by setting `user_id`, and a `claimed_by_user_id` audit field records
-who approved it. Host confirmation matters — otherwise anyone signing up as "רני" could absorb
-someone else's history.
+**What a guest can do**: exactly one thing — open a share link and *ask to join a game*. Only the
+host can approve, and approval is what creates their player row. Guests have no write path to
+anything, and a guest's past games do not merge into a later account: statistics begin when the
+account does ([03](03-data-model.md#join_requests-21)).
 
 ## Security model
 
@@ -95,12 +95,14 @@ no privileges of its own. Everything therefore rests on RLS. Non-negotiable rule
    has RLS off.
 2. Anonymous share-link access goes through a `SECURITY DEFINER` RPC that takes the token and
    returns the game, rather than a policy that exposes the token column to `anon`.
-3. Share tokens are 128-bit random, revocable, and never derived from the game id. The RPC returns
+3. Share tokens are 256-bit random, **stored only as a SHA-256 hash**, carried in the URL
+   fragment so they never reach a server log, revocable, and never derived from the game id. They
+   expire in 7 days for anyone outside the group and 30 days for group members, and the RPC returns
    a different projection depending on whether the game is live or finished
-   ([03](03-data-model.md#share_links-5)).
-4. Writes are restricted to the host (see [08 Q1](08-gaps-and-open-questions.md#q1) if you want
-   players to add their own buy-ins). The one exception is the `take_over_host` RPC, which any
-   group member may call — see [03](03-data-model.md#host-takeover).
+   ([03](03-data-model.md#link-security)).
+4. **Writes are host-only, permanently** — not a v1 simplification. The only exceptions are two
+   narrow audited RPCs: `take_over_host`, callable by any group member, and a join request, which
+   creates nothing until the host approves it. See [03](03-data-model.md#row-level-security).
 5. Permanent result snapshots are writable by nobody: only the `finalize_game()` function, running
    as the table owner, may insert them.
 6. No service-role key anywhere in the client or in the repo.

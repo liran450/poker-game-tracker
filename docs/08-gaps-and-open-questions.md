@@ -50,9 +50,10 @@ One Screen Wake Lock API call while a game is active.
 → [04](04-ux-spec.md#cross-cutting-interaction-rules)
 
 ### A8. Share-link security and revocation
-The link must be unguessable, revocable, optionally expiring, and grant read-only access without
-exposing the underlying tables. A random token plus a `SECURITY DEFINER` RPC, not a permissive
-policy. → [03](03-data-model.md#anonymous-share-access)
+The link must be unguessable, revocable, expiring, and grant read-only access without exposing the
+underlying tables. A 256-bit token stored only as a hash, carried in the URL fragment, plus a
+`SECURITY DEFINER` RPC — not a permissive policy.
+→ [03](03-data-model.md#link-security)
 
 ### A9. Bit / PayBox deep links don't exist as a public API
 Requirement #23 can't be built as described. What can be built — `wa.me` pre-filled messages and
@@ -110,7 +111,7 @@ Listed for the design pass in [10](10-design-brief.md#states-to-design-not-just-
 
 | Your call | Where it's specified |
 |---|---|
-| **Detailed game data expires; aggregates kept forever, even for deleted games** | Three-tier retention: snapshots forever, full detail 12 months, activity log 90 days. Statistics read only from the permanent snapshots, so purging and deletion can never change a number. Purge runs on the existing cron → [03](03-data-model.md#retention-and-archiving), [01 §8](01-product-spec.md#8-data-retention) |
+| **Detailed game data expires; aggregates kept forever, even for deleted games** | Three-tier retention: snapshots forever, full detail **90 days**, activity log **30 days**. Statistics read only from the permanent snapshots, so purging and deletion can never change a number. Purge runs on the existing cron → [03](03-data-model.md#retention-and-archiving), [01 §8](01-product-spec.md#8-data-retention) |
 | **Exactly one host** | Stated as a hard rule; the co-host idea is dropped → [01 §4](01-product-spec.md#4-roles-and-permissions) |
 | **Host can be seized immediately by a signed-in group member — no 24h wait** | `take_over_host` RPC authorised by group membership, no time gate → [03](03-data-model.md#host-takeover) |
 | **Warn about sync state on takeover** | A modal showing the outgoing host's last sync time, with the copy hardening as the data gets staler → [04](04-ux-spec.md#host-takeover-warning) |
@@ -127,81 +128,54 @@ Listed for the design pass in [10](10-design-brief.md#states-to-design-not-just-
 | **Share link joins a live game; shows settlement only when finished** | Two RPCs, two viewer experiences, and link copy that changes with the game's state → [03](03-data-model.md#share_links-5), [04](04-ux-spec.md#the-viewers-experience) |
 | **Half buys / odd rates: valid but deferred** | Column reserved in the schema, out of v1, listed under deferred work → [01 §7](01-product-spec.md#7-whats-deliberately-not-in-v1) |
 | **Cash paid editable directly on the row** | Tappable `💵` figure on the row with a quick-amount sheet, no menu → [04](04-ux-spec.md#player-row-anatomy) |
+| **Only the manager can edit** | Host-only writes are now permanent, not a v1 simplification. Two narrow audited exceptions: the takeover RPC and a join request, which creates nothing until approved → [03](03-data-model.md#row-level-security) |
+| **Nobody opens a game from last year — the results card is enough** | Retention windows cut: full detail 90 days, activity log 30 days. Share links expire well before the data does → [03](03-data-model.md#retention-and-archiving) |
+| **Nickname pre-fill logic accepted** | Stored per game, pre-filled from that person's most recent nickname in the same group → [03](03-data-model.md#naming-and-nicknames) |
+| **A guest can only ask to join; the host approves** | The "claim profile" feature is removed. `join_requests` replaces `guest_claims`, and guest results never merge into a later account → [03](03-data-model.md#join_requests-21) |
+| **Announce and log a host takeover** | A banner to every device with the game open, alongside the log entry → [04](04-ux-spec.md#host-takeover-warning) |
+| **Shared costs as a plain amount in personal stats** | One figure, not itemised — "you've put ₪340 into shared costs", never what it was spent on → [06](06-statistics.md#personal-statistics-12) |
+| **Currency is semantics only; no conversion** | Changing a currency re-labels amounts and never converts them. Statistics sum raw numbers and note when a group's history spans more than one label → [03](03-data-model.md#money-representation) |
+| **Chip denominations later, not now** | Moved to deferred → [09](09-roadmap.md#explicitly-deferred) |
+| **Link security and expiry** | 256-bit token, stored only as a SHA-256 hash, carried in the URL fragment so it never reaches a server log. 7 days for anyone outside the group, 30 days for group members, one link for both → [03](03-data-model.md#link-security) |
 
 ---
 
 # Part C — Still open
 
+Everything raised in earlier rounds has now been decided. Two things remain, both of them
+consequences of the newest decisions rather than leftovers.
+
 ## Q1
-**Can non-host players write, or is the host the only editor?** *(carried over — still unanswered)*
+**Should a guest's join request be possible on a game with no share link out?**
 
-Requirement #5 says other players "can view but not edit", which the plan implements literally. The
-obvious middle ground is letting each player tap `+` on *their own* row, removing the bottleneck of
-everyone shouting at the host.
-
-My recommendation stands: build host-only first, add self-service in v2 as a per-game toggle
-(`שחקנים יכולים להוסיף קניות בעצמם`). Deciding now matters because it shapes the write policies.
+A join request currently arrives through the share link, which is the only way someone outside the
+game reaches it. That means a host who never shares a link can only add players manually — which is
+probably correct, and certainly simpler. The alternative is letting group members request to join
+any of the group's live games from their own app. Recommendation: leave it link-only for v1; add
+the in-app path if people ask.
 
 ## Q2
-**Are the retention windows right?**
+**Does anything need to happen when a share link expires while a game is still live?**
 
-The plan uses 90 days for the activity log and 12 months for full game detail, both arbitrary but
-defensible. Worth sanity-checking against how you actually use old games: do you ever open a game
-from last year, or is the results card enough after a month? Shorter windows are strictly better
-for the free tier.
+A 7-day window is far longer than a poker night, so in practice a link expires long after the game
+ends. The only odd case is a game left open for over a week. Recommendation: nothing special — the
+link dies, the host can issue a new one in one tap.
 
-Related: should the app **email or notify before the first purge**, or is the export button enough?
-The plan assumes the latter, since a notification about data deletion is alarming out of proportion
-to what's being deleted.
+---
 
-## Q3
-**Is a nickname per game, or per group?**
+## Decided and closed
 
-Currently per game — you nickname `מור` as `הכריש` in tonight's game and it doesn't stick. Per group
-would mean setting it once, which is probably what people want, at the cost of one more table.
-Recommendation: keep per-game storage, but pre-fill from the person's most recent nickname in that
-group. Cheap, and behaves like a persistent nickname without being one.
+For the record, so these don't get reopened by accident:
 
-## Q4
-**Who approves a guest claim if the host is gone or the game is purged?**
-
-Approval is host-confirmed today. For a game whose host has left the group, or whose details have
-been purged, there's no obvious approver. Options: any group owner can approve; or claims older
-than N days can be approved by any two group members. Needs a rule before the claim flow ships.
-
-## Q5
-**Should a takeover be announced to everyone, or only to the outgoing host?**
-
-The plan tells the outgoing host and writes it to the log. Announcing it to all viewers is more
-transparent and makes abuse socially expensive — relevant because a takeover is now instant and
-ungated, so the only real guardrail is visibility. Recommendation: announce it in the game, not
-just the log.
-
-## Q6
-**Do shared costs belong in personal statistics at all?**
-
-They're tracked separately and never inside poker net, which is certainly right. But should
-`הוצאות משותפות` appear as its own personal stat ("you've spent ₪340 on pizza this year"), or stay
-purely a settlement mechanic? The plan includes the stat; it's easy to drop.
-
-## Q7
-**What happens if a group changes currency?**
-
-Historical results keep their original currency, and statistics report per currency without
-summing. That's correct but could look odd. Alternative: lock a group's currency permanently once
-it has a finished game. Recommendation: lock it, and let people make a new group if they really
-need to switch.
-
-## Q8
-**Chip denominations?**
-
-Some tables count chips by colour (5 black × 25 + 3 red × 10 …). A small denomination calculator in
-the settle sheet would be faster and less error-prone at 2am, but it's a real chunk of UI. Does your
-table use multiple colours? Still unanswered from last round.
-
-## Q9
-**How long should a share link live by default?**
-
-Forever until revoked (current default), 24h after the game ends, or 7 days. Now that a finished
-game's link becomes a settlement view, "forever" is more defensible — people do look back at who
-paid whom.
+- Host-only editing — permanent, not deferred.
+- Retention: 30 days for the activity log, 90 for full detail, forever for results.
+- Nicknames: per game, pre-filled from the group.
+- Guests: request to join, host approves, no retroactive profile claiming.
+- Host takeover: instant, announced to everyone, logged.
+- Shared costs: a single amount in statistics, never itemised.
+- Currency: a label, never converted.
+- Chip denominations: later.
+- Share links: hashed 256-bit tokens in the URL fragment, 7 days outside the group, 30 inside.
+- No "mark as paid" on transfers.
+- Statistics never cross a group.
+- Non-standard buy-in amounts: deferred, column reserved.

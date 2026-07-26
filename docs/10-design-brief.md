@@ -93,6 +93,8 @@ screen, bigger.
 | Per-player reconciliation strip | אמור / בפועל / פער with colour + sign |
 | Slide-to-confirm | End-game only |
 | Takeover modal | Shows the outgoing host's sync state; the tone escalates green → amber → red with staleness |
+| Announcement banner | Non-blocking, for "X took over the game" |
+| Join request row | Name + `אשר` / `דחה`, in the host's pending-requests sheet |
 | Destructive confirm | Used for delete-game, which must explain that statistics survive |
 | Audit log drawer | Grab handle, expandable, filter chips, live entries |
 | Stat hero number | Large signed value with a label and sample size |
@@ -122,7 +124,10 @@ Specific ones that matter:
   open, since links get read after everyone's gone home
 - Statistics with fewer than 5 games (`נתונים חלקיים`)
 - Offline with pending changes, and the failed-sync state
-- Host takeover modal at each sync-staleness level
+- Host takeover modal at each sync-staleness level, and the announcement banner everyone else sees
+- Join request: the guest's single-button state, the "sent" state, and the host's pending-requests
+  sheet
+- Share sheet showing the two expiry windows without turning into a paragraph of legalese
 - A finished game past its 24h reopen window
 - **An archived game whose details were purged** — results card only, no audit log
 

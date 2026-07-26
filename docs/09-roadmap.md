@@ -58,10 +58,11 @@ stopping point if energy runs out.
 - Cloud sync, conflict-free merge, real sync indicator, `host_last_synced_at`
 - `finalize_game()` persisting snapshots; local-only games from M1/M2 upload their snapshots on
   first sign-in
-- Share links: live mode (join as viewer) and finished mode (settlement view), revocation
+- Share links: 256-bit hashed tokens in the URL fragment, 7/30-day windows, live mode (join as
+  viewer) and finished mode (settlement view), revocation and rotation
 - Realtime for viewers; in-app viewer list
 - Hand over management, and **immediate host takeover with the sync warning**
-- Guests + claim flow
+- Guest join requests: request from the share link, host-only approval
 - Nicknames for registered players
 
 ### M4 — Groups, statistics, retention
@@ -80,12 +81,14 @@ ever lost in the meantime.
 - `wa.me` shortcuts, copy-to-clipboard everywhere
 - Data export refinements
 - Duplicate-last-game
-- Denomination calculator, if [Q8](08-gaps-and-open-questions.md#q8) comes back yes
+- Nickname pre-fill from the player's most recent nickname in the group
 
 ### Explicitly deferred
 Non-standard / half buy-ins · multi-currency UI · push notifications · native wrapper · tournament
-mode · blind timer · self-service buy-ins ([Q1](08-gaps-and-open-questions.md#q1)) · additional
-languages beyond the plumbing · "mark as paid" (dropped for good, not deferred)
+mode · blind timer · chip denomination entry · additional languages beyond the plumbing
+
+Dropped for good, not deferred: **"mark as paid"** on transfers, and **retroactive guest-profile
+claiming**. Non-host editing is not deferred either — writes are host-only by design.
 
 ## Testing
 
@@ -98,7 +101,7 @@ languages beyond the plumbing · "mark as paid" (dropped for good, not deferred)
 | Offline sync | Vitest | Duplicate `client_event_id` is a no-op; out-of-order arrival converges; **events pushed by a deposed host are still accepted** |
 | Snapshots & retention | SQL + Vitest | `finalize_game` is idempotent across reopen/re-end; **statistics are byte-identical before and after `purge_expired_game_data()` and after an explicit game deletion**; purge refuses to run without a snapshot |
 | Statistics | Vitest | Hand-computed fixtures, especially the win-rate zero-exclusion and profit-per-hour with late joiners |
-| RLS | SQL test suite | Each role against each table, including both anonymous share paths — **a non-host cannot write, a revoked token returns nothing, a non-group-member cannot take over host, nobody can insert into the snapshot tables** |
+| RLS | SQL test suite | Each role against each table, including both anonymous share paths — **a non-host cannot write, a revoked or expired token returns nothing, the 7-day window applies to non-members and the 30-day one to members, a non-group-member cannot take over host, nobody can insert into the snapshot tables, and every rejection returns the same generic shape** |
 | Flow | Playwright | One full game: create → 4 players → buy-ins → shared cost → settle → end → transfers → share text |
 | i18n | Lint + snapshot | No literal user-facing strings; every screen renders with a pseudo-locale that is LTR and 40% longer, to catch RTL and truncation assumptions early |
 | Devices | Manual | iOS Safari and Android Chrome, installed and in-browser, in airplane mode |
@@ -116,7 +119,7 @@ irreversible — it deletes rows nobody can get back — so it gets the same tre
 | Supabase changes its free tier | Migration needed | Repository layer isolates data access; Firebase is the documented fallback |
 | iOS clears IndexedDB | Unsynced local game lost | Sync eagerly, warn on unsynced data, prompt Home Screen install |
 | Settlement bug | Someone pays the wrong amount | Property-based tests; the balance banner and per-player over/under column make errors visible before anyone sends money |
-| **Host takeover used carelessly** | Confusion over who's in control mid-game | The sync warning, a prominent log entry, and an in-game announcement ([Q5](08-gaps-and-open-questions.md#q5)); late events from the old host are still merged, so nothing is lost |
+| **Host takeover used carelessly** | Confusion over who's in control mid-game | The sync warning, a prominent log entry, and an announcement banner to everyone with the game open; late events from the old host are still merged, so nothing is lost |
 | Bidi rendering bugs in shared text | Looks unprofessional, amounts misread | Single `<Money>` component, LRI/PDI in exported text, test on real WhatsApp |
 | Scope creep from the statistics page | v1 never ships | Statistics are M4; M2 is a complete product without them |
 | Nobody uses it because the host has to be on their phone all night | The real product risk | M1's one-tap buy-in is the entire answer; validate it at a real game before M2 |

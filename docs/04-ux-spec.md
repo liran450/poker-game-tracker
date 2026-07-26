@@ -223,6 +223,10 @@ A registered player's real identity is never overwritten — this is a game abou
 person behind a row has to stay unambiguous. Clearing the nickname reverts to their display name.
 Statistics always use the account, never the nickname.
 
+The nickname field is **pre-filled from that person's most recent nickname in the same group**, so
+`הכריש` set once reappears every Thursday without being a separate thing to manage. Changing it
+affects tonight only.
+
 Commit on blur (on a phone, tapping elsewhere means "done", not "cancel"); Escape or the back
 gesture reverts. Duplicate rendered names get the `(1)` suffix on commit, with a brief toast
 explaining it (#9).
@@ -349,10 +353,14 @@ The last-sync line is the whole point of the modal, and it changes tone with the
 - Stale → amber, and the copy hardens: `יש שינויים שלא סונכרנו — מומלץ לחכות אם אפשר`.
 - Unknown → red, and the confirm button requires a second tap.
 
-The previous host's device, when it reconnects, shows a non-blocking banner:
-`אורי לקח את ניהול המשחק`. Their unsynced changes are still accepted on arrival — the event log is
-append-only and idempotent — so the warning is about the case where their phone never comes back,
-not about routine handover.
+A takeover is **announced to everyone**, not just written to the log: every device with the game
+open — players, viewers, and the outgoing host when it reconnects — shows a non-blocking banner
+`אורי לקח את ניהול המשחק`, alongside the log entry. Since the action is instant and ungated,
+visibility is the guardrail.
+
+The outgoing host's unsynced changes are still accepted on arrival — the event log is append-only
+and idempotent — so the warning is about the case where their phone never comes back, not about
+routine handover.
 
 ---
 
@@ -392,13 +400,18 @@ Then the settlement screen, fully specified in [05 — Settlement](05-settlement
 
 `שיתוף` opens a sheet with three sections:
 
-1. **Live link** — `העתק קישור` / `שתף`, plus the state: `הקישור פעיל · 3 צופים`, and
-   `בטל קישור`. Explicit about what the link grants, and the wording changes with the game's status:
+1. **Live link** — `העתק קישור` / `שתף`, plus the state: `הקישור פעיל · 3 צופים`,
+   `בטל קישור` and `צור קישור חדש`. Explicit about what the link grants, and the wording changes
+   with the game's status:
    - Live game: `כל מי שיש לו את הקישור יוכל להצטרף לצפייה בזמן אמת — בלי לערוך`
    - Finished game: `הקישור מציג את סיכום ההעברות בלבד`
-2. **Viewers** — the in-app list, add from group members, remove with a swipe. Anyone who joined
-   via the link appears here automatically with a `הצטרף בקישור` caption, so the host always knows
-   who's watching.
+
+   Under it, the expiry, stated plainly because two windows need explaining once:
+   `פג תוקף: 7 ימים לאורחים · 30 יום לחברי החבורה`. Members are reassured they aren't locked out:
+   `חברי החבורה תמיד יכולים לפתוח את המשחק מהאפליקציה`.
+2. **Viewers** — the in-app list, add from group members, remove with a swipe. Anyone who opened
+   the link while signed in appears here automatically with a `הצטרף בקישור` caption, so the host
+   always knows who's watching.
 3. **Text** — `שתף כטקסט` with a live preview of exactly what will be sent (#8), because people
    want to know what they're pasting into a group chat.
 
@@ -407,8 +420,14 @@ Then the settlement screen, fully specified in [05 — Settlement](05-settlement
 **Live game.** The same game page, live, with every control removed rather than disabled — no ghost
 `+` buttons, no `⋯` on rows. A banner at the top: `צפייה בלבד`. If the viewer is signed in and is a
 player in this game, their row is highlighted and their running result is pinned, since that's the
-only number they care about. A signed-in viewer who arrives by link is recorded so the host can
-promote them to a player with one tap.
+only number they care about.
+
+Anyone holding the link — signed in or not — gets one action and one only: **`בקש להצטרף למשחק`**,
+a single button in the bottom bar. It asks for the name they want at the table and then goes quiet
+(`הבקשה נשלחה למנהל המשחק`). Nothing appears in the game until the host approves. On the host's
+side, a badge on the action bar shows pending requests; tapping it opens a sheet with
+`אשר` / `דחה` per request. Approving creates the player row; rejecting is silent to everyone else.
+This is the entire extent of what a guest can do.
 
 **Finished game.** A different, simpler screen: results and the transfer list only. No player
 management, no audit log, no live controls — just `מי מעביר למי`, with tap-to-copy amounts and a
@@ -434,6 +453,8 @@ belongs to more than one.
 - Every rate shows its sample size: `62% (13 משחקים)`. Suppress rates under 5 games and show
   `נתונים חלקיים` instead — a 100% win rate from one game is a lie.
 - Leaderboards let you switch the sort metric via chips, rather than tiny column headers.
+- If a group's history spans more than one currency label, one quiet line says so rather than
+  hiding the totals: `המשחקים כוללים יותר ממטבע אחד — הסכומים לא הומרו`. The app never converts.
 - Fun stats ([06](06-statistics.md#fun-statistics)) as a row of cards — these are the ones people
   screenshot into the group chat, so they should look good on their own.
 

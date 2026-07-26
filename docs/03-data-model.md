@@ -12,6 +12,13 @@ currencies are coming later. **Nothing user-facing ever says "minor units" or "a
 share text and these documents speak in the currency's own name: shekels, dollars.
 See [07](07-hebrew-glossary.md#formatting-conventions).
 
+**Currency is a label, not a conversion.** Changing a game's or a group's currency changes the
+symbol and nothing else — `5000` stays `5000`, it just reads as `$50` instead of `₪50`. The app
+never converts between currencies and never fetches an exchange rate. A game keeps the label it was
+played under; statistics sum the raw numbers and display them in the group's current label, with a
+one-line note if a group's history spans more than one
+([06](06-statistics.md#scoping)).
+
 ## Event sourcing
 
 Every mutation to a live game is an append-only row in `game_events`. Current state is a fold
@@ -139,10 +146,24 @@ Renaming a registered player therefore never overwrites their identity; it decor
 username stays visible so nobody can be misrepresented in a game that involves money. Statistics
 always key off the profile, never the nickname.
 
+**Nicknames are stored per game but behave as if they persist.** When a player is added, the
+nickname field is pre-filled from that person's most recent nickname *in the same group*. Set
+`הכריש` once and it reappears every Thursday; change it for one night and only that night changes.
+This gets the ergonomics of a persistent nickname with no extra table and no cross-game write.
+
+```sql
+-- pre-fill on player_added
+select nickname from game_players gp
+join games g on g.id = gp.game_id
+where gp.user_id = $user and g.group_id = $group and gp.nickname is not null
+order by g.played_on desc limit 1;
+```
+
 **Duplicates (#9)** apply to the rendered name: a second `מור` becomes `מור (1)`, a third
 `מור (2)`. The suffix goes on the *new* entry. Two registered users with the same display name
-disambiguate naturally via the username as soon as either is nicknamed. If a guest name collides
-with a registered player's name, offer `זה אותו בן אדם?` and link instead of suffixing.
+disambiguate naturally via the username as soon as either is nicknamed. A guest name that collides
+with a registered player's name is suffixed like any other duplicate — the app does not try to
+guess that they're the same person.
 
 ### `game_events`
 Append-only. The source of truth for a live game.
@@ -169,6 +190,7 @@ chips_set           player_settled       player_reopened
 shared_cost_added   shared_cost_removed  shared_cost_updated
 game_started        game_settling        game_ended           game_reopened
 host_changed        host_taken_over      viewer_added         viewer_removed
+join_requested      join_approved        join_rejected
 unaccounted_set     transfer_edited      note
 ```
 
@@ -227,11 +249,53 @@ checklist is worse than none.
 |---|---|---|
 | `id` | uuid PK | |
 | `game_id` | uuid → games | |
-| `token` | text unique | 128-bit random, URL-safe |
+| `token_hash` | bytea unique | **SHA-256 of the token. The token itself is never stored** |
+| `token_prefix` | text | First 6 chars, so the host can tell two links apart in the UI |
 | `created_by` | uuid | |
-| `expires_at` | timestamptz NULL | |
+| `created_at` | timestamptz | Expiry is measured from here |
 | `revoked_at` | timestamptz NULL | |
 | `last_viewed_at` | timestamptz NULL | |
+| `view_count` | int | Shown to the host as `3 צופים` |
+
+#### Link security
+
+The requirement is that a link must not be guessable and must not simply be a game id. The design:
+
+- **256-bit token** from a CSPRNG, base64url-encoded to 43 characters. Not derived from the game
+  id, not sequential, not a UUID (UUIDv4 gives 122 bits; there's no reason to settle for that
+  here).
+- **Only a SHA-256 hash is stored.** Lookup is by hash, so a database leak — or a careless
+  screenshot of a table — yields nothing usable. The plaintext token exists only in the URL the
+  host copied.
+- **The token lives in the URL fragment**, not the query string: `…/#/s/<token>`. Fragments are
+  never sent to the server, never appear in access logs, and are stripped from `Referer` headers.
+  The app already uses a hash router ([02](02-architecture.md#hosting-details)), so this costs
+  nothing.
+- **Revocable and rotatable.** `בטל קישור` kills it; `צור קישור חדש` issues a fresh token and
+  invalidates the old one. Both are one tap in the share sheet.
+- **Failed-lookup throttling** in the RPC — after a handful of bad tokens from the same caller,
+  back off. Brute-forcing 256 bits is not a real threat; this just keeps enumeration noise out of
+  the logs.
+- The token never appears in a page title, an analytics event, or the share-text preview.
+
+#### Link lifetime
+
+One token, two lifetimes, evaluated at request time by who is asking:
+
+| Who's opening it | Link works for |
+|---|---|
+| Anonymous, or a signed-in user who is not in the game's group | **7 days** from creation |
+| Signed-in member of the game's group | **30 days** from creation |
+
+This is deliberately a single link rather than two — the host shares one URL into one WhatsApp
+group, and each recipient gets the window appropriate to them. Enforcement is server-side in the
+RPC, never in the client.
+
+Group members are never actually cut off from their own history: after 30 days they open the game
+from the app's history list, which needs no link at all. The expiry only closes the door on people
+outside the group.
+
+Expired and revoked links are deleted by the maintenance cron.
 
 **What the link does depends on the game's status:**
 
@@ -241,18 +305,35 @@ checklist is worse than none.
 | `finished` | **Settlement view only.** Results and the transfer list, nothing else — no live controls, no audit log, no player management |
 | purged or deleted | A results-only archive card, or a plain "this game is no longer available" |
 
-### `guest_claims` (#21)
+### `join_requests` (#21)
+
+The only thing a guest can actively do: **ask to join a game**. Only the host can approve.
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
-| `game_player_id` | uuid → game_players NULL | NULL once the live row has been purged |
-| `player_result_id` | uuid → player_results | The permanent target of the claim |
-| `claimant_user_id` | uuid → profiles | |
-| `approved_by` | uuid NULL | Host who approved |
+| `game_id` | uuid → games | |
+| `user_id` | uuid → profiles NULL | Set when the requester is signed in |
+| `requested_name` | text | What they want to be called at the table |
 | `status` | enum(`pending`,`approved`,`rejected`) | |
+| `decided_by` | uuid NULL | The host who decided |
+| `created_at`, `decided_at` | timestamptz | |
 
-Approval sets `user_id` on both the live row (if it still exists) and the permanent
-`player_results` row, so claiming works even for games whose details are long gone.
+Flow: someone opens the share link for a live game → `בקש להצטרף למשחק` → the host sees a badge on
+the game page and approves or rejects from a sheet. Approval creates a `game_players` row (with
+`user_id` if they were signed in, otherwise a guest row). Rejection is silent to everyone but the
+requester. Every decision is an event, so it shows in the audit log.
+
+Guests still cannot edit anything, ever — a guest who joins is a player row on someone else's
+screen, not an editor. Writes remain host-only
+([RLS](#row-level-security)).
+
+> **Note on a dropped feature.** The original brief (#21) also asked for a "claim profile / link
+> guest" button so a guest's past games would merge into their statistics once they signed up. That
+> is now out: guest rows stay guest rows, and a person's statistics start when their account starts.
+> This simplifies the model considerably — no retroactive rewriting of permanent results, and no
+> question of who's allowed to approve a claim years later. Flagging it because it was an explicit
+> item in the original list; say the word if the merge was wanted after all.
 
 ---
 
@@ -285,8 +366,8 @@ One immutable row per player per finished game.
 | `id` | uuid PK | |
 | `game_id` | uuid → game_summaries | |
 | `group_id` | uuid NULL | Denormalised so statistics never join a purged table |
-| `user_id` | uuid → profiles NULL | NULL for an unclaimed guest; set retroactively on claim |
-| `guest_name` | text NULL | Retained so a guest stays recognisable and claimable |
+| `user_id` | uuid → profiles NULL | NULL for a guest. Never backfilled — guest results stay guest results |
+| `guest_name` | text NULL | Retained so the row still reads correctly years later |
 | `display_name` | text | The name as rendered on the night |
 | `buys_count` | int | |
 | `owed_minor` | int | |
@@ -294,7 +375,7 @@ One immutable row per player per finished game.
 | `chips_final` | int | |
 | `cash_out_minor` | int | |
 | `net_minor` | int | **Poker result only** — excludes shared costs |
-| `shared_costs_share_minor` | int | Separate, for a "what the pizza cost me" stat |
+| `shared_costs_share_minor` | int | A single amount. Statistics report the total, not what it was spent on |
 | `minutes_played` | int | From `joined_at` / `left_at`, for profit-per-hour |
 | `settled_position` | int NULL | Order of settling that night |
 
@@ -325,8 +406,13 @@ and never from the live ones.
 | Tier | Data | Kept for | Why |
 |---|---|---|---|
 | 1 | `game_summaries`, `player_results`, `transfer_summaries` | **Forever** | The statistics substrate. Tiny — a few hundred bytes per player-game |
-| 2 | `games`, `game_players`, `transfers`, `shared_costs` | 12 months after `finished_at` | Lets you open an old game in full and re-share its settlement |
-| 3 | `game_events` | 90 days after `finished_at` | The audit log only matters while an argument is still live, and it's ~90% of the row count |
+| 2 | `games`, `game_players`, `transfers`, `shared_costs` | **90 days** after `finished_at` | Long enough for any real dispute; nobody opens a game from last year |
+| 3 | `game_events` | **30 days** after `finished_at` | The audit log only matters while an argument is still live, and it's ~90% of the row count |
+
+These windows are short on purpose. The results card carries everything anyone actually looks back
+at — date, players, results, who paid whom — so keeping the raw detail beyond a season buys nothing
+and costs the free tier. Share links expire well before tier 2 does (30 days at most), so no link
+ever outlives the data behind it.
 
 Rules:
 
@@ -390,7 +476,12 @@ can_read_game(game_id)      -- host or player or viewer
 | `profiles` | `username`, `display_name`, `avatar_url` readable to co-members of a shared group; everything else self-only | self |
 | `groups`, `group_members` | members | `owner` |
 | `player_results`, `game_summaries`, `transfer_summaries` | `is_group_member(group_id)`, or self for group-less games | **Nobody.** Written only by `finalize_game()` |
-| `guest_claims` | claimant + host | claimant inserts, host approves |
+| `join_requests` | requester + host | requester inserts (via the share-link RPC); **only the host** may decide |
+
+**Writes are host-only, permanently.** Not a v1 simplification to be relaxed later — one person
+holds the pen for the whole night. Players and viewers have no write path to any game table, and
+the only two exceptions are narrow, audited RPCs: `take_over_host` (below) and a join request,
+which creates nothing until the host approves it.
 
 ### Host takeover
 
@@ -413,17 +504,30 @@ together with the host's last sync time from `host_last_synced_at`
 accepted** — they're append-only and idempotent, so nothing is lost provided their phone
 eventually reconnects. The warning exists because they might never reconnect.
 
+A takeover is **announced, not just logged**: everyone with the game open — players, viewers and
+the outgoing host — gets a banner naming who took control, alongside the `host_taken_over` log
+entry. The action is instant and ungated, so visibility is the guardrail.
+
 ### Anonymous share access
 
-No table policy. One RPC per mode, both `SECURITY DEFINER`:
+No table policy. One RPC per mode, both `SECURITY DEFINER`, both taking the plaintext token and
+looking it up by `sha256(token)`:
 
-- `get_shared_game(token)` — live games. Validates the token, stamps `last_viewed_at`, returns a
-  read-only projection: header, players, results, activity. If the caller is signed in, it also
-  inserts them into `game_viewers`.
-- `get_shared_settlement(token)` — finished games. Returns results and transfers only, sourced
-  from `transfer_summaries` so it keeps working after the live rows are purged.
+1. Hash the token; find the link; reject if missing, revoked, or past the caller's window
+   (7 days for anyone outside the group, 30 for a group member — see
+   [Link lifetime](#link-lifetime)).
+2. Stamp `last_viewed_at`, bump `view_count`.
+3. Return the projection for the game's status.
 
-Anonymous clients never get direct table access, so there is no policy to get wrong.
+- `get_shared_game(token)` — live games. Read-only projection: header, players, results, activity.
+  A signed-in caller is also inserted into `game_viewers` so the host sees who's watching, and may
+  submit a `join_requests` row.
+- `get_shared_settlement(token)` — finished games. Results and transfers only, sourced from
+  `transfer_summaries` so it keeps working after the live rows are purged.
+
+Anonymous clients never get direct table access, so there is no policy to get wrong. Every rejection
+returns the same generic "not available" shape regardless of cause — expired, revoked, wrong token
+or no such game — so the RPC can't be used to probe which game ids exist.
 
 Log immutability is enforced with a rule denying `update`/`delete` on `game_events` to all roles
 including the host. Undo appends; it does not erase. Only `purge_expired_game_data()`, running as
