@@ -113,6 +113,10 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Members keep access | `חברי החבורה תמיד יכולים לפתוח את המשחק מהאפליקציה` |
 | Join request sent | `הבקשה נשלחה למנהל המשחק` |
 | Pending requests | `2 בקשות הצטרפות` |
+| Request source, member | `חבר בחבורה` |
+| Request source, link | `הצטרף בקישור` |
+| Approve as | `אשר כשחקן` · `אשר כצופה` |
+| Group live game card | `משחק פעיל בחבורה` |
 | Approve / reject | `אשר` · `דחה` |
 | Mixed currencies | `המשחקים כוללים יותר ממטבע אחד — הסכומים לא הומרו` |
 | Delete game | `הנתונים המפורטים יימחקו. הסטטיסטיקה תישמר.` |

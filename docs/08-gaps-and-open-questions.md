@@ -137,45 +137,54 @@ Listed for the design pass in [10](10-design-brief.md#states-to-design-not-just-
 | **Currency is semantics only; no conversion** | Changing a currency re-labels amounts and never converts them. Statistics sum raw numbers and note when a group's history spans more than one label → [03](03-data-model.md#money-representation) |
 | **Chip denominations later, not now** | Moved to deferred → [09](09-roadmap.md#explicitly-deferred) |
 | **Link security and expiry** | 256-bit token, stored only as a SHA-256 hash, carried in the URL fragment so it never reaches a server log. 7 days for anyone outside the group, 30 days for group members, one link for both → [03](03-data-model.md#link-security) |
+| **Group members can request to join from the app; outsiders only via a link. The host approves either way** | One `join_requests` table, two entry paths, one approval gate. A slim `get_group_live_games()` projection lets members see a game exists without reading it → [03](03-data-model.md#two-paths-in-one-gate), [04](04-ux-spec.md#the-viewers-experience) |
+| **A link expiring on a live game needs no special handling** | The link dies; the host issues a new one in one tap → [03](03-data-model.md#link-lifetime) |
 
 ---
 
-# Part C — Still open
+# Part C — Nothing open
 
-Everything raised in earlier rounds has now been decided. Two things remain, both of them
-consequences of the newest decisions rather than leftovers.
+Every question raised across the three review rounds has been answered. The plan is complete enough
+to hand to design and then to implementation.
 
-## Q1
-**Should a guest's join request be possible on a game with no share link out?**
+The one thing worth a second look before building, because it removes a feature from the original
+brief rather than adding one:
 
-A join request currently arrives through the share link, which is the only way someone outside the
-game reaches it. That means a host who never shares a link can only add players manually — which is
-probably correct, and certainly simpler. The alternative is letting group members request to join
-any of the group's live games from their own app. Recommendation: leave it link-only for v1; add
-the in-app path if people ask.
-
-## Q2
-**Does anything need to happen when a share link expires while a game is still live?**
-
-A 7-day window is far longer than a poker night, so in practice a link expires long after the game
-ends. The only odd case is a game left open for over a week. Recommendation: nothing special — the
-link dies, the host can issue a new one in one tap.
+> **Dropping "claim profile" (original brief #21).** A guest's earlier games no longer merge into
+> their statistics when they later sign up — statistics begin when the account begins. This came out
+> of defining a guest's abilities as "ask to join, host approves, nothing else", and it simplifies
+> the model considerably: no retroactive rewriting of permanent results, and no question of who may
+> approve a claim years later. Easy to add back if that wasn't the intent.
 
 ---
 
 ## Decided and closed
 
-For the record, so these don't get reopened by accident:
+The full record, so none of this gets reopened by accident.
 
-- Host-only editing — permanent, not deferred.
+**Permissions**
+- Host-only editing — permanent, not deferred. Exactly one host at a time.
+- Host takeover is instant for any group member, announced to everyone with the game open, logged.
+- Nobody joins a game without the host approving. Group members ask from the app; everyone else asks
+  through the share link.
+- Guests: request to join, and nothing else. No retroactive profile claiming.
+
+**Data**
 - Retention: 30 days for the activity log, 90 for full detail, forever for results.
-- Nicknames: per game, pre-filled from the group.
-- Guests: request to join, host approves, no retroactive profile claiming.
-- Host takeover: instant, announced to everyone, logged.
-- Shared costs: a single amount in statistics, never itemised.
-- Currency: a label, never converted.
-- Chip denominations: later.
-- Share links: hashed 256-bit tokens in the URL fragment, 7 days outside the group, 30 inside.
-- No "mark as paid" on transfers.
+- Deleting a game keeps its statistics.
 - Statistics never cross a group.
+- Shared costs appear as a single amount, never itemised.
+- Currency is a display label, never converted.
+
+**Sharing**
+- 256-bit tokens, stored hashed, carried in the URL fragment.
+- 7 days outside the group, 30 days inside. Revocable and rotatable.
+- An expired link on a live game needs no special handling — issue a new one.
+- Live link opens the game read-only; a finished game's link shows the settlement only.
+
+**Product**
+- Nicknames: per game, pre-filled from the group.
+- No "mark as paid" on transfers.
 - Non-standard buy-in amounts: deferred, column reserved.
+- Chip denomination entry: deferred.
+- Multi-currency UI: deferred.

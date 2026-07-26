@@ -41,7 +41,7 @@ symbol is hardcoded, because other currencies are expected
 |---|---|---|---|
 | Host / manager | מנהל המשחק | Creator by default; transferable | Everything: add/remove players, buy-ins, settle, end game, share, hand over management |
 | Player (registered) | שחקן | Signed-in user listed in the game | View live. Counts toward their statistics. May seize the host role in an emergency (below) |
-| Guest player | אורח | A name with no account | Appears in the game, no login. Can ask to join a game; nothing else |
+| Guest player | אורח | A name with no account | Appears in the game, no login. Can ask to join via a share link; nothing else |
 | Viewer | צופה | Added in-app or arrived via the share link | Read-only, live |
 
 Rules:
@@ -189,7 +189,7 @@ The share link's behaviour depends on the game's state:
 
 | Game state | What the link does |
 |---|---|
-| Live | **Joins the game as a viewer** — live, read-only, no edit path. Signed-in visitors are recorded in the viewer list so the host sees who's watching. Anyone holding the link can **request to join as a player**; only the host approves |
+| Live | **Opens the game read-only**, live, with no edit path. Signed-in visitors are recorded in the viewer list so the host sees who's watching. Anyone holding the link can **request to join**; only the host approves. This is the only way in for someone outside the group |
 | Finished | **Settlement view only** — results and the transfer list. No live controls, no audit log, no player management |
 | Purged or revoked | A plain "no longer available" page |
 
@@ -210,9 +210,13 @@ which needs no link. Full design: [03](03-data-model.md#link-security).
 
 - Google sign-in and email (magic link preferred over passwords on mobile).
 - Guests need no account (#21).
-- **What a guest can do**: one thing only — open a share link to a live game and **ask to join**
-  (`בקש להצטרף למשחק`). Only the host can approve, and approval is what creates their row. Guests
-  never edit anything.
+- **Joining a game always needs the host's approval**, whichever way the request arrives:
+  - **Group members** see their group's live games in the app — a thin card with the name, host and
+    player count, nothing inside — and can tap `בקש להצטרף` without needing a link.
+  - **Everyone else** can only ask by opening the share link.
+
+  Both land in the same pending-requests list, and the host approves each one as a player or a
+  viewer. Approval is what creates the row; nobody appears in a game uninvited.
 - **A guest's past games do not merge into a later account.** Statistics begin when the account
   does. This drops the "claim profile" idea from the original brief (#21) in favour of a much
   simpler model: no retroactive rewriting of permanent results, and no question of who's allowed to

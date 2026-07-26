@@ -68,8 +68,9 @@ Each is justified in the linked document.
    the cash on the table" falls out of the settlement algorithm with no special case.
    → [05](docs/05-settlement.md#the-pot-as-a-settlement-node)
 9. **Statistics never cross a group.** → [06](docs/06-statistics.md#scoping)
-10. **Writes are host-only, permanently.** Guests can do exactly one thing — ask to join a game,
-    which only the host can approve. → [03](docs/03-data-model.md#row-level-security)
+10. **Writes are host-only, permanently**, and nobody joins a game without the host approving —
+    group members ask from the app, everyone else through the share link.
+    → [03](docs/03-data-model.md#two-paths-in-one-gate)
 11. **Share links are 256-bit tokens, stored hashed, carried in the URL fragment**, valid 7 days
     for anyone outside the group and 30 days for members.
     → [03](docs/03-data-model.md#link-security)
@@ -79,10 +80,11 @@ Each is justified in the linked document.
 
 ## Open questions
 
-All the substantive decisions are made. Two minor ones remain, both listed with a recommendation in
-[08 Part C](docs/08-gaps-and-open-questions.md#part-c--still-open). The full record of what's been
-decided and closed is in the same document, so nothing gets reopened by accident.
+None. Every question raised across three review rounds has been answered, and the full record is in
+[08 Part C](docs/08-gaps-and-open-questions.md#part-c--nothing-open) so nothing gets reopened by
+accident. The plan is ready for the design pass.
 
-One flag worth reading: dropping the "claim profile" feature means a guest's earlier games no longer
-merge into their account when they sign up. That was item #21 in the original brief, so it's called
-out explicitly in [08](docs/08-gaps-and-open-questions.md) in case the merge was actually wanted.
+One flag worth reading before building: dropping the "claim profile" feature means a guest's earlier
+games no longer merge into their account when they sign up. That was item #21 in the original brief,
+so it's called out explicitly in [08](docs/08-gaps-and-open-questions.md#part-c--nothing-open) in
+case the merge was actually wanted.

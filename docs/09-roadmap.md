@@ -62,7 +62,8 @@ stopping point if energy runs out.
   viewer) and finished mode (settlement view), revocation and rotation
 - Realtime for viewers; in-app viewer list
 - Hand over management, and **immediate host takeover with the sync warning**
-- Guest join requests: request from the share link, host-only approval
+- Join requests, host-approved either way: group members ask from the app via a slim lobby
+  projection, everyone else via the share link
 - Nicknames for registered players
 
 ### M4 — Groups, statistics, retention

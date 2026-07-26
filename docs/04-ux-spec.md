@@ -424,10 +424,33 @@ only number they care about.
 
 Anyone holding the link — signed in or not — gets one action and one only: **`בקש להצטרף למשחק`**,
 a single button in the bottom bar. It asks for the name they want at the table and then goes quiet
-(`הבקשה נשלחה למנהל המשחק`). Nothing appears in the game until the host approves. On the host's
-side, a badge on the action bar shows pending requests; tapping it opens a sheet with
-`אשר` / `דחה` per request. Approving creates the player row; rejecting is silent to everyone else.
-This is the entire extent of what a guest can do.
+(`הבקשה נשלחה למנהל המשחק`). Nothing appears in the game until the host approves.
+
+**Group members don't need a link.** A live game in their group shows up in their own app as a slim
+card — game name, host, player count, elapsed time, and nothing inside it — with the same
+`בקש להצטרף` button. Same request, same approval, no URL to pass around. Someone outside the group
+has only the link path.
+
+**On the host's side**, a badge on the action bar shows pending requests. Tapping it opens a sheet,
+one row per request:
+
+```
+┌──────────────────────────────────────────────┐
+│  רני                            [ דחה ] [ אשר ] │
+│  חבר בחבורה · לפני דקה                        │
+└──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│  דנה                            [ דחה ] [ אשר ] │
+│  הצטרפה בקישור · לפני 3 דקות                  │
+└──────────────────────────────────────────────┘
+```
+
+The caption tells the host how each person arrived, which is the thing they'll actually use to
+decide — a group member is a known quantity, a link arrival might be anyone. `אשר` offers player or
+viewer. Approving creates the row; rejecting is silent to everyone but the requester. One open
+request per person, so repeated taps don't pile up.
+
+Nobody joins any game without the host approving it, by either path.
 
 **Finished game.** A different, simpler screen: results and the transfer list only. No player
 management, no audit log, no live controls — just `מי מעביר למי`, with tap-to-copy amounts and a

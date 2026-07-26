@@ -307,7 +307,8 @@ Expired and revoked links are deleted by the maintenance cron.
 
 ### `join_requests` (#21)
 
-The only thing a guest can actively do: **ask to join a game**. Only the host can approve.
+**Nobody joins a game without the host's approval.** That is the single rule; there are just two
+ways to ask.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -315,18 +316,37 @@ The only thing a guest can actively do: **ask to join a game**. Only the host ca
 | `game_id` | uuid → games | |
 | `user_id` | uuid → profiles NULL | Set when the requester is signed in |
 | `requested_name` | text | What they want to be called at the table |
+| `requested_role` | enum(`player`,`viewer`) | default `player`; the host can approve as either |
+| `source` | enum(`link`,`in_app`) | Which path the request came from — shown to the host |
 | `status` | enum(`pending`,`approved`,`rejected`) | |
 | `decided_by` | uuid NULL | The host who decided |
 | `created_at`, `decided_at` | timestamptz | |
 
-Flow: someone opens the share link for a live game → `בקש להצטרף למשחק` → the host sees a badge on
-the game page and approves or rejects from a sheet. Approval creates a `game_players` row (with
-`user_id` if they were signed in, otherwise a guest row). Rejection is silent to everyone but the
-requester. Every decision is an event, so it shows in the audit log.
+`unique (game_id, user_id) where status = 'pending'` — one open request per person, so a repeated
+tap doesn't spam the host.
 
-Guests still cannot edit anything, ever — a guest who joins is a player row on someone else's
-screen, not an editor. Writes remain host-only
-([RLS](#row-level-security)).
+#### Two paths in, one gate
+
+| Who | How they ask | Needs a link? |
+|---|---|---|
+| **Member of the game's group** | From the app. Live games in their group appear in a slim lobby projection with a `בקש להצטרף` button | ❌ No |
+| **Anyone else** | Only by opening the share link | ✅ Yes |
+
+Both land in the same table and both wait for the same approval. The host sees one list, with a
+caption showing which way each person arrived.
+
+The in-app path needs group members to know a live game exists without being able to read it, so
+`get_group_live_games()` returns a **deliberately thin projection** — game name, host, player count,
+start time, and nothing else. No amounts, no player list, no events. Full read access still requires
+being a player or viewer ([RLS](#row-level-security)). Minimum disclosure to make the request
+possible, and no more.
+
+Approval creates a `game_players` row (with `user_id` when they were signed in, otherwise a guest
+row) or a `game_viewers` row, depending on the role the host picks. Rejection is silent to everyone
+but the requester. Every decision is an event, so it shows in the audit log.
+
+Joining changes nothing about editing rights — an approved player is a row on the host's screen, not
+an editor. Writes remain host-only.
 
 > **Note on a dropped feature.** The original brief (#21) also asked for a "claim profile / link
 > guest" button so a guest's past games would merge into their statistics once they signed up. That
@@ -476,12 +496,15 @@ can_read_game(game_id)      -- host or player or viewer
 | `profiles` | `username`, `display_name`, `avatar_url` readable to co-members of a shared group; everything else self-only | self |
 | `groups`, `group_members` | members | `owner` |
 | `player_results`, `game_summaries`, `transfer_summaries` | `is_group_member(group_id)`, or self for group-less games | **Nobody.** Written only by `finalize_game()` |
-| `join_requests` | requester + host | requester inserts (via the share-link RPC); **only the host** may decide |
+| `join_requests` | requester + host | Group members insert directly; everyone else via the share-link RPC. **Only the host** may decide |
+
+A slim, read-only exception exists for group members: `get_group_live_games()` lets them see that
+a game is running so they can ask to join it, without exposing anything inside the game.
 
 **Writes are host-only, permanently.** Not a v1 simplification to be relaxed later — one person
 holds the pen for the whole night. Players and viewers have no write path to any game table, and
-the only two exceptions are narrow, audited RPCs: `take_over_host` (below) and a join request,
-which creates nothing until the host approves it.
+the only two exceptions are narrow and audited: `take_over_host` (below), and a join request, which
+creates nothing until the host approves it.
 
 ### Host takeover
 
