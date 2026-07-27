@@ -156,27 +156,23 @@ Listed for the design pass in [10](10-design-brief.md#states-to-design-not-just-
 | **Account-level default nickname** | `profiles.default_nickname`, offered at signup. Pre-fill chain: last nickname in this group → account default → nothing → [03](03-data-model.md#naming-and-nicknames) |
 | **Show the account name beside the nickname** | Composed as `nickname (account name)` — `הכריש (מור לוי)`. `username` moves to profile/admin screens and to tie-breaking identical display names → [03](03-data-model.md#naming-and-nicknames) |
 | **Generic `שיתוף`, not `שתף בוואטסאפ`** | The button opens the OS share sheet; naming one app promises something it doesn't do. WhatsApp stays named only on the per-person `wa.me` payment shortcut → [07](07-hebrew-glossary.md#two-words-that-must-never-be-shortened) |
+| **Group membership is by invite, accepted by the invitee** | Exact-username lookup, owner/admin sends, **only the invitee** can accept. The forwardable `invite_token` is removed — a link anyone can pass on is the wrong door into a group whose members read each other's money history → [03](03-data-model.md#joining-a-group), [04](04-ux-spec.md#adding-a-group-member--invite-and-accept) |
+| **The group creator can never be displaced** | No demotion, no vote, no takeover. Ownership moves only by transfer. Deliberately asymmetric with a game host, who is seizable in one tap → [03](03-data-model.md#group-roles) |
+| **Host takeover is scoped to people in the game** | Narrowed from "any group member": a signed-in player or viewer in that game. Someone not at the table has no business seizing it → [03](03-data-model.md#host-takeover) |
+| **Exactly two ways into a game, both host-approved** | The host's share link, or a group member asking from the app. No third path → [03](03-data-model.md#two-paths-in-one-gate) |
 
 ---
 
-# Part C — Still open
+# Part C — Nothing open
 
-One gap, newly surfaced by the add-players work.
+Every question raised across five review rounds has been answered. The plan is ready for the design
+pass.
 
-## C1
-**The group screen's "add member" flow is unspecified.**
-
-The in-game add-players sheet is fully designed. Adding someone to the *group* is a different action
-with heavier consequences — it grants access to group statistics and the standing ability to seize a
-host role — so it should not simply reuse that sheet with a different verb.
-
-Recommendation, for whoever picks it up: a group member is added by **invite**, not by being typed
-into a list. Reuse the existing `groups.invite_token` link, plus a search by username for people who
-already have accounts, and require the new member to accept. That keeps group membership something
-people opt into rather than something done to them, which matters because membership is what the
-host-takeover rule keys off.
-
-Everything else raised across five review rounds has been answered.
+One consequence is worth knowing rather than discovering: scoping host takeover to people *in the
+game* means that if the host is the only signed-in person there and everyone else is a guest, nobody
+can take over. The remedy is cheap — someone signs in and asks to join, or the host hands over
+before the battery dies — but the corner is real, and widening the rule back to any group member is
+a one-line change if you'd rather.
 
 ---
 
@@ -186,6 +182,9 @@ The full record, so none of this gets reopened by accident.
 
 **Permissions**
 - Host-only editing — permanent, not deferred. Exactly one host at a time.
+- Into a group: invite by username, accepted by the invitee. No invite link, no other path.
+- Into a game: the host's share link, or a group member asking. Both host-approved, no third path.
+- A game host is seizable by anyone signed in and in that game; a group owner never is.
 - Group roles are `owner` / `admin` / `member`; a group admin has no power inside any game.
 - Adding someone to a game never adds them to the group.
 - Host takeover is instant for any group member, announced to everyone with the game open, logged.

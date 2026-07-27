@@ -73,7 +73,10 @@ stopping point if energy runs out.
 
 ### M4 — Groups, statistics, retention
 - Groups (חבורה), membership, quick-add sorted by frequency
-- **Group roles**: `owner` / `admin` / `member`, with `הפוך למנהל חבורה` and owner-only demotion
+- **Group roles**: `owner` / `admin` / `member`, with `הפוך למנהל חבורה` and owner-only demotion.
+  The owner is permanent — no takeover, no demotion, transfer only
+- **Group membership by invite**: exact-username lookup, invitee must accept, revocable pending
+  invites, leave-at-will ([03](03-data-model.md#joining-a-group))
 - **Private games** — the create-page checkbox, the `is_private` filter in every group-scoped view
   and list, host-only link sharing, player-initiated invites
 - Personal statistics + cumulative-net sparkline
@@ -129,7 +132,8 @@ money. Non-host editing is not deferred either: writes are host-only by design.
 | Private games | SQL | **Every group-scoped view and list excludes `is_private`**, still excludes it after the live rows are purged, and personal statistics still include it; `create_share_link` rejects a non-host on a private game |
 | Claims | SQL | A claim outside the window is rejected; only the host may decide; an approved claim changes `user_id` and nothing else on `player_results`; two people cannot both own one row |
 | Statistics | Vitest | Hand-computed fixtures, especially the win-rate zero-exclusion and profit-per-hour with late joiners |
-| RLS | SQL test suite | Each role against each table, including both anonymous share paths — **a non-host cannot write, a revoked or expired token returns nothing, the 7-day window applies to non-members and the 30-day one to members, a non-group-member cannot take over host, nobody can insert into the snapshot tables, and every rejection returns the same generic shape** |
+| RLS | SQL test suite | Each role against each table, including both anonymous share paths — **a non-host cannot write, a revoked or expired token returns nothing, the 7-day window applies to non-members and the 30-day one to members, someone not in the game cannot take over host, nobody can insert into the snapshot tables, and every rejection returns the same generic shape** |
+| Group membership | SQL | **No membership row can be created without an accepted invite**; only the invitee may accept; **no path demotes or removes the owner**; `find_user_by_username` returns nothing on a partial match |
 | Flow | Playwright | One full game: create → 4 players → buy-ins → shared cost → settle → end → transfers → share text |
 | i18n | Lint + snapshot | No literal user-facing strings; every screen renders with a pseudo-locale that is LTR and 40% longer, to catch RTL and truncation assumptions early |
 | Devices | Manual | iOS Safari and Android Chrome, installed and in-browser, in airplane mode |

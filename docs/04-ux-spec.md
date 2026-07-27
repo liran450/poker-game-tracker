@@ -382,10 +382,9 @@ correctly for N = 1 (`הוסף שחקן`).
 > because it is exactly the kind of thing that gets implemented as a convenience and then quietly
 > grows a friend list nobody agreed to.
 
-**Not yet specified:** the *group* screen's "add member" flow. It's a different action with
-different consequences — it grants access to group statistics and the ability to seize a host role —
-so it belongs with group invites rather than reusing this sheet. Tracked in
-[08](08-gaps-and-open-questions.md#c1).
+**The group screen does not use this sheet.** Adding someone to a *group* is a heavier act with
+different, permanent consequences, and it is an invitation rather than an addition — see
+[Adding a group member](#adding-a-group-member--invite-and-accept) below.
 
 ### Action bar
 
@@ -440,7 +439,7 @@ old host keeps read access.
 
 ### Host takeover warning
 
-Any signed-in member of the group can seize the host role immediately when the current host's phone
+Any signed-in person **in that game** can seize the host role immediately when the current host's phone
 has died or frozen — no waiting period. Because that is a disruptive action, the button lives one
 level down (`⋯` → `קח ניהול`) and shows a warning modal first:
 
@@ -592,6 +591,65 @@ money.
 for something that no longer exists.
 
 ---
+
+## Adding a group member — invite and accept
+
+The one thing this must not be is the [add-players sheet](#adding-players--the-multi-select-sheet)
+with a different verb. Adding a player to tonight's game is a label on a list; adding a member to a
+group hands them every member's money history, permanently, plus the standing right to ask their
+way into any of the group's games. So it is an **invitation the other person accepts**, never
+something done to them.
+
+**On the group screen**, `+ הזמן חבר` opens a small sheet:
+
+```
+┌─────────────────────────────────────────────┐
+│  הזמנה לחבורה                            ✕  │
+├─────────────────────────────────────────────┤
+│  [ שם משתמש…                       ] [ חפש ]│
+│                                             │
+│  ┌───────────────────────────────────────┐  │
+│  │  מור לוי                              │  │
+│  │  mor_l                       [ הזמן ] │  │
+│  └───────────────────────────────────────┘  │
+├─────────────────────────────────────────────┤
+│  הזמנות ממתינות                             │
+│  דנה (dana_k) · נשלחה אתמול      [ בטל ]    │
+└─────────────────────────────────────────────┘
+```
+
+- **Exact username only.** No prefix matching, no fuzzy search, no browsing. The field finds one
+  account or none, and the empty state says so plainly: `לא נמצא משתמש בשם הזה`. Partial matching
+  would turn this into a way to enumerate every account in the app, which isn't worth saving someone
+  four keystrokes.
+- The result card shows the account name above the username, so you can tell two `מור`s apart before
+  handing one of them your group's statistics.
+- Pending invites are listed below with a `בטל` to revoke, so an invite sent to the wrong handle
+  isn't permanent.
+- Only the **owner and admins** see this button at all.
+
+**On the invitee's side**, a pending invite appears on their home screen as a card that can't be
+missed and can't be bypassed:
+
+```
+   דנה הזמינה אותך לחבורה
+   "הפוקר של יום חמישי"
+
+   חברי החבורה רואים את הסטטיסטיקה שלך  ⓘ
+
+   [ דחה ]              [ הצטרף ]
+```
+
+The consequence line is not optional and not hidden behind the ⓘ — the popover expands on it, but
+the card itself says the thing that matters. **A membership row exists only after `הצטרף`.**
+
+**Leaving** is `עזוב חבורה` in the group's `⋯`, needs nobody's approval, and is immediate. The one
+exception is the owner, who must transfer ownership first and is told exactly that.
+
+**The owner cannot be removed or demoted by anyone.** The group screen offers no affordance for it,
+because none exists ([03](03-data-model.md#group-roles)). That is deliberately unlike a game, where
+the host can be seized in one tap — worth an ⓘ on the roles list, because the asymmetry surprises
+people who have just used the takeover.
 
 ## Statistics
 

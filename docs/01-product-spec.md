@@ -41,7 +41,8 @@ symbol is hardcoded, because other currencies are expected
 |---|---|---|---|
 | Host / manager | מנהל המשחק | Creator by default; transferable | Everything: add/remove players, buy-ins, settle, end game, share, hand over management |
 | Player (registered) | שחקן | Signed-in user listed in the game | View live. Counts toward their statistics. May seize the host role in an emergency (below) |
-| Group admin | מנהל חבורה | Promoted by the owner or another admin | Manage the group's roster and settings. **No special power inside any game** — unrelated to being a host |
+| Group admin | מנהל חבורה | Promoted by the owner or another admin | Invite and remove members, promote members, edit group settings. **No special power inside any game** — unrelated to being a host |
+| Group owner | בעל החבורה | The creator | Everything an admin can, plus demoting admins and deleting the group. **Cannot be displaced by anyone** |
 | Guest player | אורח | A name with no account | Appears in the game, no login. Can ask to join via a share link; nothing else |
 | Viewer | צופה | Added in-app or arrived via the share link | Read-only, live |
 
@@ -51,17 +52,27 @@ Rules:
   roles are independent, and the UI must never label either one bare `מנהל`
   ([03](03-data-model.md#group-roles)).
 - **Adding someone to a game never adds them to the group**, and vice versa. Two separate acts with
-  different consequences — group membership grants access to group statistics and the ability to
-  seize a host role ([04](04-ux-spec.md#adding-players--the-multi-select-sheet)).
+  different consequences ([04](04-ux-spec.md#adding-players--the-multi-select-sheet)).
+- **Getting into a group:** an owner or admin invites you by username, and you accept. There is no
+  invite link and no other path — nobody is enrolled by someone else's action alone
+  ([03](03-data-model.md#joining-a-group)).
+- **Getting into a game:** the host's share link, or — if you're already in the group — you ask and
+  the host approves. Exactly two paths, both host-approved
+  ([03](03-data-model.md#two-paths-in-one-gate)).
+- **The two "admin" powers are unrelated and asymmetric.** A game host can be seized in one tap by
+  anyone signed in *and in that game*, because money is being counted live. A **group owner can
+  never be displaced** — no takeover, no vote, no demotion. Ownership moves only if the owner
+  transfers it ([03](03-data-model.md#group-roles)).
 - **Exactly one host at a time.** No co-hosts, no shared write access. One source of truth for
   who's holding the pen.
 - The host can hand management to any **registered** player or viewer in the game (#6). The change
   is immediate, confirmed with a modal, written to the audit log; the old host keeps read access. A
   guest cannot be host — there's no account to own it.
-- **Emergency takeover, with no waiting period.** Any signed-in member of the game's group can
-  seize the host role at any moment (for a group-less game, any registered player in it). Phones
-  die, freeze and get left in cars, and a game frozen behind a dead phone is the worst possible
-  failure — so this is deliberately immediate rather than time-gated.
+- **Emergency takeover, with no waiting period.** Any signed-in person **in that game** — player or
+  viewer — can seize the host role at any moment. Phones die, freeze and get left in cars, and a
+  game frozen behind a dead phone is the worst possible failure, so this is deliberately immediate
+  rather than time-gated. It is scoped to people actually at the table: a group member who isn't in
+  the game has no business seizing it.
 - Taking over shows a warning about the outgoing host's sync state first, because unsynced changes
   on a phone that never reconnects are the one thing that can actually be lost. Full modal and
   copy: [04](04-ux-spec.md#host-takeover-warning). The mechanism:

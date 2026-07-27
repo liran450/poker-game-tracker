@@ -61,9 +61,10 @@ Each is justified in the linked document.
    concurrent editing, offline sync, undo — and makes an instant host takeover safe.
    → [03](docs/03-data-model.md#event-sourcing)
 6. **Offline-first.** Home games have bad Wi-Fi. → [02](docs/02-architecture.md#offline-first)
-7. **One host, seizable immediately.** Any signed-in group member can take control the moment the
-   host's phone dies, with a warning about that phone's sync state.
-   → [04](docs/04-ux-spec.md#host-takeover-warning)
+7. **One host, seizable immediately** by any signed-in person *in that game*, the moment the host's
+   phone dies, with a warning about that phone's sync state. A **group** owner, by contrast, can
+   never be displaced — the two are unrelated powers.
+   → [03](docs/03-data-model.md#host-takeover)
 8. **The cash pot is modelled as a player** — a node with a negative balance, so "pay Dana out of
    the cash on the table" falls out of the settlement algorithm with no special case.
    → [05](docs/05-settlement.md#the-pot-as-a-settlement-node)
@@ -95,7 +96,15 @@ migration later ([01 §10](docs/01-product-spec.md#10-planned-not-in-v1)):
 
 ## Open questions
 
-One: the **group screen's "add member" flow** is unspecified — adding someone to a group is a
-heavier act than adding them to a game, and shouldn't reuse the same sheet. Direction and reasoning
-in [08 C1](docs/08-gaps-and-open-questions.md#c1). Everything else raised across five review rounds
-has been answered, and the full record is in the same document.
+None. Every question raised across five review rounds has been answered, and the full record of
+what's been decided is in [08](docs/08-gaps-and-open-questions.md#part-c--nothing-open) so nothing
+gets reopened by accident. The plan is ready for the design pass.
+
+Two access rules are worth reading before anything else gets built, because everything else keys
+off them:
+
+- **Into a group:** an owner or admin invites you by username, and *you* accept. There is no invite
+  link and no other path. → [03](docs/03-data-model.md#joining-a-group)
+- **Into a game:** either the host's share link, or — if you're already in the group — you ask and
+  the host approves. Both end in host approval.
+  → [03](docs/03-data-model.md#two-paths-in-one-gate)

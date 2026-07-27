@@ -80,8 +80,12 @@ crosses a group boundary.
 | `currency` | text | default `ILS` |
 | `default_buy_amount_minor` | int | default 5000 |
 | `default_chips_per_buy` | int | default 100 |
-| `invite_token` | uuid | join-by-link, revocable |
 | `created_at` | timestamptz | |
+
+> **There is deliberately no group invite link.** Membership is granted one person at a time, by
+> username, and only with that person's consent — see [Joining a group](#joining-a-group). A
+> forwardable link would let anyone it was ever passed to read every member's money history and ask
+> their way into any of the group's live games.
 
 ### `group_members`
 | Column | Type | Notes |
@@ -91,8 +95,8 @@ crosses a group boundary.
 | `role` | enum(`owner`,`admin`,`member`) | See below |
 | `joined_at` | timestamptz | |
 
-Group membership is what authorises an **emergency host takeover** — see
-[Host takeover](#host-takeover).
+Rows only ever appear when someone **accepts an invite** — see
+[Joining a group](#joining-a-group).
 
 #### Group roles
 
@@ -100,16 +104,66 @@ Group membership is what authorises an **emergency host takeover** — see
 |---|---|
 | `owner` | Everything. Edit group settings, add and remove members, promote and **demote** admins, transfer ownership, delete the group. Exactly one per group |
 | `admin` | Add and remove members, promote a member to admin, edit the group's name and defaults. Cannot demote another admin, cannot remove the owner, cannot delete the group |
-| `member` | Everything else — play, view group statistics, seize a host role |
+| `member` | Everything else — play, view group statistics, ask to join the group's games |
 
 `הפוך למנהל חבורה` on a member row promotes; `הסר הרשאות ניהול` demotes, and is owner-only. A group
 can have any number of admins, which is the point: one person shouldn't be a single point of failure
 for adding a friend to the roster.
 
+**The owner cannot be displaced.** There is no group-level equivalent of the host takeover: nobody
+can demote the creator, take ownership, or vote them out. Ownership moves only if the owner
+themselves transfers it. The takeover mechanism exists because a dead phone must not freeze money
+being counted in real time — a group roster has no such urgency, and an ungated grab there would
+just be a way to hijack someone's group.
+
 > **Naming collision, worth getting right in the UI.** `מנהל המשחק` is the host of one game;
 > `מנהל חבורה` administers the group. They are unrelated — a group admin gets no special power
 > inside a game, and a host needn't be an admin. Never label either one bare `מנהל`; always carry
 > the noun. See [07](07-hebrew-glossary.md#core-terms).
+
+### `group_invites`
+
+The only way into a group.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `group_id` | uuid → groups | |
+| `invited_user_id` | uuid → profiles | Resolved from a username; you can only invite someone who already has an account |
+| `invited_by` | uuid → profiles | Owner or admin |
+| `status` | enum(`pending`,`accepted`,`declined`,`revoked`) | |
+| `created_at`, `decided_at` | timestamptz | |
+
+`unique (group_id, invited_user_id) where status = 'pending'` — one open invite per person.
+
+#### Joining a group
+
+**Invite by username, accepted by the invitee. There is no other path in.**
+
+1. An owner or admin searches for an exact username and sends an invite.
+2. The invitee sees it on their own screen and taps `הצטרף` or `דחה`.
+3. Only on acceptance does a `group_members` row appear.
+
+Nobody is ever added to a group by someone else's action alone. That matters more here than it
+looks: membership grants access to every member's statistics, so being quietly enrolled in a
+stranger's group would expose your money history to them and theirs to you. It is also the standing
+right to ask your way into any of the group's live games without a link — still host-approved, but
+one approval away rather than out of reach.
+
+Username lookup is a dedicated RPC:
+
+```sql
+create function find_user_by_username(p_username text)
+returns table (username text, display_name text, avatar_url text)
+  security definer as $$ ... $$;
+```
+
+**Exact match only — no prefix or fuzzy search**, and it returns nothing but the three display
+fields. A search that matched partial usernames would be an endpoint for enumerating every account
+in the app, which is not a trade worth making to save someone typing four characters.
+
+Leaving is always allowed and needs nobody's approval, except for the owner, who must transfer
+ownership first.
 
 ### `games`
 | Column | Type | Notes |
@@ -373,13 +427,16 @@ tap doesn't spam the host.
 
 #### Two paths in, one gate
 
-| Who | How they ask | Needs a link? |
-|---|---|---|
-| **Member of the game's group** | From the app. Live games in their group appear in a slim lobby projection with a `בקש להצטרף` button | ❌ No |
-| **Anyone else** | Only by opening the share link | ✅ Yes |
+**There are exactly two ways into a game, and both end in host approval.**
 
-Both land in the same table and both wait for the same approval. The host sees one list, with a
-caption showing which way each person arrived.
+| # | Who | How | Needs a link? |
+|---|---|---|---|
+| 1 | Anyone | Opens the host's share link — the link *is* the invitation | ✅ Yes |
+| 2 | A member of the game's group | Asks from the app. Live games in their group appear in a slim lobby projection with a `בקש להצטרף` button | ❌ No |
+
+No third path exists. Being in the group does not put you in the game, and holding a link does not
+either — both are requests. They land in the same table and the host sees one list, with a caption
+showing which way each person arrived.
 
 The in-app path needs group members to know a live game exists without being able to read it, so
 `get_group_live_games()` returns a **deliberately thin projection** — game name, host, player count,
@@ -592,7 +649,8 @@ Enabled on every table. Helper functions (`SECURITY DEFINER`, `STABLE`):
 is_host(game_id)            -- auth.uid() = games.host_id
 is_game_player(game_id)     -- a non-removed game_players row with user_id = auth.uid()
 is_game_viewer(game_id)     -- a game_viewers row for auth.uid()
-is_group_member(group_id)   -- authorises host takeover and group statistics
+is_group_member(group_id)   -- group statistics, and asking to join the group's games
+is_in_game(game_id)         -- a player or viewer row for auth.uid(); authorises host takeover
 can_read_game(game_id)      -- host or player or viewer
 ```
 
@@ -606,7 +664,8 @@ can_read_game(game_id)      -- host or player or viewer
 | `game_viewers` | `can_read_game` | `is_host`, plus self-insert through the share-link RPC |
 | `share_links` | `is_host` | `is_host` |
 | `profiles` | `username`, `display_name`, `avatar_url` readable to co-members of a shared group; everything else self-only | self |
-| `groups`, `group_members` | members | `owner` and `admin`; demoting an admin and deleting the group are `owner` only |
+| `groups`, `group_members` | members | `owner` and `admin`; demoting an admin, transferring ownership and deleting the group are `owner` only. **No policy can remove or demote the owner** |
+| `group_invites` | the invitee, plus the group's owner and admins | Owner/admin insert and revoke; **only the invitee** may accept or decline |
 | `player_results`, `game_summaries`, `transfer_summaries` | `is_group_member(group_id)`, or self for group-less games | **Nobody.** Written only by `finalize_game()` |
 | `join_requests` | requester + host | Group members insert directly; everyone else via the share-link RPC. **Only the host** may decide |
 | `player_claims` | claimant + host | Claimant inserts within the window; **only the host** may decide |
@@ -629,10 +688,20 @@ create function take_over_host(p_game_id uuid) returns void
   security definer as $$ ... $$;
 ```
 
-Authorised for any signed-in **member of the game's group** (or, for a group-less game, any
-registered player in it). No waiting period. The function sets `host_id`, appends a
-`host_taken_over` event naming the actor, and the previous host's device shows a banner telling
-them they are no longer the host.
+Authorised for a signed-in user who is **in that game** — a player or a viewer. Not merely a member
+of the group: someone who isn't at the table has no business seizing a night they aren't part of. No
+waiting period. The function sets `host_id`, appends a `host_taken_over` event naming the actor, and
+the previous host's device shows a banner telling them they are no longer the host.
+
+> **Consequence worth knowing.** If the host is the only signed-in person in the game and everyone
+> else is a guest, nobody can take over. The fix is social and cheap — someone signs in and asks to
+> join, or the host hands over before their battery dies — but it is a real corner, and it is the
+> price of the narrower rule. Say the word if you'd rather any group member could seize it.
+
+This is **entirely separate from group administration**. A group admin gets no power inside a game,
+a host needn't be an admin, and neither role can reach the other: a game host is seizable in one tap
+because money is being counted live, while a group owner can never be displaced at all
+([Group roles](#group-roles)).
 
 The client shows a warning before calling it:
 `ודאו שהמכשיר של המנהל הנוכחי סונכרן — שינויים שלא נשלחו עלולים ללכת לאיבוד.`

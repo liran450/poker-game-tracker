@@ -97,6 +97,8 @@ screen, bigger.
 | Takeover modal | Shows the outgoing host's sync state; the tone escalates green → amber → red with staleness |
 | Announcement banner | Non-blocking, for "X took over the game" |
 | Join request row | Name + `אשר` / `דחה`, in the host's pending-requests sheet. Also carries claim requests, which additionally show the row's result |
+| Username result card | Account name over username, with a single `הזמן` — the last check before handing someone your group's statistics |
+| Invite card | The invitee's accept/decline card, whose consequence line is part of the card, not hidden in the ⓘ |
 | ⓘ explainer | The glyph (muted, ≥44px hit area) and its popover/sheet. Used on ten controls — must not become visual noise |
 | Private badge | `פרטי` beside the game name |
 | Share / copy button pair | Equal weight, used in the share sheet and on the summary screen |
@@ -134,7 +136,10 @@ Specific ones that matter:
   sheet
 - Add-players sheet: nothing selected (footer disabled), several selected, a roster long enough to
   scroll, and a typed name that collides with an existing chip
-- Group screen: a member row with `הפוך למנהל חבורה`, and the same row once they're an admin
+- Group screen: a member row with `הפוך למנהל חבורה`, the same row once they're an admin, and the
+  owner's row — which has no remove or demote affordance at all
+- Group invite sheet: empty, no-such-username, one result found, and a list of pending invites
+- The invitee's pending-invite card, with its consequence line
 - Share sheet showing the two expiry windows without turning into a paragraph of legalese
 - Share sheet as seen by a **non-host player in a private game** — invite available, link sharing
   replaced by an explanation

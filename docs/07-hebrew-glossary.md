@@ -79,6 +79,15 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Hand over management | העבר ניהול |
 | Take over management | קח ניהול |
 | Promote to group admin | הפוך למנהל חבורה |
+| Invite a group member | + הזמן חבר |
+| Group invite (sheet title) | הזמנה לחבורה |
+| Username field | שם משתמש… |
+| Search | חפש |
+| Invite | הזמן |
+| Pending invites | הזמנות ממתינות |
+| Join / decline an invite | הצטרף · דחה |
+| Leave group | עזוב חבורה |
+| Transfer ownership | העבר בעלות |
 | Remove admin rights | הסר הרשאות ניהול |
 | Add players (sheet title) | הוספת שחקנים |
 | Selected (N) | נבחרו (3) |
@@ -114,6 +123,10 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Duplicate name (#9) | `השם כבר קיים במשחק — נוסף בתור "מור (1)"` |
 | Nickname helper | `הכינוי יוצג לצד השם בחשבון` |
 | Adding ≠ group | `הוספה למשחק לא מצרפת לחבורה` |
+| No such username | `לא נמצא משתמש בשם הזה` |
+| Invite headline | `דנה הזמינה אותך לחבורה "הפוקר של יום חמישי"` |
+| Invite consequence | `חברי החבורה רואים את הסטטיסטיקה שלך` |
+| Owner must transfer first | `כדי לעזוב, העבירו קודם את הבעלות על החבורה` |
 | Name already picked | `השם כבר ברשימה` |
 | Slide to end | `החלק לסיום המשחק` |
 | Players still open | `יש 2 שחקנים שעדיין לא נסגרו` |
