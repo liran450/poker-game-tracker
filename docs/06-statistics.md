@@ -12,9 +12,19 @@ Only games that reached `finished` are ever counted.
 A signed-in user is included wherever they have a `player_results` row carrying their `user_id` —
 i.e. being added to a game is enough; no separate opt-in.
 
-Guest rows carry no `user_id` and count toward nobody's statistics, ever. If a guest later signs up,
-their earlier games stay guest games: **statistics begin when the account begins**, and permanent
-results are never rewritten after the fact.
+Guest rows carry no `user_id` and count toward nobody's statistics — **unless the row is claimed**.
+A group member, or anyone who reached the game through its share link, can claim one specific guest
+row as themselves; the host approves; and from then on that row counts toward their figures. The
+window is the life of the game plus **2 days after it ends**
+([03](03-data-model.md#player_claims-21)).
+
+Two consequences for this document:
+
+- A game's attribution is not final until the claim window closes. An approved claim sets `user_id`
+  on the permanent `player_results` row — the one and only field that is ever mutable after
+  finalisation. Amounts never change.
+- After the window, a guest row is a guest row forever. There is no path that rewrites years-old
+  results.
 
 ## Scoping
 
@@ -28,6 +38,16 @@ figure aggregates across group boundaries. Three views:
 | Personal, all groups | הכל | Only you — your own totals across every group you're in |
 
 Games with no group contribute to your personal totals only.
+
+**Private games are excluded from everything group-scoped.** One rule, applied identically in every
+view on this page:
+
+> A private game is excluded from every group-scoped figure and every group-visible list.
+> It never affects personal figures.
+
+`is_private` is denormalised onto `game_summaries` and `player_results`, so the exclusion still holds
+after a game's live rows have been purged. Every group-scoped view carries
+`where is_private = false`; no personal view does.
 
 A `stats_visibility = private` flag on the profile keeps someone off the group leaderboard while
 still counting them, anonymously, in table-level aggregates.
@@ -62,6 +82,8 @@ Worked check on your example: lost ₪100 five times, won ₪100 once →
 `Σ net = −400` ✓, win rate `1/6 = 17%`, ROI `−400/600 = −67%`.
 
 ## Group-level statistics (#11)
+
+All of the below exclude private games.
 
 Per player, within the group:
 

@@ -35,9 +35,12 @@ largest balance, optional whole-shekel rounding for transfers.
 → [05](05-settlement.md#rounding-and-precision)
 
 ### A5. Misattributed buy-ins
-The most common data-entry error at a real table is tapping `+` on the wrong row. Undo covers it if
-noticed immediately; `העברת קנייה לשחקן אחר` in the row action sheet covers it if noticed an hour
-later. → [04](04-ux-spec.md#row-action-sheet)
+The most common data-entry error at a real table is tapping `+` on the wrong row. `בטל` in the
+snackbar covers it if noticed immediately; `−` on the wrong player and `+` on the right one covers
+it later. A dedicated "move this buy-in" action was considered and rejected — it's a third way to
+change someone's money, reachable from a menu anyone holding the passed-around phone can open, to
+save one tap.
+→ [04](04-ux-spec.md#the-buy-in-counter--the-most-important-interaction-in-the-app)
 
 ### A6. Late joiners and per-hour statistics
 "Profit per hour" (#24) is meaningless if someone who played the last 40 minutes is measured
@@ -139,22 +142,21 @@ Listed for the design pass in [10](10-design-brief.md#states-to-design-not-just-
 | **Link security and expiry** | 256-bit token, stored only as a SHA-256 hash, carried in the URL fragment so it never reaches a server log. 7 days for anyone outside the group, 30 days for group members, one link for both → [03](03-data-model.md#link-security) |
 | **Group members can request to join from the app; outsiders only via a link. The host approves either way** | One `join_requests` table, two entry paths, one approval gate. A slim `get_group_live_games()` projection lets members see a game exists without reading it → [03](03-data-model.md#two-paths-in-one-gate), [04](04-ux-spec.md#the-viewers-experience) |
 | **A link expiring on a live game needs no special handling** | The link dies; the host issues a new one in one tap → [03](03-data-model.md#link-lifetime) |
+| **No "move a buy-in to another player"** | Removed from the row action sheet. Undo, or `−` then `+`. Undo now explicitly covers decrements too → [04](04-ux-spec.md#the-buy-in-counter--the-most-important-interaction-in-the-app) |
+| **[my call] Undone actions stay in the log** | A log that can be silently rewritten by add-then-undo can't settle the argument it exists for. Rendered as one struck-through line with a `בוטל` chip, hidden behind a filter → [03](03-data-model.md#undo-and-whether-an-undone-action-stays-in-the-log) |
+| **[my call] Copy buttons** | The share sheet is enough for the live game — but inside it `העתק` is a peer of `שתף`, not a fallback. The settlement screen gets its own `העתק העברות` button, because that text gets pasted repeatedly → [04](04-ux-spec.md#sharing-5-14) |
+| **Claiming a guest row, narrowed** | Group members or anyone who arrived via the share link may claim one specific guest row; the host approves; open until 2 days after the game ends. Changes attribution, never amounts → [03](03-data-model.md#player_claims-21) |
+| **Private games** | One rule: excluded from every group-scoped figure and list, always counted in personal statistics. Host-only link sharing; any current player may invite a group member → [01 §6.7](01-product-spec.md#67-private-games), [03](03-data-model.md#private-games) |
+| **ⓘ on ambiguous controls** | A standard affordance for *second-order consequences* only, on ten named controls, starting with the private-game checkbox → [04](04-ux-spec.md#-explainers) |
+| **Locations — planned** | Attachable at creation, during, and after a game; five most-played places as quick picks. Schema reserved → [01 §10](01-product-spec.md#10-planned-not-in-v1) |
+| **Scheduled games — planned** | Date, time, location, invitees, RSVPs, per-person expected arrival times, and `התחל משחק` on the day. A planned game is the same row in an earlier status, so starting it is a transition rather than a copy → [01 §10](01-product-spec.md#10-planned-not-in-v1) |
 
 ---
 
 # Part C — Nothing open
 
-Every question raised across the three review rounds has been answered. The plan is complete enough
-to hand to design and then to implementation.
-
-The one thing worth a second look before building, because it removes a feature from the original
-brief rather than adding one:
-
-> **Dropping "claim profile" (original brief #21).** A guest's earlier games no longer merge into
-> their statistics when they later sign up — statistics begin when the account begins. This came out
-> of defining a guest's abilities as "ask to join, host approves, nothing else", and it simplifies
-> the model considerably: no retroactive rewriting of permanent results, and no question of who may
-> approve a claim years later. Easy to add back if that wasn't the intent.
+Every question raised across four review rounds has been answered. The plan is ready for the design
+pass.
 
 ---
 
@@ -167,12 +169,16 @@ The full record, so none of this gets reopened by accident.
 - Host takeover is instant for any group member, announced to everyone with the game open, logged.
 - Nobody joins a game without the host approving. Group members ask from the app; everyone else asks
   through the share link.
-- Guests: request to join, and nothing else. No retroactive profile claiming.
+- On a private game, any current player can invite a group member, but only the host can share a
+  link.
+- A guest row can be claimed by a group member or a link visitor, host-approved, until 2 days after
+  the game ends.
 
 **Data**
 - Retention: 30 days for the activity log, 90 for full detail, forever for results.
 - Deleting a game keeps its statistics.
-- Statistics never cross a group.
+- Statistics never cross a group, and never include a private game in a group figure.
+- A claim is the only field ever mutable after finalisation, and only `user_id`, only in the window.
 - Shared costs appear as a single amount, never itemised.
 - Currency is a display label, never converted.
 
@@ -181,10 +187,20 @@ The full record, so none of this gets reopened by accident.
 - 7 days outside the group, 30 days inside. Revocable and rotatable.
 - An expired link on a live game needs no special handling — issue a new one.
 - Live link opens the game read-only; a finished game's link shows the settlement only.
+- Copy is a peer of share in the share sheet, and its own button on the settlement screen.
 
-**Product**
+**Interaction**
+- Buy-ins: one tap, optimistic, with a coalescing undo that reports buy-ins, chips and money.
+- Undo covers decrements as well as increments.
+- No "move a buy-in to another player" — undo, or `−` then `+`.
+- Undone actions stay in the log, struck through and hidden behind a filter.
+- ⓘ explainers on ten controls, for second-order consequences only.
 - Nicknames: per game, pre-filled from the group.
-- No "mark as paid" on transfers.
-- Non-standard buy-in amounts: deferred, column reserved.
-- Chip denomination entry: deferred.
-- Multi-currency UI: deferred.
+
+**Not in v1**
+- Non-standard buy-in amounts — deferred, column reserved.
+- Chip denomination entry — deferred.
+- Multi-currency UI — deferred.
+- Locations and scheduled games — planned, schema reserved
+  ([01 §10](01-product-spec.md#10-planned-not-in-v1)).
+- "Mark as paid" on transfers — dropped for good.

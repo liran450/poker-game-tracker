@@ -43,7 +43,9 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Activity log | יומן פעילות | Short: `יומן` |
 | Share | שיתוף | |
 | Statistics | סטטיסטיקה | |
-| Synced | מסונכרן | |
+| Synced | מסונכרן |
+| Private game | משחק פרטי | |
+| Location | מיקום | Planned feature | |
 
 ## Common UI strings
 
@@ -75,6 +77,12 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Take over management | קח ניהול |
 | Revoke link | בטל קישור |
 | New link | צור קישור חדש |
+| Invite a player | הזמן שחקן |
+| Copy transfers | העתק העברות |
+| That's me | זה אני |
+| Show undone | הצג בוטלים |
+| Undone | בוטל |
+| Add location | הוסף מיקום |
 | Request to join | בקש להצטרף למשחק |
 | Approve request | אשר בקשה |
 | Games (tab) | משחקים |
@@ -119,6 +127,12 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Group live game card | `משחק פעיל בחבורה` |
 | Approve / reject | `אשר` · `דחה` |
 | Mixed currencies | `המשחקים כוללים יותר ממטבע אחד — הסכומים לא הומרו` |
+| Private, inline on the checkbox | `לא יופיע בסטטיסטיקה של החבורה · ייספר בסטטיסטיקה האישית` |
+| Private, the ⓘ | `משחק פרטי לא יופיע בסטטיסטיקה של החבורה ולא ברשימת המשחקים שלה. הוא כן נספר בסטטיסטיקה האישית של כל מי ששיחק בו. כל מי שבמשחק רואה בו הכול, בדיוק כמו במשחק רגיל.` |
+| Private, link sharing | `רק מנהל המשחק יכול לשתף קישור למשחק פרטי` |
+| Claim a row, the ⓘ | `הבקשה עוברת לאישור מנהל המשחק. שיוך משנה רק למי שייכת השורה — הסכומים לא משתנים. אפשר לבקש עד יומיים אחרי סוף המשחק.` |
+| Claim window closed | `חלון השיוך נסגר — אפשר לשייך עד יומיים אחרי סוף המשחק` |
+| Claim sent | `הבקשה נשלחה למנהל המשחק` |
 | Delete game | `הנתונים המפורטים יימחקו. הסטטיסטיקה תישמר.` |
 | Log purged | `יומן הפעילות של משחק זה כבר לא זמין` |
 | Small sample | `נתונים חלקיים` |

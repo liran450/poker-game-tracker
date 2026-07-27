@@ -81,10 +81,15 @@ Supabase Auth with two providers:
 
 Guests (#21) are just rows with `user_id = null` and a name. They never touch auth.
 
-**What a guest can do**: exactly one thing — open a share link and *ask to join a game*. Only the
-host can approve, and approval is what creates their player row. Guests have no write path to
-anything, and a guest's past games do not merge into a later account: statistics begin when the
-account does ([03](03-data-model.md#join_requests-21)).
+**What a guest can do**: ask to join a game. Only the host can approve, and approval is what creates
+their player row — guests have no write path to anything
+([03](03-data-model.md#join_requests-21)).
+
+**Claiming a guest row**: a signed-in group member, or anyone who arrived through the game's share
+link, can claim one specific guest row as themselves. The host approves, and the window closes 2
+days after the game ends. Approval sets `user_id` on the live row and on the permanent result — the
+only field that is ever mutable after finalisation, and only inside that window
+([03](03-data-model.md#player_claims-21)).
 
 ## Security model
 

@@ -103,6 +103,7 @@ Creating a game asks for:
 | Players | שחקנים | — | Quick-add list sorted by **most frequently played with**, plus free text for guests |
 | Viewers | צופים | — | People who can watch but not edit (#5, #14) |
 | Group | חבורה | last used | Scopes the quick-add list and statistics |
+| Private game | משחק פרטי | off | Keeps the game out of every group-scoped figure and list. Carries an ⓘ explaining exactly that — see [§6.7](#67-private-games) |
 
 Chip value is displayed prominently on the game page as a chip: **`ז'יטון = ₪0.5`** (#13).
 
@@ -171,7 +172,32 @@ players. They move money between people at settlement but are **kept entirely ou
 statistics** — a player who lost ₪80 at cards and paid ₪20 toward dinner lost ₪80 at poker.
 UI: [04](04-ux-spec.md#shared-costs). Math: [05](05-settlement.md#shared-costs).
 
-### 6.7 Ending the game (#16, #19, #22)
+### 6.7 Private games
+
+A checkbox at creation: `משחק פרטי`. One rule governs all of it:
+
+> A private game is excluded from every group-scoped figure and every group-visible list.
+> It never affects personal figures.
+
+| | Private game |
+|---|---|
+| Group statistics, leaderboards, fun stats | Never appears |
+| The group's past-games list | Never appears |
+| The participants' own personal statistics | **Always counts** |
+| Sharing a join link | **Host only** |
+| Inviting a group member | Host **or any current player** |
+
+The asymmetry in the last two rows is deliberate: any player can pull in someone the group already
+knows, but only the host can mint a URL that works for a stranger. Either way the host still
+approves the join.
+
+This is privacy about *statistics and discoverability*, not secrecy — everyone in the game sees
+everything in it, exactly as in a normal game. That distinction is not obvious from a checkbox
+label, which is why it gets an ⓘ ([§6.13](#613-explainers-on-ambiguous-controls)).
+
+Mechanism: [03 — Private games](03-data-model.md#private-games).
+
+### 6.8 Ending the game (#16, #19, #22)
 
 1. **Slide to confirm** — not a tap — so it can't happen mid-hand (#22).
 2. Any un-settled players must have chips entered first; the app lists who's missing.
@@ -183,7 +209,7 @@ UI: [04](04-ux-spec.md#shared-costs). Math: [05](05-settlement.md#shared-costs).
 5. Share as text (#8, #16).
 6. **Reopen within 24h** (#22) — host only, logged.
 
-### 6.8 Sharing (#5, #8, #14)
+### 6.9 Sharing (#5, #8, #14)
 
 The share link's behaviour depends on the game's state:
 
@@ -206,7 +232,7 @@ expire on their own: **7 days for anyone outside the group, 30 days for group me
 members never lose access to their own history — after 30 days they open the game from the app,
 which needs no link. Full design: [03](03-data-model.md#link-security).
 
-### 6.9 Accounts (#3, #21)
+### 6.10 Accounts (#3, #21)
 
 - Google sign-in and email (magic link preferred over passwords on mobile).
 - Guests need no account (#21).
@@ -217,19 +243,27 @@ which needs no link. Full design: [03](03-data-model.md#link-security).
 
   Both land in the same pending-requests list, and the host approves each one as a player or a
   viewer. Approval is what creates the row; nobody appears in a game uninvited.
-- **A guest's past games do not merge into a later account.** Statistics begin when the account
-  does. This drops the "claim profile" idea from the original brief (#21) in favour of a much
-  simpler model: no retroactive rewriting of permanent results, and no question of who's allowed to
-  approve a claim two years later. Flagged in [08](08-gaps-and-open-questions.md) in case the merge
-  was actually wanted.
+- **Claiming a guest row** (#21): a signed-in person can say "that guest row is me" and, once the
+  host approves, it starts counting toward their statistics.
 
-### 6.10 Statistics (#10, #11, #12, #24)
+  | | Rule |
+  |---|---|
+  | Who may claim | A member of the game's group, **or** anyone who reached the game through its share link |
+  | What | One specific guest row — never a whole history |
+  | Approval | Host only |
+  | Window | While the game is live, and up to **2 days after it ends** |
+
+  A claim changes attribution, never amounts. After the window closes the row stays a guest row
+  permanently, which is what keeps the permanent results genuinely immutable. Mechanism:
+  [03](03-data-model.md#player_claims-21).
+
+### 6.11 Statistics (#10, #11, #12, #24)
 
 A signed-in user is included in statistics for any game where they are a player row (#10). All
 statistics are scoped to a group — you never see players from another group. Definitions, formulas
 and the final set of fun stats: [06 — Statistics](06-statistics.md).
 
-### 6.11 Audit log (#22)
+### 6.12 Audit log (#22)
 
 A collapsible drawer at the bottom of the game page, live, newest first:
 
@@ -243,7 +277,17 @@ Because every mutation is an event ([03](03-data-model.md#event-sourcing)), this
 also the first thing discarded by the retention policy, since it stops being useful once the
 argument is over.
 
-### 6.12 Sync state
+### 6.13 Explainers on ambiguous controls
+
+Some controls in this app have a consequence you cannot infer from the label. Ticking `משחק פרטי`
+changes which statistics a night counts toward; setting `ז'יטונים לקנייה` silently sets the value of
+every chip on the table. Those get a small **ⓘ** beside them, opening one to three sentences.
+
+The rule is narrow on purpose: ⓘ is for a *second-order consequence*, never a substitute for a
+label that should have been clearer. Full list and interaction rules:
+[04](04-ux-spec.md#-explainers).
+
+### 6.14 Sync state
 
 A persistent sync indicator sits in the top corner of every screen that touches game data: synced,
 syncing, offline with a pending count, or failed. It matters for two moments in particular —
@@ -262,6 +306,11 @@ closing the app with unsynced changes, and a host takeover
   only: changing it re-labels amounts and never converts them.
 - **Chip denomination entry** (counting by colour: 5 black × 25 + 3 red × 10). Planned for later,
   not now.
+- **Moving a buy-in from one player to another.** A buy-in tapped onto the wrong row is corrected by
+  undo, or by `−` on the wrong player and `+` on the right one. A dedicated "reassign" action adds a
+  second way to change someone's money that a bystander could trigger by accident, to save one tap
+  on a mistake that is usually caught within seconds.
+- **Locations and scheduled games** — both planned, see §10.
 - **Push notifications**, native app wrappers, tournament mode.
 
 ## 8. Data retention
@@ -287,9 +336,9 @@ Your original numbered list, mapped to where each item is specified.
 |---|---|---|
 | 1 | Hebrew | [04 RTL](04-ux-spec.md#rtl-and-hebrew), [07 glossary](07-hebrew-glossary.md) |
 | 2 | Editable players, buy counter, confirm UX | [04 buy counter](04-ux-spec.md#the-buy-in-counter--the-most-important-interaction-in-the-app) |
-| 3 | Google / email accounts | §6.9, [02 auth](02-architecture.md#auth) |
+| 3 | Google / email accounts | §6.10, [02 auth](02-architecture.md#auth) |
 | 4 | Free DB | [02 database choice](02-architecture.md#database-choice) |
-| 5 | Share game, view-only | §6.8, [03 RLS](03-data-model.md#row-level-security) |
+| 5 | Share game, view-only | §6.9, [03 RLS](03-data-model.md#row-level-security) |
 | 6 | Pass management | §4 |
 | 7 | Creator is host | §4 |
 | 8 | Share as text | [07 templates](07-hebrew-glossary.md#share-text-templates) |
@@ -298,14 +347,47 @@ Your original numbered list, mapped to where each item is specified.
 | 11 | Group statistics | [06](06-statistics.md#group-level-statistics-11) |
 | 12 | Personal statistics | [06](06-statistics.md#personal-statistics-12) |
 | 13 | Buy amount, chips, chip value, quick-add | §6.1 |
-| 14 | Add/remove viewers | §6.8 |
+| 14 | Add/remove viewers | §6.9 |
 | 15 | Settle a player, long-press menu | §6.2, §6.3, [04 action sheet](04-ux-spec.md#row-action-sheet) |
 | 16 | End game, editable transfers, balance indicator | [05](05-settlement.md#edit-mode-16-17) |
 | 17 | Pick payer/payee from this game's players | [05](05-settlement.md#edit-mode-16-17) |
 | 18 | Cash paid at table, pay from pot | §6.4, [05](05-settlement.md#the-pot-as-a-settlement-node) |
 | 19 | Minimum-transfer settlement | [05](05-settlement.md#minimum-transfer-algorithm-19) |
 | 20 | Pot verification banner | §6.5 |
-| 21 | Guests + join requests | §6.9 |
-| 22 | Confirm end, reopen 24h, audit log | §6.7, §6.11 |
+| 21 | Guests, join requests, claiming a guest row | §6.10 |
+| 22 | Confirm end, reopen 24h, audit log | §6.8, §6.12 |
 | 23 | Payment links | [05](05-settlement.md#payment-links--reality-check-23) |
 | 24 | Extra statistics | [06](06-statistics.md#fun-statistics) |
+
+## 10. Planned, not in v1
+
+Known future features. They are written down now because today's schema reserves room for them
+([03](03-data-model.md#reserved-for-planned-features)) — building them later should not require
+migrating existing games.
+
+### Locations
+
+A game can carry a location: where it was played. Addable **at creation, during the game, and after
+it has finished** — including on an old game somebody wants to tidy up.
+
+- `+ הוסף מיקום` with a quick-pick list of the group's **five most-played places**, plus free text
+  for a new one.
+- The name is denormalised onto the permanent summary, so a purged game still knows where it
+  happened and can feed a "where does this group play most?" statistic.
+
+### Scheduled games
+
+Create a game in advance and invite people to it.
+
+- The game carries a **date, time and location**, and a list of invited players.
+- Invitees **RSVP**, and the plan shows who has accepted.
+- An invitee can also set an **expected arrival time** — the game starts at 20:00, they'll be there
+  at 21:00. Late arrivals render differently from everyone else in the plan, so the host can see at
+  a glance who to expect and when.
+- On the day, `התחל משחק` turns the plan into a live game, and the host picks **which of the invited
+  players are actually starting**. The rest can still be added later as they arrive.
+- The preset stays editable up to that point, and the plan view remains reachable afterwards to
+  check who was supposed to come and when.
+
+A planned game is the same row as a live one in an earlier status, so starting it is a status
+transition rather than a copy — the game keeps its identity, its invites and its history.

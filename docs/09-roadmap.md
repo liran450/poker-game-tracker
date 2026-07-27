@@ -33,7 +33,7 @@ statistics) is amplification. So the first milestone deliberately ships without 
 - Settle a player, gray out, reopen
 - Pot verification banner
 - Full offline operation, IndexedDB persistence, wake lock
-- Event log powering the audit drawer
+- Event log powering the audit drawer, with undone actions collapsed and hidden behind a filter
 
 **Test it at a real game before building anything else.** Everything after this point is guesswork
 until M1 has survived one Thursday night.
@@ -64,10 +64,13 @@ stopping point if energy runs out.
 - Hand over management, and **immediate host takeover with the sync warning**
 - Join requests, host-approved either way: group members ask from the app via a slim lobby
   projection, everyone else via the share link
+- Claiming a guest row: host-approved, open until 2 days after the game ends
 - Nicknames for registered players
 
 ### M4 — Groups, statistics, retention
 - Groups (חבורה), membership, quick-add sorted by frequency
+- **Private games** — the create-page checkbox, the `is_private` filter in every group-scoped view
+  and list, host-only link sharing, player-initiated invites
 - Personal statistics + cumulative-net sparkline
 - Group statistics and leaderboards, sample-size suppression, privacy flag
 - The seven fun stats
@@ -83,13 +86,30 @@ ever lost in the meantime.
 - Data export refinements
 - Duplicate-last-game
 - Nickname pre-fill from the player's most recent nickname in the group
+- ⓘ explainers across the ten controls listed in [04](04-ux-spec.md#-explainers)
+
+### Planned, after v1
+
+Both are specified in [01 §10](01-product-spec.md#10-planned-not-in-v1) and have schema reserved for
+them in [03](03-data-model.md#reserved-for-planned-features), so neither needs a migration of
+existing games.
+
+- **Locations** — attachable at creation, during a game, and after it's finished, with the group's
+  five most-played places as quick picks.
+- **Scheduled games** — a future game with date, time, location and invited players; RSVPs;
+  per-invitee expected arrival times, with late arrivals shown differently in the plan; and
+  `התחל משחק` on the day, picking who's actually starting. A planned game is the same row in an
+  earlier status, so starting it is a status transition — it reuses the existing game path rather
+  than forking it, and `expected_arrival_at` feeds the `joined_at` that profit-per-hour already
+  uses.
 
 ### Explicitly deferred
 Non-standard / half buy-ins · multi-currency UI · push notifications · native wrapper · tournament
 mode · blind timer · chip denomination entry · additional languages beyond the plumbing
 
-Dropped for good, not deferred: **"mark as paid"** on transfers, and **retroactive guest-profile
-claiming**. Non-host editing is not deferred either — writes are host-only by design.
+Dropped for good, not deferred: **"mark as paid"** on transfers, and **moving a buy-in from one
+player to another** — undo and `−`/`+` cover it without adding a second way to change someone's
+money. Non-host editing is not deferred either: writes are host-only by design.
 
 ## Testing
 
@@ -101,6 +121,8 @@ claiming**. Non-host editing is not deferred either — writes are host-only by 
 | Event fold | Vitest | State from events matches the cached columns; undo restores exactly |
 | Offline sync | Vitest | Duplicate `client_event_id` is a no-op; out-of-order arrival converges; **events pushed by a deposed host are still accepted** |
 | Snapshots & retention | SQL + Vitest | `finalize_game` is idempotent across reopen/re-end; **statistics are byte-identical before and after `purge_expired_game_data()` and after an explicit game deletion**; purge refuses to run without a snapshot |
+| Private games | SQL | **Every group-scoped view and list excludes `is_private`**, still excludes it after the live rows are purged, and personal statistics still include it; `create_share_link` rejects a non-host on a private game |
+| Claims | SQL | A claim outside the window is rejected; only the host may decide; an approved claim changes `user_id` and nothing else on `player_results`; two people cannot both own one row |
 | Statistics | Vitest | Hand-computed fixtures, especially the win-rate zero-exclusion and profit-per-hour with late joiners |
 | RLS | SQL test suite | Each role against each table, including both anonymous share paths — **a non-host cannot write, a revoked or expired token returns nothing, the 7-day window applies to non-members and the 30-day one to members, a non-group-member cannot take over host, nobody can insert into the snapshot tables, and every rejection returns the same generic shape** |
 | Flow | Playwright | One full game: create → 4 players → buy-ins → shared cost → settle → end → transfers → share text |

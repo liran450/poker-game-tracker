@@ -94,7 +94,10 @@ screen, bigger.
 | Slide-to-confirm | End-game only |
 | Takeover modal | Shows the outgoing host's sync state; the tone escalates green → amber → red with staleness |
 | Announcement banner | Non-blocking, for "X took over the game" |
-| Join request row | Name + `אשר` / `דחה`, in the host's pending-requests sheet |
+| Join request row | Name + `אשר` / `דחה`, in the host's pending-requests sheet. Also carries claim requests, which additionally show the row's result |
+| ⓘ explainer | The glyph (muted, ≥44px hit area) and its popover/sheet. Used on ten controls — must not become visual noise |
+| Private badge | `פרטי` beside the game name |
+| Share / copy button pair | Equal weight, used in the share sheet and on the summary screen |
 | Destructive confirm | Used for delete-game, which must explain that statistics survive |
 | Audit log drawer | Grab handle, expandable, filter chips, live entries |
 | Stat hero number | Large signed value with a label and sample size |
@@ -128,6 +131,12 @@ Specific ones that matter:
 - Join request: the guest's single-button state, the "sent" state, and the host's pending-requests
   sheet
 - Share sheet showing the two expiry windows without turning into a paragraph of legalese
+- Share sheet as seen by a **non-host player in a private game** — invite available, link sharing
+  replaced by an explanation
+- Create page with `משחק פרטי` ticked, showing the inline consequence line
+- A game header carrying the `פרטי` badge
+- Audit log with the `בוטלים` filter on, showing a struck-through undone entry
+- An ⓘ popover open — the one case where something floats above the sheet layer
 - A finished game past its 24h reopen window
 - **An archived game whose details were purged** — results card only, no audit log
 

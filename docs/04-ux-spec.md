@@ -86,6 +86,10 @@ sensible defaults already filled so the whole thing can be dismissed with one ta
   played with them** (#13), tap to toggle in. Selected chips move to the top so the list doesn't
   reflow under your finger. Below it, a text field: `הוסף אורח…` for names not in the list.
 - **Viewers** in a collapsed section — most games won't set it up here (#14 allows adding later).
+- **`משחק פרטי`** — a single checkbox with an ⓘ beside it, low in the form since most games aren't
+  private. Ticking it shows one line of consequence inline, not just in the popover:
+  `לא יופיע בסטטיסטיקה של החבורה · ייספר בסטטיסטיקה האישית`. Getting this wrong silently is the
+  worst outcome, so it says both halves.
 - Bottom bar: **`התחל משחק`** primary, full width.
 - Secondary at the top: `שכפל משחק אחרון` — same players, same stakes, one tap. This will be the
   most-used path after the first few games.
@@ -114,8 +118,24 @@ sensible defaults already filled so the whole thing can be dismissed with one ta
 
 **Header** — game name and a running clock (needed for profit-per-hour, #24, and genuinely useful
 at 2am). The chip value and buy amount are always visible: they're referenced constantly and nobody
-should have to remember them. `⋯` opens game settings: rename, edit viewers, shared costs, share,
-hand over management, reopen/close, delete.
+should have to remember them. A **`פרטי` badge** sits next to the name on a private game, so nobody
+has to remember which mode they're in. `⋯` opens game settings: rename, edit viewers, shared costs,
+share, hand over management, reopen/close, delete.
+
+### Private games
+
+A private game looks and behaves exactly like any other from inside. One rule governs the
+difference:
+
+> A private game is excluded from every group-scoped figure and every group-visible list.
+> It never affects personal figures.
+
+([01 §6.7](01-product-spec.md#67-private-games).) Two things change in the UI:
+
+- **`הזמן שחקן` is available to every current player**, not just the host, in the share sheet. It
+  picks from group members and creates a join request the host still approves.
+- **`שתף קישור` is host-only.** For anyone else the section is replaced by one line:
+  `רק מנהל המשחק יכול לשתף קישור למשחק פרטי` — explained, not just greyed out.
 
 ### Sync indicator
 
@@ -207,6 +227,19 @@ mid-hand and never taps אישור, the data is wrong and nobody knows.
 This gives one tap for the common case, an explicit confirmation surface exactly when several
 things changed at once, no dirty state (the window always closes itself), and full reversibility.
 
+**Undo covers decrements too.** Tapping `−` raises the same snackbar with the change negated —
+`מור · קנייה 2 · −100 ז'יטונים · −₪50` — and the same `בטל`. Removing a buy-in is exactly as
+reversible as adding one, which is what makes the `−` button safe enough to be the correction tool.
+
+**Correcting a buy-in tapped onto the wrong row:** `בטל` if it's still on screen, otherwise `−` on
+the wrong player and `+` on the right one. Two taps, using controls that are already in muscle
+memory.
+
+There is deliberately **no "move this buy-in to another player" action**. It would be a third way to
+change someone's money, reachable from a menu that anyone holding the passed-around phone can open,
+in order to save one tap on a mistake that is normally caught within seconds. The `−`/`+` path is
+slower to describe and faster to do.
+
 **Guard rails:** the `−` button never goes below 0 and is disabled at 0. Decrementing a player to 0
 buy-ins asks whether to remove them from the game.
 
@@ -243,7 +276,6 @@ a fingertip is hard to reach one-handed and gets clipped at screen edges.
 | Edit chips | עריכת ז'יטונים | Row is settled |
 | Cash paid | מזומן ששולם | Always — also reachable straight from the row |
 | Nickname / rename | כינוי · שינוי שם | Per the table above |
-| Move a buy-in to another player | העברת קנייה לשחקן אחר | Fixes the most common data-entry error |
 | Player history in this game | היסטוריית השחקן | Always |
 | Remove from game | הסרה מהמשחק | Always, with confirmation |
 
@@ -313,7 +345,20 @@ still missing rather than an error.
 
 A grab handle at the very bottom edge. Swipe up or tap `יומן` to expand to ~60% height; swipe down
 to dismiss. Newest first, live. Each entry: time · actor · what changed. Long-press an entry to
-undo it (where reversible). Filter chips: `הכל` `קניות` `סגירות` `ניהול`.
+undo it (where reversible). Filter chips: `הכל` `קניות` `סגירות` `ניהול` `בוטלים`.
+
+**Undone actions stay in the log**, because a log that can be silently rewritten by add-then-undo
+can't settle the argument it exists to settle. They just don't shout: the action and its inverse
+collapse into a single struck-through line with a `בוטל` chip, hidden until you tap the `בוטלים`
+filter.
+
+```
+00:14 · מור — קנייה 3
+23:58 · ~~רני — קנייה 2~~   בוטל          ← hidden by default
+23:51 · אורי — נסגר עם 120 ז'יטונים
+```
+
+Two loud lines for a corrected typo would be noise; one hidden but recoverable line is right.
 
 The drawer disappears for games whose events have been purged, replaced by one line:
 `יומן הפעילות של משחק זה כבר לא זמין`.
@@ -390,7 +435,10 @@ Then the settlement screen, fully specified in [05 — Settlement](05-settlement
   amount and name. **No "mark as paid" checkbox** — nobody comes back to tick it, so it would
   permanently misrepresent who has settled
   ([05](05-settlement.md#payment-links--reality-check-23)).
-- Bottom bar: **`שתף בוואטסאפ`** primary, `העתק טקסט` secondary.
+- Bottom bar: **`שתף בוואטסאפ`** and **`העתק העברות`**, side by side and equally weighted. Unlike
+  the live game, this text gets pasted repeatedly — into the group chat, into a DM with the one
+  person who wasn't there, into someone's notes — so copy earns its own button rather than living
+  one level down in a sheet.
 - `פתח מחדש` available to the host for 24h, in the `⋯` menu, not on the main surface — with a
   countdown so it's clear the option expires (#22).
 
@@ -412,8 +460,15 @@ Then the settlement screen, fully specified in [05 — Settlement](05-settlement
 2. **Viewers** — the in-app list, add from group members, remove with a swipe. Anyone who opened
    the link while signed in appears here automatically with a `הצטרף בקישור` caption, so the host
    always knows who's watching.
-3. **Text** — `שתף כטקסט` with a live preview of exactly what will be sent (#8), because people
-   want to know what they're pasting into a group chat.
+3. **Text** — a live preview of exactly what will be sent (#8), because people want to know what
+   they're pasting into a group chat, with **two equal buttons underneath**: `שתף` (Web Share API)
+   and `העתק`. Copy is a peer, not a fallback — plenty of people would rather paste it themselves
+   than go through the system share sheet.
+
+**Why there's no separate copy button on the game page.** The action bar already carries four items,
+and `שיתוף` → `העתק` is two taps for something done once or twice a night. A fifth item would cost
+every player row a little width for the rest of the game. The settlement screen is the opposite case
+— see below.
 
 ### The viewer's experience
 
@@ -457,8 +512,15 @@ management, no audit log, no live controls — just `מי מעביר למי`, wi
 share button. This is what most link recipients will actually open, since links get read after
 everyone's gone home.
 
-**Revoked, expired, or purged.** A plain, friendly dead end. Never a stack trace, never a login
-wall for something that no longer exists.
+**Claiming a guest row.** A signed-in viewer who sees a guest row that is actually them taps it and
+gets `זה אני` in the sheet. It sends a claim to the host, who approves from the same
+pending-requests sheet as join requests, with the row's result shown so they can sanity-check it.
+Available while the game is live and for **2 days after it ends**; past that the option is gone and
+the sheet says why. An ⓘ explains that a claim only changes who the row belongs to — never the
+money.
+
+**Revoked, expired, or purged.** A plain, friendly dead end. Never a stack trace, never a login wall
+for something that no longer exists.
 
 ---
 
@@ -504,6 +566,39 @@ Offer `ייצוא לפני מחיקה` in the same sheet. The same wording, soft
 game in a group approaches automatic purging.
 
 ---
+
+## ⓘ Explainers
+
+Some controls have a consequence you cannot infer from the label. `משחק פרטי` changes which
+statistics a night counts toward. `ז'יטונים לקנייה` silently sets the value of every chip on the
+table. `קח ניהול` can strand another person's unsynced changes. Those get a small **ⓘ** beside them.
+
+Rules:
+
+- **Second-order consequences only.** ⓘ is never a patch for a label that should have been clearer.
+  If the explainer is describing what the control *does*, rename the control instead.
+- **One to three sentences.** It opens a popover on desktop and a small sheet on mobile, dismissed
+  by tapping anywhere. Never a modal, never a tour.
+- **A real tap target.** The glyph is small; the hit area is ≥44px and offset from the control it
+  explains, so nobody toggles a setting while reaching for its explanation.
+- **Copy lives in the i18n bundle** like every other string, and gets a screen-reader label.
+- **Muted, not decorative.** If ⓘ appears on half the screen it stops meaning anything — the list
+  below is deliberately short.
+
+Where they go:
+
+| Control | What the ⓘ explains |
+|---|---|
+| `משחק פרטי` | Won't appear in group statistics or the group's past games; still counts in each player's personal statistics; everyone in the game still sees everything |
+| `ז'יטונים לקנייה` | This sets what one chip is worth, and it can't change once the first buy-in is recorded |
+| `💵` cash paid | Money physically handed to the pot, which reduces what this player still owes at settlement |
+| `לא מזוהה / הבית` | Where a chip-count discrepancy goes so the settlement can still balance, and that it's tracked over time |
+| `קח ניהול` | The current host loses control immediately, and their unsynced changes can be lost if their phone never reconnects |
+| Share link expiry | 7 days for guests, 30 for group members, and that group members can always reopen the game from the app |
+| `כינוי` | Shown alongside the username; the person's account name is unchanged and statistics still follow the account |
+| `פתח מחדש` | Available for 24 hours after the game ends, and re-running settlement discards manual edits |
+| Claiming a guest row | The host must approve, it only changes who the row belongs to, and it's possible for 2 days after the game |
+| Shared costs | Split between players at settlement, and kept out of the poker win/loss figures |
 
 ## Cross-cutting interaction rules
 

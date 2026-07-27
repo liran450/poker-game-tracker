@@ -67,7 +67,9 @@ Each is justified in the linked document.
 8. **The cash pot is modelled as a player** — a node with a negative balance, so "pay Dana out of
    the cash on the table" falls out of the settlement algorithm with no special case.
    → [05](docs/05-settlement.md#the-pot-as-a-settlement-node)
-9. **Statistics never cross a group.** → [06](docs/06-statistics.md#scoping)
+9. **Statistics never cross a group**, and a **private game** is excluded from every group-scoped
+   figure and list while still counting in each player's personal statistics.
+   → [06](docs/06-statistics.md#scoping)
 10. **Writes are host-only, permanently**, and nobody joins a game without the host approving —
     group members ask from the app, everyone else through the share link.
     → [03](docs/03-data-model.md#two-paths-in-one-gate)
@@ -78,13 +80,18 @@ Each is justified in the linked document.
     from the locale, currency from the game — and currency is a label that is never converted.
     → [02](docs/02-architecture.md#internationalisation)
 
+## Planned, not in v1
+
+Two features are specified but deliberately unbuilt, with schema reserved so they don't need a
+migration later ([01 §10](docs/01-product-spec.md#10-planned-not-in-v1)):
+
+- **Locations** — where a game was played, addable at any point, with the group's five most-played
+  places as quick picks.
+- **Scheduled games** — a future game with date, time, location and invitees, RSVPs, per-person
+  expected arrival times, and `התחל משחק` on the day.
+
 ## Open questions
 
-None. Every question raised across three review rounds has been answered, and the full record is in
+None. Every question raised across four review rounds has been answered, and the full record is in
 [08 Part C](docs/08-gaps-and-open-questions.md#part-c--nothing-open) so nothing gets reopened by
 accident. The plan is ready for the design pass.
-
-One flag worth reading before building: dropping the "claim profile" feature means a guest's earlier
-games no longer merge into their account when they sign up. That was item #21 in the original brief,
-so it's called out explicitly in [08](docs/08-gaps-and-open-questions.md#part-c--nothing-open) in
-case the merge was actually wanted.

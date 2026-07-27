@@ -36,6 +36,17 @@ One mechanism buys four features:
 Events are also the largest table by far, and the first thing to be purged — see
 [Retention](#retention-and-archiving).
 
+### Undo, and whether an undone action stays in the log
+
+**It stays.** An undo appends an inverse event and sets `undone_by` on the original; nothing is
+deleted. The log's entire job is settling arguments — "I never took a fourth buy-in" — and a log
+that can be silently rewritten by add-then-undo doesn't do that job.
+
+The noise problem is solved in rendering, not in storage: an undone action and its inverse collapse
+into **one struck-through line with a `בוטל` chip**, hidden by default behind a `הצג בוטלים` filter
+in the log drawer. Two loud lines for a corrected typo would be worse than useless; a hidden but
+recoverable one is exactly right.
+
 ---
 
 ## Live tables
@@ -100,6 +111,10 @@ Group membership is what authorises an **emergency host takeover** — see
 | `reopen_deadline` | timestamptz NULL | `ended_at + 24h` (#22) |
 | `host_last_synced_at` | timestamptz | Last successful event push from the host's device. Powers the takeover warning |
 | `unaccounted_minor` | int | The 🔴 discrepancy assigned to "the house" (#20) |
+| `is_private` | bool | default false. See [Private games](#private-games) |
+| `claim_deadline` | timestamptz NULL | `ended_at + 48h`. After this, guest rows can no longer be claimed |
+| `location_id` | uuid NULL | **Reserved** — locations are a planned feature ([01 §10](01-product-spec.md#10-planned-not-in-v1)) |
+| `scheduled_for` | timestamptz NULL | **Reserved** — planned games are a future feature |
 | `notes` | text | |
 
 > **Chip value** is derived, never stored: `chip_value = buy_amount_minor / chips_per_buy`.
@@ -185,12 +200,13 @@ Event types:
 
 ```
 player_added        player_removed       player_renamed       nickname_set
-buy_in_added        buy_in_removed       cash_paid_set        buy_in_reassigned
+buy_in_added        buy_in_removed       cash_paid_set
 chips_set           player_settled       player_reopened
 shared_cost_added   shared_cost_removed  shared_cost_updated
 game_started        game_settling        game_ended           game_reopened
 host_changed        host_taken_over      viewer_added         viewer_removed
 join_requested      join_approved        join_rejected
+player_invited      claim_requested      claim_approved       claim_rejected
 unaccounted_set     transfer_edited      note
 ```
 
@@ -348,12 +364,75 @@ but the requester. Every decision is an event, so it shows in the audit log.
 Joining changes nothing about editing rights — an approved player is a row on the host's screen, not
 an editor. Writes remain host-only.
 
-> **Note on a dropped feature.** The original brief (#21) also asked for a "claim profile / link
-> guest" button so a guest's past games would merge into their statistics once they signed up. That
-> is now out: guest rows stay guest rows, and a person's statistics start when their account starts.
-> This simplifies the model considerably — no retroactive rewriting of permanent results, and no
-> question of who's allowed to approve a claim years later. Flagging it because it was an explicit
-> item in the original list; say the word if the merge was wanted after all.
+### `player_claims` (#21)
+
+"That guest row is me." A signed-in person claims one specific guest row; the host approves.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `game_id` | uuid → games | |
+| `game_player_id` | uuid → game_players | The guest row being claimed |
+| `player_result_id` | uuid → player_results NULL | Set once the game is finished |
+| `claimant_user_id` | uuid → profiles | |
+| `status` | enum(`pending`,`approved`,`rejected`) | |
+| `decided_by` | uuid NULL | The host who decided |
+| `created_at`, `decided_at` | timestamptz | |
+
+`unique (game_player_id) where status = 'approved'` — two people can't both own the same row.
+Multiple *pending* claims on one row are allowed; the host picks one and the rest are rejected.
+
+| | Rule |
+|---|---|
+| Who may claim | A member of the game's group, **or** anyone who reached the game through its share link |
+| What | One specific guest player row — never a whole history |
+| Approval | Host only |
+| Window | While the game is live, and up to **48 hours after it ends** (`games.claim_deadline`) |
+| Effect | Sets `user_id` on the live `game_players` row **and** on the permanent `player_results` row |
+
+**A claim changes attribution, never amounts.** Buy-ins, chips and results are untouched; the row
+simply stops being anonymous and starts counting toward that person's statistics.
+
+Two consequences worth being explicit about:
+
+- **A game's statistics attribution is not final until the claim window closes.** `finalize_game()`
+  writes the snapshot at game end; an approved claim inside the next 48 hours updates `user_id` on
+  those permanent rows. Nothing else about them is ever mutable.
+- **After the deadline the row is a guest row forever.** No late claims, no appeals — which is what
+  keeps the permanent tables genuinely immutable and removes the question of who could approve a
+  claim two years later.
+
+---
+
+## Private games
+
+A game created with `is_private` behaves normally in every way except visibility. **One rule
+governs all of it:**
+
+> `is_private` excludes a game from every group-scoped figure and every group-visible list.
+> It never affects personal figures.
+
+Concretely:
+
+| Action | Private game |
+|---|---|
+| Share a join link | **Host only.** `create_share_link` rejects a non-host caller when `is_private` |
+| Invite a group member | Host **or any current player** in the game — a `player_invited` event, then the normal host approval |
+| Appear in the group's past-games list | Never |
+| Appear in group statistics, leaderboards or fun stats | Never |
+| Appear in `get_group_live_games()` | Only for people already invited or in the game |
+| Appear in a participant's own personal statistics | **Always** |
+
+The asymmetry between the first two rows is deliberate: any player can pull in someone the group
+already knows, but only the host can mint a URL that works for a stranger.
+
+Enforcement lives in three places, all server-side: the `is_private` filter in every group-scoped
+statistics view, the same filter in the group's game list and lobby projection, and the host check
+in `create_share_link`. `is_private` is copied onto `game_summaries` and `player_results` at
+finalisation so the exclusion still holds after the live rows are purged.
+
+Privacy here is about *statistics and discoverability*, not secrecy — everyone in the game sees
+everything in it, exactly as in a normal game.
 
 ---
 
@@ -376,6 +455,8 @@ statistics, and they survive both automatic purging and explicit deletion of the
 | `total_cash_pot_minor` | int | |
 | `unaccounted_minor` | int | Feeds the long-term "house loss" stat |
 | `shared_costs_minor` | int | |
+| `is_private` | bool | Excluded from every group-scoped figure — see [Private games](#private-games) |
+| `location_name` | text NULL | **Reserved.** Denormalised so a purged game can still feed a "most-played place" stat |
 | `finished_at` | timestamptz | |
 
 ### `player_results`
@@ -386,6 +467,7 @@ One immutable row per player per finished game.
 | `id` | uuid PK | |
 | `game_id` | uuid → game_summaries | |
 | `group_id` | uuid NULL | Denormalised so statistics never join a purged table |
+| `is_private` | bool | Denormalised for the same reason — group aggregates must still exclude it after the live rows are gone |
 | `user_id` | uuid → profiles NULL | NULL for a guest. Never backfilled — guest results stay guest results |
 | `guest_name` | text NULL | Retained so the row still reads correctly years later |
 | `display_name` | text | The name as rendered on the night |
@@ -497,6 +579,8 @@ can_read_game(game_id)      -- host or player or viewer
 | `groups`, `group_members` | members | `owner` |
 | `player_results`, `game_summaries`, `transfer_summaries` | `is_group_member(group_id)`, or self for group-less games | **Nobody.** Written only by `finalize_game()` |
 | `join_requests` | requester + host | Group members insert directly; everyone else via the share-link RPC. **Only the host** may decide |
+| `player_claims` | claimant + host | Claimant inserts within the window; **only the host** may decide |
+| `locations` *(reserved)* | group members | group members |
 
 A slim, read-only exception exists for group members: `get_group_live_games()` lets them see that
 a game is running so they can ask to join it, without exposing anything inside the game.
@@ -555,3 +639,45 @@ or no such game — so the RPC can't be used to probe which game ids exist.
 Log immutability is enforced with a rule denying `update`/`delete` on `game_events` to all roles
 including the host. Undo appends; it does not erase. Only `purge_expired_game_data()`, running as
 the table owner, may delete.
+
+---
+
+## Reserved for planned features
+
+Sketches, not specifications. They exist so that today's schema doesn't have to be migrated when
+these arrive ([01 §10](01-product-spec.md#10-planned-not-in-v1)). Do not build them yet.
+
+### Locations
+
+```
+locations
+  id, group_id → groups, name, created_by, created_at
+```
+
+`games.location_id` is already reserved, as is `game_summaries.location_name` — denormalised so a
+purged game can still answer "where does this group play most?". The quick-pick list is the group's
+five most-used locations by game count, which is one `group by` away and needs no counter column.
+
+A location is attachable at creation, during the game, and after it has finished — including on a
+game whose details have been purged, since the name lives on the summary.
+
+### Scheduled games
+
+```
+games.status gains 'planned'
+games.scheduled_for  (already reserved)
+
+game_invites
+  id, game_id → games, user_id → profiles NULL, guest_name text NULL,
+  rsvp enum(pending, yes, no, maybe),
+  expected_arrival_at timestamptz NULL,   -- "game's at 20:00, I'll be there at 21:00"
+  invited_by, created_at, responded_at
+```
+
+A planned game is the same row as a real one, in an earlier status — so starting it is a status
+transition plus a choice of which invitees actually turned up, not a separate object that has to be
+copied into a game. That is the whole reason `planned` is a status rather than a `scheduled_games`
+table.
+
+`expected_arrival_at` also feeds the existing `game_players.joined_at`, so a late arrival's
+profit-per-hour is already correct without new statistics work.
