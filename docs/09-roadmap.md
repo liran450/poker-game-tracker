@@ -27,6 +27,9 @@ statistics) is amplification. So the first milestone deliberately ships without 
 
 - Create a game: buy amount, chips per buy, derived chip value
 - Player list: add, remove, guest rename, `(1)` deduping
+- **The multi-select add-players sheet** — selection tray, capped-height roster, batch commit
+  ([04](04-ux-spec.md#adding-players--the-multi-select-sheet)). Group sections light up in M4 once
+  groups exist; until then it shows one unlabelled roster from local history
 - **Buy-in counter with coalescing undo**, snackbar showing buy-ins, chips and money together
   ([04](04-ux-spec.md#the-buy-in-counter--the-most-important-interaction-in-the-app))
 - Cash paid, edited directly on the row
@@ -64,11 +67,13 @@ stopping point if energy runs out.
 - Hand over management, and **immediate host takeover with the sync warning**
 - Join requests, host-approved either way: group members ask from the app via a slim lobby
   projection, everyone else via the share link
+- Account-level default nickname, offered optionally at signup
 - Claiming a guest row: host-approved, open until 2 days after the game ends
 - Nicknames for registered players
 
 ### M4 — Groups, statistics, retention
 - Groups (חבורה), membership, quick-add sorted by frequency
+- **Group roles**: `owner` / `admin` / `member`, with `הפוך למנהל חבורה` and owner-only demotion
 - **Private games** — the create-page checkbox, the `is_private` filter in every group-scoped view
   and list, host-only link sharing, player-initiated invites
 - Personal statistics + cumulative-net sparkline

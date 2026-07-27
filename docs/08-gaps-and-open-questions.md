@@ -71,7 +71,7 @@ dimmed screen in a dark room. Every colour signal is paired with a sign, icon or
 ### A11. Number bidi bugs
 `₪80-` renders wrong in Hebrew. One `<Money>` component, LTR isolation everywhere, LRI/PDI marks in
 exported text. The most likely bug to ship unnoticed and look sloppy — and it gets worse once
-composed names like `הכריש (mor_l)` enter the mix.
+composed names like `הכריש (מור לוי)` enter the mix.
 → [07](07-hebrew-glossary.md#bidi-rules-for-text--read-this-before-writing-any-string)
 
 ### A12. Long-press is undiscoverable
@@ -150,13 +150,33 @@ Listed for the design pass in [10](10-design-brief.md#states-to-design-not-just-
 | **ⓘ on ambiguous controls** | A standard affordance for *second-order consequences* only, on ten named controls, starting with the private-game checkbox → [04](04-ux-spec.md#-explainers) |
 | **Locations — planned** | Attachable at creation, during, and after a game; five most-played places as quick picks. Schema reserved → [01 §10](01-product-spec.md#10-planned-not-in-v1) |
 | **Scheduled games — planned** | Date, time, location, invitees, RSVPs, per-person expected arrival times, and `התחל משחק` on the day. A planned game is the same row in an earlier status, so starting it is a transition rather than a copy → [01 §10](01-product-spec.md#10-planned-not-in-v1) |
+| **Multi-select add-players sheet** | Tap to select, not to commit; a `נבחרו (N)` tray; labelled `◈ חברי החבורה` / `חברים נוספים` sections visible before any tap; capped-height scroll with fixed tray and footer; typed names join the same batch via `+ לרשימה` → [04](04-ux-spec.md#adding-players--the-multi-select-sheet) |
+| **Adding to a game never adds to the group** | Stated in the sheet spec and in the roles section; they are separate acts with different consequences → [01 §4](01-product-spec.md#4-roles-and-permissions) |
+| **A group admin tier** | `group_members.role` gains `admin`: manage roster and settings, promote members. Demotion and deletion stay owner-only → [03](03-data-model.md#group-roles) |
+| **Account-level default nickname** | `profiles.default_nickname`, offered at signup. Pre-fill chain: last nickname in this group → account default → nothing → [03](03-data-model.md#naming-and-nicknames) |
+| **Show the account name beside the nickname** | Composed as `nickname (account name)` — `הכריש (מור לוי)`. `username` moves to profile/admin screens and to tie-breaking identical display names → [03](03-data-model.md#naming-and-nicknames) |
+| **Generic `שיתוף`, not `שתף בוואטסאפ`** | The button opens the OS share sheet; naming one app promises something it doesn't do. WhatsApp stays named only on the per-person `wa.me` payment shortcut → [07](07-hebrew-glossary.md#two-words-that-must-never-be-shortened) |
 
 ---
 
-# Part C — Nothing open
+# Part C — Still open
 
-Every question raised across four review rounds has been answered. The plan is ready for the design
-pass.
+One gap, newly surfaced by the add-players work.
+
+## C1
+**The group screen's "add member" flow is unspecified.**
+
+The in-game add-players sheet is fully designed. Adding someone to the *group* is a different action
+with heavier consequences — it grants access to group statistics and the standing ability to seize a
+host role — so it should not simply reuse that sheet with a different verb.
+
+Recommendation, for whoever picks it up: a group member is added by **invite**, not by being typed
+into a list. Reuse the existing `groups.invite_token` link, plus a search by username for people who
+already have accounts, and require the new member to accept. That keeps group membership something
+people opt into rather than something done to them, which matters because membership is what the
+host-takeover rule keys off.
+
+Everything else raised across five review rounds has been answered.
 
 ---
 
@@ -166,6 +186,8 @@ The full record, so none of this gets reopened by accident.
 
 **Permissions**
 - Host-only editing — permanent, not deferred. Exactly one host at a time.
+- Group roles are `owner` / `admin` / `member`; a group admin has no power inside any game.
+- Adding someone to a game never adds them to the group.
 - Host takeover is instant for any group member, announced to everyone with the game open, logged.
 - Nobody joins a game without the host approving. Group members ask from the app; everyone else asks
   through the share link.

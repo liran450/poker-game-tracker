@@ -24,12 +24,14 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | The pot (physical cash) | קופה | |
 | Game | משחק | |
 | Group / table | חבורה | |
-| Host / manager | מנהל המשחק | Short form in badges: `מנהל` |
+| Host / manager | מנהל המשחק | **Never shortened to bare `מנהל`** — it collides with the group admin |
+| Group admin | מנהל חבורה | A different role entirely; carries no power inside a game |
 | Player | שחקן | |
 | Guest | אורח | |
 | Viewer | צופה | |
-| Nickname | כינוי | Rendered as `כינוי (שם משתמש)` for registered players |
-| Username | שם משתמש | |
+| Nickname | כינוי | Rendered as `כינוי (שם בחשבון)` for registered players |
+| Account name | שם בחשבון | The real name on the account — the parenthetical in a composed name |
+| Username | שם משתמש | The unique handle. Profile and admin screens, and as a tie-breaker only |
 | Settle a player | סגירת שחקן | The verb: `לסגור` |
 | Reopen | פתיחה מחדש | |
 | End game | סיום משחק | |
@@ -65,6 +67,7 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Duplicate last game | שכפל משחק אחרון |
 | Recalculate | חשב מחדש |
 | Share as text | שתף כטקסט |
+| Share (generic) | שיתוף |
 | Copy link | העתק קישור |
 | Copy text | העתק טקסט |
 | Export | ייצוא |
@@ -75,6 +78,15 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Retry | נסה שוב |
 | Hand over management | העבר ניהול |
 | Take over management | קח ניהול |
+| Promote to group admin | הפוך למנהל חבורה |
+| Remove admin rights | הסר הרשאות ניהול |
+| Add players (sheet title) | הוספת שחקנים |
+| Selected (N) | נבחרו (3) |
+| Add N players | הוסף 3 שחקנים · `הוסף שחקן` at N=1 |
+| Group members section | חברי החבורה |
+| Other friends section | חברים נוספים |
+| New name field | שם חדש… |
+| Add to list | + לרשימה |
 | Revoke link | בטל קישור |
 | New link | צור קישור חדש |
 | Invite a player | הזמן שחקן |
@@ -100,7 +112,9 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Buy-in snackbar | `מור · קנייה 3 · +100 ז'יטונים · +₪50` |
 | Batch snackbar total | `סה"כ · +200 ז'יטונים · +₪100` |
 | Duplicate name (#9) | `השם כבר קיים במשחק — נוסף בתור "מור (1)"` |
-| Nickname helper | `הכינוי יוצג לצד שם המשתמש` |
+| Nickname helper | `הכינוי יוצג לצד השם בחשבון` |
+| Adding ≠ group | `הוספה למשחק לא מצרפת לחבורה` |
+| Name already picked | `השם כבר ברשימה` |
 | Slide to end | `החלק לסיום המשחק` |
 | Players still open | `יש 2 שחקנים שעדיין לא נסגרו` |
 | Settlement incomplete | `שויך ₪430 מתוך ₪480 · חסר ₪50` |
@@ -137,6 +151,17 @@ choices, not dictionary ones, and the colloquial choice is usually the right one
 | Log purged | `יומן הפעילות של משחק זה כבר לא זמין` |
 | Small sample | `נתונים חלקיים` |
 
+## Two words that must never be shortened
+
+`מנהל המשחק` (the host of one game) and `מנהל חבורה` (a group administrator) are unrelated roles.
+Bare `מנהל` is ambiguous between them and must not appear anywhere in the UI — always carry the
+noun, even where space is tight. See [03](03-data-model.md#group-roles).
+
+The share button is **`שיתוף`**, never `שתף בוואטסאפ`. It opens the OS share sheet, and the
+destination might be Telegram, SMS, email or notes — naming one app promises something the button
+doesn't do. The only place WhatsApp is named is the per-person `wa.me` payment shortcut, which
+genuinely does open WhatsApp.
+
 ## Bidi rules for text — read this before writing any string
 
 Hebrew financial text is where bidirectional rendering goes wrong. Rules:
@@ -152,7 +177,8 @@ Hebrew financial text is where bidirectional rendering goes wrong. Rules:
 4. **Don't use `➡️` in RTL text.** A right-pointing arrow contradicts the reading direction. In the
    UI use `←` (U+2190), which correctly points from payer to payee in RTL. In shared plain text
    prefer words — see below — because arrow rendering varies by client.
-5. Composed names like `הכריש (mor_l)` mix scripts and need isolation as a unit, or the parentheses
+5. Composed names like `הכריש (מור לוי)` — and `הכריש (מור לוי · mor_l)` when a username is needed
+   as a tie-breaker — need isolation as a unit, or the parentheses
    will jump to the wrong side.
 
 ## Share text templates

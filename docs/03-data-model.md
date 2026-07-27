@@ -59,8 +59,9 @@ Mirrors `auth.users`.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | → `auth.users.id` |
-| `username` | text unique | Stable handle, shown in parentheses after a nickname (see [Naming](#naming-and-nicknames)) |
-| `display_name` | text | From Google or chosen at signup |
+| `username` | text unique | Stable handle. Used on profile and admin screens, and as a tie-breaker between identical display names (see [Naming](#naming-and-nicknames)) |
+| `display_name` | text | The account's real name, from Google or chosen at signup |
+| `default_nickname` | text NULL | Optional, offered at account creation. Seeds the per-game nickname |
 | `avatar_url` | text | Optional |
 | `phone` | text | Optional, for `wa.me` links ([05](05-settlement.md#payment-links--reality-check-23)) |
 | `locale` | text | `he` default; the app is built for more languages later |
@@ -87,11 +88,28 @@ crosses a group boundary.
 |---|---|---|
 | `group_id` | uuid → groups | PK part |
 | `user_id` | uuid → profiles | PK part |
-| `role` | enum(`owner`,`member`) | |
+| `role` | enum(`owner`,`admin`,`member`) | See below |
 | `joined_at` | timestamptz | |
 
 Group membership is what authorises an **emergency host takeover** — see
 [Host takeover](#host-takeover).
+
+#### Group roles
+
+| Role | Can |
+|---|---|
+| `owner` | Everything. Edit group settings, add and remove members, promote and **demote** admins, transfer ownership, delete the group. Exactly one per group |
+| `admin` | Add and remove members, promote a member to admin, edit the group's name and defaults. Cannot demote another admin, cannot remove the owner, cannot delete the group |
+| `member` | Everything else — play, view group statistics, seize a host role |
+
+`הפוך למנהל חבורה` on a member row promotes; `הסר הרשאות ניהול` demotes, and is owner-only. A group
+can have any number of admins, which is the point: one person shouldn't be a single point of failure
+for adding a friend to the roster.
+
+> **Naming collision, worth getting right in the UI.** `מנהל המשחק` is the host of one game;
+> `מנהל חבורה` administers the group. They are unrelated — a group admin gets no special power
+> inside a game, and a host needn't be an admin. Never label either one bare `מנהל`; always carry
+> the noun. See [07](07-hebrew-glossary.md#core-terms).
 
 ### `games`
 | Column | Type | Notes |
@@ -155,19 +173,31 @@ The name shown for a player row is composed, not stored:
 |---|---|---|
 | Guest | `guest_name` | ✅ Free rename — it's just a label |
 | Registered, no nickname | `profiles.display_name` | ❌ Only that person can change their own display name |
-| Registered, with nickname | `nickname (username)` — e.g. `הכריש (mor_l)` | ✅ Host sets the nickname |
+| Registered, with nickname | `nickname (display_name)` — e.g. `הכריש (מור לוי)` | ✅ Host sets the nickname |
+
+The parenthetical is the **account's real name**, not the username: a table of friends recognises
+`מור לוי` instantly and `mor_l` not at all. `username` is the unique handle and appears only where it
+does real work — the profile screen, group admin lists, and as a tie-breaker when two people in the
+same game share a display name, where the render becomes `nickname (display_name · username)`.
 
 Renaming a registered player therefore never overwrites their identity; it decorates it, and the
 username stays visible so nobody can be misrepresented in a game that involves money. Statistics
 always key off the profile, never the nickname.
 
 **Nicknames are stored per game but behave as if they persist.** When a player is added, the
-nickname field is pre-filled from that person's most recent nickname *in the same group*. Set
-`הכריש` once and it reappears every Thursday; change it for one night and only that night changes.
-This gets the ergonomics of a persistent nickname with no extra table and no cross-game write.
+nickname field is pre-filled from the first of these that exists:
+
+1. That person's most recent nickname **in this group** — so `הכריש` set once reappears every
+   Thursday.
+2. Their **account default** (`profiles.default_nickname`), offered as an optional field at account
+   creation. This is what a brand-new player brings to their first game with a new group.
+3. Nothing — the row shows their account name alone.
+
+Changing a nickname affects tonight only; it never writes back to the account or to past games. The
+ergonomics of a persistent nickname, with no extra table and no cross-game write.
 
 ```sql
--- pre-fill on player_added
+-- pre-fill on player_added, step 1
 select nickname from game_players gp
 join games g on g.id = gp.game_id
 where gp.user_id = $user and g.group_id = $group and gp.nickname is not null
@@ -576,7 +606,7 @@ can_read_game(game_id)      -- host or player or viewer
 | `game_viewers` | `can_read_game` | `is_host`, plus self-insert through the share-link RPC |
 | `share_links` | `is_host` | `is_host` |
 | `profiles` | `username`, `display_name`, `avatar_url` readable to co-members of a shared group; everything else self-only | self |
-| `groups`, `group_members` | members | `owner` |
+| `groups`, `group_members` | members | `owner` and `admin`; demoting an admin and deleting the group are `owner` only |
 | `player_results`, `game_summaries`, `transfer_summaries` | `is_group_member(group_id)`, or self for group-less games | **Nobody.** Written only by `finalize_game()` |
 | `join_requests` | requester + host | Group members insert directly; everyone else via the share-link RPC. **Only the host** may decide |
 | `player_claims` | claimant + host | Claimant inserts within the window; **only the host** may decide |

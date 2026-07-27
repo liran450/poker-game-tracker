@@ -61,7 +61,7 @@ screen, bigger.
 - **RTL at launch, but not forever.** Hebrew ships first; English and other languages are planned.
   Mirror everything, and never let a layout depend on RTL being true. See
   [04 — RTL and Hebrew](04-ux-spec.md#rtl-and-hebrew) for the specific traps, especially the
-  number/currency bidi isolation rule and composed names like `הכריש (mor_l)`.
+  number/currency bidi isolation rule and composed names like `הכריש (מור לוי)`.
 - **Design for longer strings than the Hebrew ones.** Hebrew runs ~15% shorter than English; if the
   layout only just fits in Hebrew, it will break the day a second language lands.
 - **Everything interactive lives in the bottom third.** Content scrolls above; actions stay in
@@ -77,7 +77,9 @@ screen, bigger.
 | Component | Notes |
 |---|---|
 | `<Money>` | The most important component in the app. Signed, LTR-isolated, tabular, sized variants, positive/negative treatment. Currency comes from the game, never a hardcoded `₪` |
-| Player name | Composed: a guest name, a display name, or `nickname (username)` — needs to stay legible when the parenthetical is long |
+| Player name | Composed: a guest name, an account name, or `nickname (account name)` — needs to stay legible when the parenthetical is long, and when a username is appended as a tie-breaker |
+| Add-players sheet | Selection chips with a `◈` group marker, the `נבחרו (N)` tray, a capped-height scroll area, the new-name field, and a footer that counts. The single most-used sheet in the app |
+| Selection chip | Unselected / selected (`✓` + accent outline) / group member (`◈`) — the marker carries the meaning, not the colour |
 | Player row | Active / settled / late-joiner / pending-sync states, with a tappable cash-paid figure |
 | Buy counter | `−  n  +`, asymmetric target sizes, count-up animation, disabled at 0 |
 | Undo snackbar | Single-row form showing buy-ins + chips + money, and the multi-row batch form with per-row lines and a total, both with a countdown ring |
@@ -130,6 +132,9 @@ Specific ones that matter:
 - Host takeover modal at each sync-staleness level, and the announcement banner everyone else sees
 - Join request: the guest's single-button state, the "sent" state, and the host's pending-requests
   sheet
+- Add-players sheet: nothing selected (footer disabled), several selected, a roster long enough to
+  scroll, and a typed name that collides with an existing chip
+- Group screen: a member row with `הפוך למנהל חבורה`, and the same row once they're an admin
 - Share sheet showing the two expiry windows without turning into a paragraph of legalese
 - Share sheet as seen by a **non-host player in a private game** — invite available, link sharing
   replaced by an explanation

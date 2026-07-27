@@ -71,12 +71,15 @@ Each is justified in the linked document.
    figure and list while still counting in each player's personal statistics.
    → [06](docs/06-statistics.md#scoping)
 10. **Writes are host-only, permanently**, and nobody joins a game without the host approving —
-    group members ask from the app, everyone else through the share link.
-    → [03](docs/03-data-model.md#two-paths-in-one-gate)
-11. **Share links are 256-bit tokens, stored hashed, carried in the URL fragment**, valid 7 days
+    group members ask from the app, everyone else through the share link. Adding someone to a game
+    never adds them to the group. → [03](docs/03-data-model.md#two-paths-in-one-gate)
+11. **Players are added in batches, not one at a time.** A multi-select sheet with a selection tray,
+    group members marked by a `◈` glyph, and one confirm button.
+    → [04](docs/04-ux-spec.md#adding-players--the-multi-select-sheet)
+12. **Share links are 256-bit tokens, stored hashed, carried in the URL fragment**, valid 7 days
     for anyone outside the group and 30 days for members.
     → [03](docs/03-data-model.md#link-security)
-12. **Hebrew first, built for more languages.** Real i18n plumbing from day one; direction derived
+13. **Hebrew first, built for more languages.** Real i18n plumbing from day one; direction derived
     from the locale, currency from the game — and currency is a label that is never converted.
     → [02](docs/02-architecture.md#internationalisation)
 
@@ -92,6 +95,7 @@ migration later ([01 §10](docs/01-product-spec.md#10-planned-not-in-v1)):
 
 ## Open questions
 
-None. Every question raised across four review rounds has been answered, and the full record is in
-[08 Part C](docs/08-gaps-and-open-questions.md#part-c--nothing-open) so nothing gets reopened by
-accident. The plan is ready for the design pass.
+One: the **group screen's "add member" flow** is unspecified — adding someone to a group is a
+heavier act than adding them to a game, and shouldn't reuse the same sheet. Direction and reasoning
+in [08 C1](docs/08-gaps-and-open-questions.md#c1). Everything else raised across five review rounds
+has been answered, and the full record is in the same document.

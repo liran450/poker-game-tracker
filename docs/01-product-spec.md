@@ -41,12 +41,18 @@ symbol is hardcoded, because other currencies are expected
 |---|---|---|---|
 | Host / manager | מנהל המשחק | Creator by default; transferable | Everything: add/remove players, buy-ins, settle, end game, share, hand over management |
 | Player (registered) | שחקן | Signed-in user listed in the game | View live. Counts toward their statistics. May seize the host role in an emergency (below) |
+| Group admin | מנהל חבורה | Promoted by the owner or another admin | Manage the group's roster and settings. **No special power inside any game** — unrelated to being a host |
 | Guest player | אורח | A name with no account | Appears in the game, no login. Can ask to join via a share link; nothing else |
 | Viewer | צופה | Added in-app or arrived via the share link | Read-only, live |
 
 Rules:
 
-- Creating a game makes you the host (#7).
+- Creating a game makes you the host (#7). Being a **group admin** confers nothing here: the two
+  roles are independent, and the UI must never label either one bare `מנהל`
+  ([03](03-data-model.md#group-roles)).
+- **Adding someone to a game never adds them to the group**, and vice versa. Two separate acts with
+  different consequences — group membership grants access to group statistics and the ability to
+  seize a host role ([04](04-ux-spec.md#adding-players--the-multi-select-sheet)).
 - **Exactly one host at a time.** No co-hosts, no shared write access. One source of truth for
   who's holding the pen.
 - The host can hand management to any **registered** player or viewer in the game (#6). The change
@@ -121,9 +127,11 @@ row anatomy, interaction and states: [04 — UX spec](04-ux-spec.md#player-row-a
   [04](04-ux-spec.md#the-buy-in-counter--the-most-important-interaction-in-the-app)).
 - **Renaming depends on who the row is:**
   - **Guest** → free rename. It's just a label.
-  - **Registered user** → sets a per-game **nickname**, rendered as `nickname (username)` —
-    e.g. `הכריש (mor_l)`. Their account identity is never overwritten, because a row that owes
-    money has to be unambiguous. Statistics always follow the account, never the nickname.
+  - **Registered user** → sets a per-game **nickname**, rendered as `nickname (account name)` —
+    e.g. `הכריש (מור לוי)`. Their account identity is never overwritten, because a row that owes
+    money has to be unambiguous. The nickname is pre-filled from their last nickname in this group,
+    or from the optional default they set when creating their account. Statistics always follow the
+    account, never the nickname.
 - **Duplicate names** (#9): a second `מור` becomes `מור (1)`, a third `מור (2)`. Uniqueness is per
   game, applied to the rendered name, and the suffix goes on the *new* entry. A guest whose name
   matches a registered player is suffixed like anyone else — the app never guesses that two rows

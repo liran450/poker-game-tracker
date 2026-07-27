@@ -82,9 +82,9 @@ sensible defaults already filled so the whole thing can be dismissed with one ta
 - **Buy amount** and **chips per buy** side by side, with the derived chip value shown live
   underneath as you type: `ז'יטון = ₪0.5`. Instant feedback that the numbers are right.
 - Amount presets as chips: `₪20` `₪50` `₪100` `אחר` — faster than the keypad for the common cases.
-- **Player quick-add**: a wrapped grid of name chips from the group, **sorted by how often you've
-  played with them** (#13), tap to toggle in. Selected chips move to the top so the list doesn't
-  reflow under your finger. Below it, a text field: `הוסף אורח…` for names not in the list.
+- **Players** — opens the same [add-players sheet](#adding-players--the-multi-select-sheet) used
+  in-game, so there is one way to pick people and it behaves identically on both screens. Names
+  chosen here seed the game; the sheet can be reopened before starting.
 - **Viewers** in a collapsed section — most games won't set it up here (#14 allows adding later).
 - **`משחק פרטי`** — a single checkbox with an ⓘ beside it, low in the form since most games aren't
   private. Ticking it shows one line of consequence inline, not just in the popover:
@@ -163,7 +163,7 @@ directly under the header so it's visible without scrolling, because a discrepan
 
 ```
 ┌───────────────────────────────────────────────────┐
-│  הכריש (mor_l)                          ₪150   ⋯  │
+│  הכריש (מור לוי)                        ₪150   ⋯  │
 │  💵 ₪100              [ − ]   3   [ + ]           │
 └───────────────────────────────────────────────────┘
 ```
@@ -250,7 +250,7 @@ Behaviour depends on who the row is:
 | Row is | Tapping the name does |
 |---|---|
 | **Guest** | Inline edit, focused, text pre-selected. It's just a label — free to change |
-| **Registered user** | Opens a **nickname** field, not a rename. The result renders as `nickname (username)`, e.g. `הכריש (mor_l)`. The helper text says so: `הכינוי יוצג לצד שם המשתמש` |
+| **Registered user** | Opens a **nickname** field, not a rename. The result renders as `nickname (account name)`, e.g. `הכריש (מור לוי)`. The helper text says so: `הכינוי יוצג לצד השם בחשבון` |
 
 A registered player's real identity is never overwritten — this is a game about money, and the
 person behind a row has to stay unambiguous. Clearing the nickname reverts to their display name.
@@ -321,6 +321,71 @@ split.
   `הוצאות משותפות ₪120` — visible but never competing with the poker numbers.
 - In the settlement results, each player's share is its own line so nobody confuses dinner with a
   bad night at cards.
+
+### Adding players — the multi-select sheet
+
+Opened by **`+ שחקן`** in the action bar, and by **Players** on the setup screen. One component,
+two entry points, identical behaviour.
+
+The design principle: adding four people at the start of a night is one task, not four. Tapping a
+name **selects** it rather than committing it, and one footer button commits the whole batch.
+
+```
+┌─────────────────────────────────────────────┐
+│  הוספת שחקנים                            ✕  │
+├─────────────────────────────────────────────┤
+│  נבחרו (3)                                  │
+│  ⟨ מור ✕ ⟩ ⟨ אורי ✕ ⟩ ⟨ יוסי ✕ ⟩            │  selection tray — fixed
+├─────────────────────────────────────────────┤
+│  ◈ חברי החבורה                              │
+│  ⟦◈ מור ✓⟧ ⟦◈ דנה⟧ ⟦◈ רני⟧ ⟦◈ אורי ✓⟧      │  scrolls
+│                                             │
+│  חברים נוספים                               │
+│  ⟦ שי ⟧ ⟦ תום ⟧ ⟦ נועה ⟧                    │
+├─────────────────────────────────────────────┤
+│  [ שם חדש…              ]  [ + לרשימה ]     │  fixed
+├─────────────────────────────────────────────┤
+│         [    הוסף 3 שחקנים    ]             │  fixed, disabled at 0
+└─────────────────────────────────────────────┘
+```
+
+**Selection, not instant add.** A tap toggles: the chip takes an accent outline and a `✓`. Tapping
+again deselects. Nothing is written to the game until the footer button is pressed, so a mis-tap
+costs nothing and needs no undo.
+
+**The tray.** `נבחרו (N)` sits above the roster and lists every pick with an `✕` to remove it. It
+stays put while the roster scrolls, so the answer to "who have I got so far" never requires
+scrolling. When nothing is selected the tray collapses to nothing rather than showing an empty box.
+
+**Two labelled sections, visible before any tap.** `◈ חברי החבורה` first, then `חברים נוספים`.
+Group members are marked **both** by an accent outline and by a `◈` glyph on each chip — the glyph
+is what carries the meaning, per the rule that colour is never the only signal
+([Accessibility](#accessibility)). Within each section, order by how often you've played together
+(#13). Selected chips do **not** reorder to the top: the tray already answers that, and reflowing a
+grid under a moving finger causes mis-taps.
+
+**Built for a long roster.** The two sections share one scroll area with a capped height. The tray
+above and the text field and confirm button below are all fixed, so the commit action is always one
+reachable tap away no matter how many friends exist.
+
+**New names join the same batch.** The free-text field has a **`+ לרשימה`** button rather than
+committing on its own. A typed name lands in the same tray, badged as new, and is deduped against
+the roster — typing a name that already exists selects that chip instead of creating a duplicate
+person. Custom names and picked friends therefore commit together in one action. Names colliding
+with someone already *in the game* still get the `(1)` suffix on commit (#9).
+
+**The footer** reads `הוסף N שחקנים`, is disabled until at least one person is picked, and pluralises
+correctly for N = 1 (`הוסף שחקן`).
+
+> **Adding someone to a game never adds them to the group.** This sheet only ever touches
+> `game_players`. Group membership is a separate, deliberate act on the group screen. Worth stating
+> because it is exactly the kind of thing that gets implemented as a convenience and then quietly
+> grows a friend list nobody agreed to.
+
+**Not yet specified:** the *group* screen's "add member" flow. It's a different action with
+different consequences — it grants access to group statistics and the ability to seize a host role —
+so it belongs with group invites rather than reusing this sheet. Tracked in
+[08](08-gaps-and-open-questions.md#c1).
 
 ### Action bar
 
@@ -435,10 +500,14 @@ Then the settlement screen, fully specified in [05 — Settlement](05-settlement
   amount and name. **No "mark as paid" checkbox** — nobody comes back to tick it, so it would
   permanently misrepresent who has settled
   ([05](05-settlement.md#payment-links--reality-check-23)).
-- Bottom bar: **`שתף בוואטסאפ`** and **`העתק העברות`**, side by side and equally weighted. Unlike
-  the live game, this text gets pasted repeatedly — into the group chat, into a DM with the one
-  person who wasn't there, into someone's notes — so copy earns its own button rather than living
-  one level down in a sheet.
+- Bottom bar: **`שיתוף`** and **`העתק העברות`**, side by side and equally weighted. Unlike the live
+  game, this text gets pasted repeatedly — into the group chat, into a DM with the one person who
+  wasn't there, into someone's notes — so copy earns its own button rather than living one level
+  down in a sheet.
+- The share button is deliberately **generic, not `שתף בוואטסאפ`**. It opens the OS share sheet,
+  where the destination might be Telegram, SMS, email or notes; naming one app promises something
+  the button doesn't do. The one place WhatsApp *is* named is the per-person `wa.me` shortcut above,
+  which genuinely does open WhatsApp.
 - `פתח מחדש` available to the host for 24h, in the `⋯` menu, not on the main surface — with a
   countdown so it's clear the option expires (#22).
 
