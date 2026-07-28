@@ -43,6 +43,7 @@ Read them in this order.
 | 08 | [Gaps, decisions & open questions](docs/08-gaps-and-open-questions.md) | What was missing, what you've decided, what's still open |
 | 09 | [Roadmap](docs/09-roadmap.md) | Milestones, cut lines, testing strategy, risks |
 | 10 | [Design brief](docs/10-design-brief.md) | Handoff package for the design pass |
+| 11 | [Visual design](docs/11-visual-design.md) | The chosen design: palette, type, shape, motion, and where it collides with the spec |
 
 ---
 

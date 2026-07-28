@@ -45,6 +45,29 @@ _(none yet)_
 
 ## Entries
 
+### Four collisions between the prototype and the spec — spec wins in all four
+**Step 0 · 2026-07-28 · trap**
+
+The design landed and `docs/11-visual-design.md` was extracted from it. Four places where building
+the prototype faithfully would break a spec'd rule, listed here because they are easy to reproduce
+by accident and all four are invisible in a screenshot:
+
+1. The `−` on the buy counter is **44×44px**; the floor is 48px. Grow it and grow `+` alongside it —
+   the asymmetry is meant to be relative weight, not an undersized decrement.
+2. Rubik is loaded from **Google Fonts**; `02` requires a self-hosted subset.
+3. The prototype is one file of inline styles with hardcoded Hebrew. Lifting its markup would
+   bypass `i18next`, `<Money>` and the event model at once.
+4. Physical CSS (`left`/`right`) throughout — fine in a permanently-RTL mock, fatal under the
+   pseudo-locale.
+
+None of the four changes how anything looks, which is why the resolution is always "adapt the
+design", never "revisit the spec". Full detail in
+[`../11-visual-design.md`](../11-visual-design.md#collisions-with-the-spec).
+
+Also worth knowing: the prototype already gets two things right that are easy to lose —
+`font-variant-numeric:tabular-nums` on every numeral, and `direction:ltr; unicode-bidi:isolate` on
+money. That is the `<Money>` rule, already proven in situ.
+
 ### The mockup decides appearance; the spec decides behaviour
 **Step 0 · 2026-07-28 · decision**
 

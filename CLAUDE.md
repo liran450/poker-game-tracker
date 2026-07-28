@@ -80,13 +80,15 @@ purge. Treat any change to it with the same care as the settlement module.
 games have bad Wi-Fi; this is a product requirement, not an optimisation.
 → [02](docs/02-architecture.md#offline-first)
 
-**The design decides how it looks; the spec decides how it works.** `docs/design/` holds the chosen
-visual direction — authoritative for colour, type, spacing, density, iconography and motion.
+**The design decides how it looks; the spec decides how it works.** [`docs/11`](docs/11-visual-design.md)
+and `docs/design/` hold the chosen visual direction — authoritative for colour, type, spacing,
+density, iconography and motion.
 `docs/01`–`docs/09` are authoritative for what a control does, where it lives, what it's called and
-which states exist. Where they disagree the spec wins and the design is adapted to it; the
-predictable collisions are listed in [`docs/design/README.md`](docs/design/README.md). A mockup is
-silent on most non-happy-path states — silence is a gap to fill in the design's own language, never
-permission to skip the state.
+which states exist. Where they disagree the spec wins and the design is adapted to it; the four
+known collisions are listed in
+[`docs/11`](docs/11-visual-design.md#collisions-with-the-spec). The prototype is silent on most
+non-happy-path states — silence is a gap to fill in the design's own language, never permission to
+skip the state.
 
 ## Already decided — do not reopen
 

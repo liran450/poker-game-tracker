@@ -164,10 +164,10 @@ instead of inventing a new button each time.
 
 **Depends on** — 1, 2, and the design assets in [`docs/design/`](../design/README.md).
 
-**Input.** The chosen visual design, plus `docs/11-visual-design.md` derived from it. `docs/10` is
-the brief and leaves the palette and typeface open; the design closes them. **Read
-[`docs/design/README.md`](../design/README.md) first** — it carries the precedence rule that keeps
-a mockup from overriding a spec'd interaction, and the list of states the mockup won't cover.
+**Input.** [`docs/11-visual-design.md`](../11-visual-design.md) — the extracted tokens, the nine
+screens covered, the four known collisions with the spec, and the states the prototype leaves
+open. The prototype itself is in [`docs/design/prototype/`](../design/prototype/); open it in a
+browser rather than working from the screenshots.
 
 **Build.** The non-game-specific half of
 [`10 — Component inventory`](../10-design-brief.md#component-inventory):

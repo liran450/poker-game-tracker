@@ -1,8 +1,21 @@
 # The chosen design — reference assets
 
 The visual direction is settled: the **poker tracker design** from Claude Design is the one.
-This folder holds it, and `docs/11-visual-design.md` (written once the assets land) reads it back
-as a specification.
+The assets are here, and **[`docs/11-visual-design.md`](../11-visual-design.md) reads them back as a
+specification** — real token values, the screens covered, and the collisions with the spec. Read
+that first; this folder is the raw material behind it.
+
+## What's here
+
+| Path | What it is |
+|---|---|
+| `prototype/poker-tracker.dc.html` | The interactive prototype — nine screens. Open it in a browser; `support.js` next to it is its runtime |
+| `screenshots/` | Stills of the live game screen and the add-players sheet |
+| `handoff.md` | Provenance: what was built, from which spec documents, when |
+
+The prototype is a **single-file mock** — inline styles, hardcoded Hebrew, no i18n, no event model.
+It is a visual reference, not code to merge. See
+[`11 — Collisions`](../11-visual-design.md#collisions-with-the-spec).
 
 ## What this folder is, and is not
 
@@ -43,37 +56,16 @@ A future session that finds a genuine conflict not listed here resolves it in th
 records it in [`../build/NOTES.md`](../build/NOTES.md), and says so — rather than quietly building
 the mockup.
 
-## What to put here
+## Known gaps
 
-- `screens/` — every screen as exported, named for the screen it shows (`home.png`,
-  `game-live.png`, `settlement-edit.png`…).
-- `tokens/` — the palette, type scale and spacing as values, if the design can export them.
-  Values beat eyedropping a screenshot.
-- `code/` — any React/CSS the design tool emits. Read as **reference for the visual result**, not
-  as code to merge: it won't carry the i18n, the logical properties, the `<Money>` component or the
-  event model, and retrofitting those is more work than building the component correctly once.
-- `NOTES.md` — what the design covers, what it doesn't, and any deliberate departure from it.
+A mockup covers the happy path. The states this design does not cover — and there are many, because
+[`10`](../10-design-brief.md#states-to-design-not-just-the-happy-path) requires around forty — are
+enumerated in [`11`](../11-visual-design.md#what-the-design-does-not-cover). Step 3 derives them in
+this design's own language.
 
-## Known gaps to expect
+## Updating these assets
 
-A mockup covers the happy path. [`10 — States to design`](../10-design-brief.md#states-to-design-not-just-the-happy-path)
-lists roughly forty states this app actually needs, and silence in the design is **not** a decision
-that a state isn't needed. The ones most likely to be missing, and which step 3 must therefore
-derive from the design's own language rather than copy:
-
-loading · empty · error · offline-with-pending-changes · failed sync · read-only viewer ·
-200% text scale · the red pot discrepancy · settlement where everyone broke even · a revoked,
-expired or purged share link · the host-takeover modal at each staleness level · a purged game's
-results card · and every screen under the pseudo-locale, which runs LTR and ~40% longer than
-Hebrew.
-
-## Getting the files in
-
-`DesignSync` cannot authorise in this environment (it needs an interactive terminal, and this is a
-web session), so the assets can't be pulled automatically from here. Either:
-
-- use **"Send to Claude Code Web"** in Claude Design, which seeds the project into the workspace; or
-- export the screens and drop them in this folder directly.
-
-Either way, once they're here, the next session writes `docs/11-visual-design.md` from them and
-step 3 has a concrete target instead of a suggestion.
+`DesignSync` cannot authorise in a web session (it needs an interactive terminal), so a refreshed
+design arrives either through Claude Design's **"Send to Claude Code Web"**, or as an export
+dropped in here by hand. Whichever way: re-extract the values in
+[`11`](../11-visual-design.md) rather than assuming they held, and update its collision list.
