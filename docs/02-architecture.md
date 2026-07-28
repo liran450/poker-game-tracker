@@ -154,7 +154,7 @@ Fall back to polling every 15s if the WebSocket fails (some restrictive networks
 | Concern | Choice | Why |
 |---|---|---|
 | Framework | React + TypeScript + Vite | Ubiquitous, fast builds, good PWA plugins |
-| Styling | Tailwind CSS with **logical properties** (`ms-`, `me-`, `ps-`, `pe-`) | RTL for free; never use `left`/`right` |
+| Styling | **Tailwind CSS** with **logical properties** (`ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`), falling back to an **SCSS module** where Tailwind can't express it | RTL for free; never `left`/`right`, never inline styles |
 | State | Zustand for local game state + TanStack Query for server sync | Small, no boilerplate |
 | Local DB | Dexie (IndexedDB) | Outbox + cached games |
 | PWA | `vite-plugin-pwa` (Workbox) | Service worker, offline shell, install prompt |
@@ -177,7 +177,8 @@ but the few things it does change are expensive to retrofit:
   pluralisation (Hebrew has its own rules), interpolation, and lazy-loaded language bundles for
   free, and costs a few kilobytes.
 - **Direction is derived from the locale.** `<html dir>` and `lang` are set at runtime; no
-  component may assume RTL, and layout uses logical properties exclusively
+  component may assume RTL, and layout uses logical properties exclusively — enforced by an ESLint
+  rule over the Tailwind classes and a stylelint rule over any SCSS
   ([04](04-ux-spec.md#rtl-and-hebrew)).
 - **No string concatenation.** Every user-visible sentence is a template with named parameters, so
   word order can differ per language.

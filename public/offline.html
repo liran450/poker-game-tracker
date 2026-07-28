@@ -1,0 +1,32 @@
+<!doctype html>
+<!--
+  The offline fallback, served by the service worker when a navigation fails and
+  nothing is cached. It is deliberately standalone: no bundle, no script, no
+  font file — those are exactly the things that may be missing.
+
+  Its text is not routed through i18next, because i18next lives in the bundle
+  this page exists to survive without. It ships in Hebrew, the launch language.
+
+  Styling is a linked stylesheet rather than a <style> block so this page needs
+  no `unsafe-inline`, matching the app's CSP.
+-->
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0E0C09" />
+    <title>אין חיבור</title>
+    <link rel="stylesheet" href="./offline.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <img class="mark" src="./icons/icon-192.png" alt="" width="72" height="72" />
+      <h1 class="title">אין חיבור</h1>
+      <p class="body">המשחק ממשיך לעבוד. השינויים יסתנכרנו כשהחיבור יחזור.</p>
+    </main>
+  </body>
+</html>

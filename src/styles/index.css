@@ -1,0 +1,21 @@
+/*
+ * The single stylesheet entry. Order matters: Tailwind first so its base layer
+ * lands before our reset, then tokens (which define what the reset consumes).
+ */
+
+@import 'tailwindcss';
+
+/* Self-hosted Rubik — no CDN, no third-party request, works offline, and it is
+ * what lets `font-src 'self'` hold in the CSP (02-architecture.md). */
+@import '@fontsource/rubik/hebrew-400.css';
+@import '@fontsource/rubik/hebrew-500.css';
+@import '@fontsource/rubik/hebrew-600.css';
+@import '@fontsource/rubik/hebrew-700.css';
+@import '@fontsource/rubik/hebrew-800.css';
+@import '@fontsource/rubik/latin-400.css';
+@import '@fontsource/rubik/latin-500.css';
+@import '@fontsource/rubik/latin-600.css';
+@import '@fontsource/rubik/latin-700.css';
+@import '@fontsource/rubik/latin-800.css';
+@import './tokens.css';
+@import './reset.css';

@@ -4,9 +4,14 @@ A Hebrew-first, RTL, mobile web app (PWA) for tracking money in a friendly home 
 buy-ins, chips, the cash pot, shared costs, end-of-game settlement with a minimum number of
 transfers, and long-term statistics per player and per group.
 
-**Status: planning only.** No code yet. This repo currently contains the full product,
-architecture, data-model, UX and design specification, intended to be handed off to a design pass
-and then to implementation.
+**Status: planning complete, build not started.** This repo contains the full product,
+architecture, data-model, UX and design specification, plus the build plan that turns it into
+code. Implementation begins at step 1.
+
+Building it: [`docs/build/PLAN.md`](docs/build/PLAN.md) (the 18 steps) ·
+[`docs/build/PROGRESS.md`](docs/build/PROGRESS.md) (what's done) ·
+[`docs/build/NOTES.md`](docs/build/NOTES.md) (what we learned) ·
+[`CLAUDE.md`](CLAUDE.md) (the rules every session follows).
 
 ---
 
@@ -38,6 +43,7 @@ Read them in this order.
 | 08 | [Gaps, decisions & open questions](docs/08-gaps-and-open-questions.md) | What was missing, what you've decided, what's still open |
 | 09 | [Roadmap](docs/09-roadmap.md) | Milestones, cut lines, testing strategy, risks |
 | 10 | [Design brief](docs/10-design-brief.md) | Handoff package for the design pass |
+| 11 | [Visual design](docs/11-visual-design.md) | The chosen design: palette, type, shape, motion, and where it collides with the spec |
 
 ---
 

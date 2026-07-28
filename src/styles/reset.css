@@ -1,0 +1,111 @@
+/*
+ * Reset. Logical properties only — no `left`, `right`, `margin-left` or their
+ * friends anywhere in this file or any other (CLAUDE.md § RTL).
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  /* Never scale text on orientation change. iOS Safari — a primary target —
+     only honours the prefixed property, so both ship. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+
+  /* The app owns the viewport; the browser must not bounce it. */
+  overscroll-behavior-y: none;
+}
+
+body {
+  min-block-size: 100dvb;
+  background-color: var(--color-surface-base);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizelegibility;
+}
+
+/*
+ * Every numeral in this app is a quantity in a table-like layout, so tabular
+ * figures are the default rather than an opt-in. Money additionally gets LTR
+ * isolation — that lives in <Money>, built in step 2.
+ */
+body,
+input,
+button,
+textarea,
+select {
+  font-variant-numeric: tabular-nums;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+}
+
+button {
+  cursor: pointer;
+
+  /* iOS Safari adds its own tap flash on top of ours. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+img,
+picture,
+svg,
+video {
+  display: block;
+  max-inline-size: 100%;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+/* Visible focus is not optional; the default ring is just poorly placed. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* 10-design-brief.md#motion: replace all motion with instant state changes. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

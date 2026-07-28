@@ -1,0 +1,58 @@
+{
+  "extends": ["stylelint-config-standard-scss"],
+  "rules": {
+    "declaration-property-value-disallowed-list": [
+      {
+        "text-align": ["left", "right"],
+        "float": ["left", "right"],
+        "clear": ["left", "right"]
+      },
+      {
+        "message": "Use the logical value instead: text-align: start / end, float: inline-start / inline-end."
+      }
+    ],
+    "property-disallowed-list": [
+      [
+        "margin-left",
+        "margin-right",
+        "padding-left",
+        "padding-right",
+        "border-left",
+        "border-right",
+        "border-left-width",
+        "border-right-width",
+        "border-left-color",
+        "border-right-color",
+        "border-left-style",
+        "border-right-style",
+        "border-top-left-radius",
+        "border-top-right-radius",
+        "border-bottom-left-radius",
+        "border-bottom-right-radius",
+        "left",
+        "right"
+      ],
+      {
+        "message": "Physical properties break RTL and the pseudo-locale. Use the logical equivalent — margin-inline-start, padding-inline-end, inset-inline-start, border-start-start-radius."
+      }
+    ],
+    "scss/dollar-variable-pattern": "^[a-z][a-zA-Z0-9]*$",
+    "selector-class-pattern": [
+      "^[a-z][a-zA-Z0-9]*$",
+      {
+        "message": "CSS-module class names are camelCase, so they read as styles.playerRow."
+      }
+    ],
+    "custom-property-pattern": "^[a-z][a-zA-Z0-9-]*$",
+    "no-descending-specificity": null,
+    "comment-empty-line-before": null,
+    "property-no-vendor-prefix": null,
+    "scss/at-rule-no-unknown": [
+      true,
+      {
+        "ignoreAtRules": ["theme", "tailwind", "apply", "utility", "variant", "custom-variant", "source", "plugin", "config", "reference"]
+      }
+    ],
+    "import-notation": null
+  }
+}

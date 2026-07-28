@@ -1,0 +1,43 @@
+/*
+ * Styles for offline.html only. Values are duplicated from the design tokens
+ * rather than imported, because this page must render when the bundle — and
+ * therefore the token stylesheet — is unavailable. That is the one place in the
+ * app where duplicating a token is correct.
+ */
+
+body {
+  margin: 0;
+  min-block-size: 100dvb;
+  display: grid;
+  place-items: center;
+  background-color: #0e0c09;
+  color: #f4efe7;
+  font-family: system-ui, sans-serif;
+  text-align: center;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-inline: 24px;
+  max-inline-size: 22rem;
+}
+
+.mark {
+  opacity: 0.85;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.1875rem;
+  font-weight: 700;
+}
+
+.body {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: rgb(244 239 231 / 0.6);
+}

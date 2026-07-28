@@ -1,0 +1,151 @@
+/*
+ * The design tokens, extracted from the chosen prototype — docs/11-visual-design.md.
+ *
+ * Tailwind v4's `@theme` is the single source of truth: every entry here becomes
+ * BOTH a utility class (`bg-surface-card`) and a CSS custom property
+ * (`var(--color-surface-card)`) that the SCSS-module fallback consumes. One
+ * definition, two consumers, no drift.
+ *
+ * A raw hex or a magic pixel value in a component is a bug. Change it here.
+ */
+
+@theme {
+  /* ---- Surfaces. Warm near-black, never pure black: OLED black makes the
+     count-up animations flicker (10-design-brief.md). ---- */
+  --color-surface-base: #0e0c09;
+  --color-surface-app: #14110d;
+  --color-surface-card: #1e1913;
+  --color-surface-raised: #272119;
+  --color-surface-amber-dim: #2b2419;
+
+  /* ---- Accent. Amber, not green: green reads as "money/win" and is reserved
+     for results, so actions take a warm accent instead. ---- */
+  --color-accent: #e9a23c;
+  --color-accent-hover: #f4b95a;
+  --color-on-accent: #1a1508;
+
+  /* ---- Results. Never the only carrier of meaning — always paired with an
+     explicit +/− or ✓ (04-ux-spec.md#accessibility). ---- */
+  --color-positive: #4fc98a;
+  --color-positive-bright: #7fe0ac;
+  --color-negative: #ef6b63;
+  --color-negative-soft: #f0a5a0;
+  --color-tint-positive: #0c2417;
+  --color-tint-positive-alt: #1c2a1e;
+  --color-tint-negative: #241b1a;
+
+  /* ---- Foreground. One warm off-white, varied by alpha rather than by hue. ---- */
+  --color-fg: #f4efe7;
+  --color-fg-secondary: rgb(244 239 231 / 70%);
+  --color-fg-muted: rgb(244 239 231 / 55%);
+  --color-fg-tertiary: rgb(244 239 231 / 40%);
+  --color-fg-disabled: rgb(244 239 231 / 25%);
+  --color-line: rgb(244 239 231 / 9%);
+  --color-line-strong: rgb(244 239 231 / 16%);
+
+  /* ---- Type. Rubik, self-hosted. Hebrew has no casing, so hierarchy comes
+     from size and weight alone — hence the heavy reliance on 600/700. ---- */
+  --font-sans: 'Rubik', system-ui, sans-serif;
+  --text-caption: 0.6875rem; /* 11px */
+  --text-body-sm: 0.8125rem; /* 13px */
+  --text-body: 0.875rem; /* 14px */
+  --text-title: 1rem; /* 16px */
+  --text-heading: 1.1875rem; /* 19px */
+  --text-hero: 1.375rem; /* 22px */
+  --text-display: 1.875rem; /* 30px */
+
+  /* ---- Radii. 14px is the default; the prototype uses it 38 times. ---- */
+  --radius-sm: 0.5625rem; /* 9px */
+  --radius-md: 0.75rem; /* 12px */
+  --radius-lg: 0.875rem; /* 14px */
+  --radius-xl: 1rem; /* 16px */
+  --radius-pill: 999px;
+
+  /* ---- Spacing beyond Tailwind's scale. 9px is the dominant gap. ---- */
+  --spacing-gap: 0.5625rem; /* 9px */
+
+  /* ---- Tap targets. 48px floor, 8px apart — the prototype's 44px decrement
+     button is one of the four known collisions in docs/11. ---- */
+  --spacing-tap: 3rem; /* 48px */
+
+  /* ---- Motion, from 10-design-brief.md#motion. Disabled wholesale under
+     prefers-reduced-motion in reset.css. ---- */
+  --animate-count-up: count-up 200ms ease-out;
+  --animate-sheet-in: sheet-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-fade-in: fade-in 200ms ease;
+  --animate-rise: rise 240ms ease-out;
+}
+
+/*
+ * Light theme. Doc 11 records that the prototype has no light design, so these
+ * are a structurally-correct derivation and NOT a designed palette — step 3
+ * replaces them against the real contrast checks. Dark stays the default.
+ */
+:root[data-theme='light'] {
+  --color-surface-base: #f7f4ef;
+  --color-surface-app: #fffdfa;
+  --color-surface-card: #fff;
+  --color-surface-raised: #f1ece3;
+  --color-surface-amber-dim: #fdf3e2;
+  --color-accent: #a86a12;
+  --color-accent-hover: #8d5809;
+  --color-on-accent: #fffdfa;
+  --color-positive: #17794b;
+  --color-positive-bright: #0f5c37;
+  --color-negative: #c0342c;
+  --color-negative-soft: #94231d;
+  --color-tint-positive: #e4f3ea;
+  --color-tint-positive-alt: #edf6ef;
+  --color-tint-negative: #fbeae9;
+  --color-fg: #1b1610;
+  --color-fg-secondary: rgb(27 22 16 / 72%);
+  --color-fg-muted: rgb(27 22 16 / 58%);
+  --color-fg-tertiary: rgb(27 22 16 / 45%);
+  --color-fg-disabled: rgb(27 22 16 / 30%);
+  --color-line: rgb(27 22 16 / 12%);
+  --color-line-strong: rgb(27 22 16 / 20%);
+}
+
+@keyframes count-up {
+  from {
+    transform: translateY(0.35em);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

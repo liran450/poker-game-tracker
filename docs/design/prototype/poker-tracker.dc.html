@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0E0C09;font-family:'Rubik',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:#E9A23C;text-decoration:none}a:hover{color:#F4B95A}
+  *{box-sizing:border-box}
+  input{font-family:inherit}
+  .pt-scroll::-webkit-scrollbar{width:0;height:0}
+  @keyframes pt-ring{from{stroke-dashoffset:0}to{stroke-dashoffset:113}}
+  @keyframes pt-up{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
+  @keyframes pt-sheet{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  @keyframes pt-fade{from{opacity:0}to{opacity:1}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:18px;padding:26px 16px 46px;background:radial-gradient(120% 80% at 50% -10%,#1a1610 0%,#0E0C09 60%)">
+
+  <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:7px;max-width:600px;background:#1a1510;border:1px solid rgba(244,239,231,.09);border-radius:20px;padding:7px 8px" dir="rtl">
+    <span style="font-size:11px;color:rgba(244,239,231,.4);padding:0 8px">תצוגה</span>
+    <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="8">
+      <button onClick="{{ n.go }}" style="{{ n.style }}" style-hover="filter:brightness(1.12)">{{ n.label }}</button>
+    </sc-for>
+  </div>
+
+  <div style="width:392px;height:844px;background:#14110D;border-radius:46px;padding:9px;box-shadow:0 0 0 2px #2a2620,0 30px 70px -20px rgba(0,0,0,.8);position:relative">
+    <div style="position:absolute;top:20px;left:50%;transform:translateX(-50%);width:118px;height:30px;background:#000;border-radius:0 0 18px 18px;z-index:40"></div>
+    <div dir="rtl" style="height:100%;background:#14110D;border-radius:38px;overflow:hidden;position:relative;color:#F4EFE7">
+
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 26px 6px;font-size:13px;font-weight:600;position:relative;z-index:30">
+        <span style="direction:ltr">23:42</span>
+        <span dir="ltr" style="letter-spacing:2px;white-space:nowrap;font-size:12px">●●●&nbsp;&nbsp;▮</span>
+      </div>
+
+      <sc-if value="{{ toast }}" hint-placeholder-val="">
+      <div style="position:absolute;top:50px;left:50%;transform:translateX(-50%);z-index:60;background:#2b2419;border:1px solid rgba(233,162,60,.4);color:#F4EFE7;font-size:13px;font-weight:600;padding:9px 18px;border-radius:12px;animation:pt-fade .2s ease;box-shadow:0 8px 24px rgba(0,0,0,.5);white-space:nowrap">{{ toast }}</div>
+      </sc-if>
+
+      <div style="position:absolute;inset:44px 0 0 0;overflow:hidden">
+
+        <!-- ============ HOME ============ -->
+        <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+        <div style="height:100%;display:flex;flex-direction:column">
+          <div style="padding:8px 20px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(244,239,231,.07)">
+            <h1 style="margin:0;font-size:26px;font-weight:800">משחקים</h1>
+            <button onClick="{{ goProfile }}" style="width:30px;height:30px;border-radius:50%;background:#3a2f1f;border:none;font-family:inherit;display:grid;place-items:center;font-size:13px;font-weight:700;color:#E9A23C;cursor:pointer">מ</button>
+          </div>
+          <div class="pt-scroll" style="flex:1;overflow:auto;padding:16px 16px 20px;display:flex;flex-direction:column;gap:16px">
+            <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45)">פעיל עכשיו</div>
+            <button onClick="{{ goGame }}" style-hover="filter:brightness(1.06)" style="text-align:right;border:1px solid rgba(233,162,60,.28);background:linear-gradient(150deg,#241d12,#1b1610);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:16px;cursor:pointer;color:inherit">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:#4FC98A;box-shadow:0 0 8px #4FC98A"></span><span style="font-size:20px;font-weight:700">פוקר חמישי</span></div>
+                  <div style="font-size:13px;color:rgba(244,239,231,.5);margin-top:5px">{{ playerCount }} שחקנים · התחיל 21:30</div>
+                </div>
+                <div style="text-align:left"><div style="direction:ltr;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums">02:14</div><div style="font-size:11px;color:rgba(244,239,231,.45)">זמן משחק</div></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-top:14px;border-top:1px solid rgba(244,239,231,.08)">
+                <span style="font-size:13px;color:rgba(244,239,231,.55)">קופה במשחק</span>
+                <span dir="ltr" style="unicode-bidi:isolate;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums">{{ potStr }}</span>
+              </div>
+            </button>
+            <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-top:4px">משחקים אחרונים</div>
+            <sc-for list="{{ history }}" as="g" hint-placeholder-count="3">
+              <button onClick="{{ g.open }}" style-hover="filter:brightness(1.06)" style="{{ g.wrap }}">
+                <div style="display:flex;flex-direction:column;gap:3px;text-align:right">
+                  <span style="font-size:15px;font-weight:600">{{ g.name }}</span>
+                  <span style="font-size:12px;color:rgba(244,239,231,.42)">{{ g.meta }}</span>
+                </div>
+                <div style="text-align:left">
+                  <span style="{{ g.resStyle }}">{{ g.result }}</span>
+                  <div style="font-size:11px;color:rgba(244,239,231,.35);margin-top:2px">{{ g.tag }}</div>
+                </div>
+              </button>
+            </sc-for>
+          </div>
+          <div style="padding:12px 16px 26px;border-top:1px solid rgba(244,239,231,.07);background:#14110D">
+            <button onClick="{{ goNew }}" style-hover="filter:brightness(1.05)" style="width:100%;height:54px;border:none;border-radius:16px;background:#E9A23C;color:#1A1508;font-size:17px;font-weight:700;font-family:inherit;cursor:pointer">+  משחק חדש</button>
+            <div style="display:flex;justify-content:space-around;padding-top:16px;font-size:11px">
+              <span style="color:#E9A23C;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px"><span style="font-size:19px">♠</span>משחקים</span>
+              <button onClick="{{ goStats }}" style="background:none;border:none;font-family:inherit;color:rgba(244,239,231,.4);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;cursor:pointer"><span style="font-size:19px">▨</span>סטטיסטיקה</button>
+              <button onClick="{{ goProfile }}" style="background:none;border:none;font-family:inherit;color:rgba(244,239,231,.4);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;cursor:pointer"><span style="font-size:19px">◐</span>פרופיל</button>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ NEW GAME ============ -->
+        <sc-if value="{{ isNew }}" hint-placeholder-val="{{ true }}">
+        <div style="height:100%;display:flex;flex-direction:column">
+          <div style="padding:10px 20px 14px;display:flex;align-items:center;gap:14px;border-bottom:1px solid rgba(244,239,231,.07)">
+            <button onClick="{{ goHome }}" style="background:none;border:none;color:#F4EFE7;font-size:22px;cursor:pointer;padding:0">→</button>
+            <h1 style="margin:0;font-size:20px;font-weight:700">משחק חדש</h1>
+          </div>
+          <div class="pt-scroll" style="flex:1;overflow:auto;padding:18px 18px 20px;display:flex;flex-direction:column;gap:22px">
+            <button onClick="{{ dupLast }}" style-hover="filter:brightness(1.08)" style="align-self:flex-start;background:#241d12;border:1px solid rgba(233,162,60,.3);color:#E9A23C;font-family:inherit;font-size:14px;font-weight:600;padding:10px 16px;border-radius:12px;cursor:pointer">⟳  שכפל משחק אחרון</button>
+            <div style="display:flex;gap:14px">
+              <div style="flex:1"><div style="font-size:13px;color:rgba(244,239,231,.55);margin-bottom:8px">סכום קנייה</div><div style="background:#1E1913;border:1px solid rgba(244,239,231,.1);border-radius:14px;padding:15px;font-size:22px;font-weight:700;direction:ltr;text-align:center;font-variant-numeric:tabular-nums">₪50</div></div>
+              <div style="flex:1"><div style="font-size:13px;color:rgba(244,239,231,.55);margin-bottom:8px">ז'יטונים לקנייה</div><div style="background:#1E1913;border:1px solid rgba(244,239,231,.1);border-radius:14px;padding:15px;font-size:22px;font-weight:700;direction:ltr;text-align:center;font-variant-numeric:tabular-nums">100</div></div>
+            </div>
+            <div style="text-align:center;font-size:13px;color:#4FC98A;background:rgba(79,201,138,.1);padding:9px;border-radius:10px">שווי ז'יטון · <span dir="ltr" style="unicode-bidi:isolate">ז'יטון = ₪0.5</span></div>
+            <div>
+              <div style="font-size:13px;color:rgba(244,239,231,.55);margin-bottom:10px">שחקנים · <span style="color:#E9A23C">{{ pickedCount }}</span></div>
+              <div style="display:flex;flex-wrap:wrap;gap:9px">
+                <sc-for list="{{ nameChips }}" as="c" hint-placeholder-count="8"><button onClick="{{ c.toggle }}" style="{{ c.style }}">{{ c.name }}</button></sc-for>
+              </div>
+              <button onClick="{{ openAddGuest }}" style="width:100%;text-align:right;margin-top:12px;background:#1E1913;border:1px dashed rgba(244,239,231,.16);border-radius:12px;padding:13px;font-size:14px;font-family:inherit;color:rgba(244,239,231,.5);cursor:pointer">הוסף אורח…</button>
+            </div>
+            <button onClick="{{ togglePriv }}" style="text-align:right;display:flex;align-items:flex-start;gap:11px;background:#1B1610;border:1px solid rgba(244,239,231,.08);border-radius:14px;padding:14px;cursor:pointer;font-family:inherit;color:inherit">
+              <span style="{{ checkboxStyle }}">{{ checkMark }}</span>
+              <div><div style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px">משחק פרטי <span style="width:18px;height:18px;border-radius:50%;border:1px solid rgba(244,239,231,.3);display:inline-grid;place-items:center;font-size:11px;color:rgba(244,239,231,.5)">i</span></div>
+              <div style="font-size:12px;color:rgba(244,239,231,.42);margin-top:5px;line-height:1.5">לא יופיע בסטטיסטיקה של החבורה · ייספר בסטטיסטיקה האישית</div></div>
+            </button>
+          </div>
+          <div style="padding:12px 18px 26px;border-top:1px solid rgba(244,239,231,.07)">
+            <button onClick="{{ startGame }}" style-hover="filter:brightness(1.05)" style="width:100%;height:54px;border:none;border-radius:16px;background:#E9A23C;color:#1A1508;font-size:17px;font-weight:700;font-family:inherit;cursor:pointer">התחל משחק</button>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ LIVE GAME ============ -->
+        <sc-if value="{{ isGame }}" hint-placeholder-val="{{ true }}">
+        <div style="height:100%;display:flex;flex-direction:column">
+          <div style="padding:8px 18px 12px;border-bottom:1px solid rgba(244,239,231,.07)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="display:flex;align-items:center;gap:11px">
+                <button onClick="{{ goHome }}" style="background:none;border:none;color:#F4EFE7;font-size:22px;cursor:pointer;padding:0">→</button>
+                <div><div style="font-size:17px;font-weight:700">פוקר חמישי</div><div dir="ltr" style="text-align:right;font-size:12px;color:rgba(244,239,231,.45);font-variant-numeric:tabular-nums">02:14</div></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <button onClick="{{ openSync }}" style="background:none;border:none;color:#4FC98A;font-size:15px;cursor:pointer;padding:0">✓</button>
+                <button onClick="{{ openMenu }}" style="background:none;border:none;color:rgba(244,239,231,.6);font-size:20px;letter-spacing:2px;cursor:pointer;padding:0">⋯</button>
+              </div>
+            </div>
+            <div style="font-size:12px;color:rgba(244,239,231,.5);margin-top:7px;display:flex;gap:8px"><span dir="ltr" style="unicode-bidi:isolate">ז'יטון ₪0.5</span><span>·</span><span dir="ltr" style="unicode-bidi:isolate">קנייה ₪50</span><span>·</span><span>{{ playerCount }} שחקנים</span></div>
+          </div>
+
+          <div style="{{ potBannerStyle }}">
+            <span style="{{ potDotStyle }}"></span>
+            <span style="font-size:14px;font-weight:600;{{ potTextColor }}">{{ potLabel }}</span>
+            <span dir="ltr" style="unicode-bidi:isolate;font-size:12px;color:rgba(244,239,231,.55);margin-inline-start:auto;font-variant-numeric:tabular-nums">{{ potDetail }}</span>
+          </div>
+
+          <div class="pt-scroll" style="flex:1;overflow:auto;padding:8px 16px 14px;display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ livePlayers }}" as="p" hint-placeholder-count="6">
+              <div style="{{ p.rowStyle }}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                  <div style="display:flex;flex-direction:column;gap:3px">
+                    <span style="font-size:16px;font-weight:600">{{ p.name }}<sc-if value="{{ p.meta }}" hint-placeholder-val="x"><span dir="ltr" style="unicode-bidi:isolate;font-size:13px;font-weight:400;color:rgba(244,239,231,.42);margin-inline-start:6px">({{ p.meta }})</span></sc-if></span>
+                    <sc-if value="{{ p.late }}" hint-placeholder-val="x"><span style="font-size:11px;color:rgba(244,239,231,.38)">הצטרף {{ p.late }}</span></sc-if>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="{{ p.amountStyle }}">{{ p.lock }}{{ p.displayAmount }}</span>
+                    <button onClick="{{ p.menu }}" style="background:none;border:none;color:rgba(244,239,231,.35);font-size:18px;cursor:pointer;padding:0">⋯</button>
+                  </div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <button onClick="{{ p.cash }}" style="background:none;border:none;padding:0;font-family:inherit;cursor:pointer;{{ p.cashStyle }}">{{ p.cashStr }}</button>
+                  <sc-if value="{{ p.active }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <button onClick="{{ p.dec }}" disabled="{{ p.buysDisabled }}" style="{{ p.decStyle }}">−</button>
+                    <span style="min-width:34px;text-align:center;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;direction:ltr">{{ p.buys }}</span>
+                    <button onClick="{{ p.inc }}" style-active="transform:scale(.94)" style="width:56px;height:50px;border-radius:15px;border:none;background:#E9A23C;color:#1A1508;font-size:28px;font-weight:700;cursor:pointer;line-height:1">+</button>
+                  </div>
+                  </sc-if>
+                  <sc-if value="{{ p.settled }}" hint-placeholder-val="">
+                  <button onClick="{{ p.reopen }}" style="background:none;border:1px solid rgba(244,239,231,.14);color:rgba(244,239,231,.55);font-family:inherit;font-size:12px;padding:8px 14px;border-radius:10px;cursor:pointer">פתיחה מחדש</button>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ undoShow }}" hint-placeholder-val="">
+          <div style="margin:0 14px;animation:pt-up .22s ease">
+            <div style="background:#2b2419;border:1px solid rgba(233,162,60,.3);border-radius:14px;padding:11px 15px;display:flex;align-items:center;gap:12px">
+              <span dir="ltr" style="unicode-bidi:isolate;flex:1;font-size:13px;font-variant-numeric:tabular-nums;color:#F4EFE7">{{ undoText }}</span>
+              <button onClick="{{ doUndo }}" style="background:none;border:1px solid rgba(233,162,60,.5);color:#E9A23C;font-family:inherit;font-size:13px;font-weight:600;padding:6px 14px;border-radius:9px;cursor:pointer">בטל</button>
+              <svg width="22" height="22" viewBox="0 0 40 40" style="flex:none"><circle cx="20" cy="20" r="18" fill="none" stroke="rgba(244,239,231,.15)" stroke-width="3"/><circle cx="20" cy="20" r="18" fill="none" stroke="#E9A23C" stroke-width="3" stroke-dasharray="113" transform="rotate(-90 20 20)" style="animation:pt-ring 4.2s linear forwards"/></svg>
+            </div>
+          </div>
+          </sc-if>
+
+          <div style="padding:12px 14px 24px;border-top:1px solid rgba(244,239,231,.07);display:flex;gap:9px;align-items:stretch">
+            <button onClick="{{ openAdd }}" style-hover="filter:brightness(1.08)" style="flex:1.3;height:50px;border:none;border-radius:14px;background:#E9A23C;color:#1A1508;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer">+ שחקן</button>
+            <button onClick="{{ openShare }}" style="flex:1;height:50px;border:1px solid rgba(244,239,231,.14);background:#1E1913;color:#F4EFE7;font-size:13px;font-family:inherit;border-radius:14px;cursor:pointer">שיתוף</button>
+            <button onClick="{{ openLog }}" style="flex:1;height:50px;border:1px solid rgba(244,239,231,.14);background:#1E1913;color:#F4EFE7;font-size:13px;font-family:inherit;border-radius:14px;cursor:pointer">יומן</button>
+            <button onClick="{{ endGame }}" style-hover="filter:brightness(1.1)" style="{{ endBtnStyle }}">סיום משחק</button>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ SETTLEMENT ============ -->
+        <sc-if value="{{ isSettle }}" hint-placeholder-val="{{ true }}">
+        <div style="height:100%;display:flex;flex-direction:column">
+          <div style="padding:10px 18px 12px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(244,239,231,.07)">
+            <button onClick="{{ goGame }}" style="background:none;border:none;color:#F4EFE7;font-size:22px;cursor:pointer;padding:0">→</button>
+            <h1 style="margin:0;font-size:18px;font-weight:700">חישוב העברות</h1>
+          </div>
+          <div style="{{ balanceBannerStyle }}">
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:14px;font-weight:600;{{ balanceTextColor }}">{{ balanceLabel }}</span><span style="font-size:12px;color:rgba(244,239,231,.5)">{{ transferCount }} העברות</span></div>
+            <div style="height:6px;background:rgba(244,239,231,.1);border-radius:3px;margin-top:9px;overflow:hidden"><div style="height:100%;width:{{ balancePct }};background:{{ balanceBarColor }};border-radius:3px;transition:width .2s"></div></div>
+          </div>
+          <div class="pt-scroll" style="flex:1;overflow:auto;padding:14px 16px 16px;display:flex;flex-direction:column;gap:18px">
+            <div>
+              <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">העברות</div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <sc-for list="{{ transfers }}" as="t" hint-placeholder-count="3">
+                  <div style="background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px">
+                    <button onClick="{{ t.pickFrom }}" style="background:#272119;border:1px solid rgba(244,239,231,.12);border-radius:10px;padding:7px 13px;font-size:14px;font-weight:600;font-family:inherit;color:inherit;cursor:pointer">{{ t.from }}</button>
+                    <span style="color:rgba(244,239,231,.4);font-size:17px">←</span>
+                    <button onClick="{{ t.pickTo }}" style="background:#272119;border:1px solid rgba(244,239,231,.12);border-radius:10px;padding:7px 13px;font-size:14px;font-weight:600;font-family:inherit;color:inherit;cursor:pointer">{{ t.to }}</button>
+                    <button onClick="{{ t.editAmt }}" dir="ltr" style="unicode-bidi:isolate;margin-inline-start:auto;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;background:none;border:none;color:inherit;font-family:inherit;cursor:pointer">{{ t.amount }}</button>
+                    <button onClick="{{ t.del }}" style="background:none;border:none;color:rgba(239,107,99,.6);font-size:16px;cursor:pointer;padding:0">🗑</button>
+                  </div>
+                </sc-for>
+                <button onClick="{{ addTransfer }}" style="background:none;border:1px dashed rgba(244,239,231,.16);color:rgba(244,239,231,.5);border-radius:12px;padding:11px;font-family:inherit;font-size:14px;cursor:pointer">+ הוסף העברה</button>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">בדיקה לפי שחקן</div>
+              <div style="background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:14px;overflow:hidden">
+                <div style="display:flex;padding:9px 14px;font-size:11px;color:rgba(244,239,231,.4);border-bottom:1px solid rgba(244,239,231,.07)"><span style="flex:1">שם</span><span style="width:62px;text-align:left">אמור</span><span style="width:62px;text-align:left">בפועל</span><span style="width:52px;text-align:left">פער</span></div>
+                <sc-for list="{{ recon }}" as="r" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;padding:11px 14px;border-bottom:1px solid rgba(244,239,231,.05);font-size:14px">
+                    <span style="flex:1;font-weight:500">{{ r.name }}<sc-if value="{{ r.cashChip }}" hint-placeholder-val=""><span dir="ltr" style="unicode-bidi:isolate;font-size:10px;background:rgba(79,201,138,.14);color:#7fe0ac;padding:2px 6px;border-radius:6px;margin-inline-start:6px">{{ r.cashChip }}</span></sc-if></span>
+                    <span dir="ltr" style="unicode-bidi:isolate;width:62px;text-align:left;font-variant-numeric:tabular-nums;color:rgba(244,239,231,.6)">{{ r.should }}</span>
+                    <span dir="ltr" style="unicode-bidi:isolate;width:62px;text-align:left;font-variant-numeric:tabular-nums;color:rgba(244,239,231,.6)">{{ r.actual }}</span>
+                    <span dir="ltr" style="unicode-bidi:isolate;width:52px;text-align:left;font-weight:700;{{ r.diffColor }}">{{ r.diff }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="padding:12px 16px 26px;border-top:1px solid rgba(244,239,231,.07);display:flex;gap:9px">
+            <button onClick="{{ shareSettleText }}" style="flex:1;height:50px;border:1px solid rgba(244,239,231,.14);background:#1E1913;color:#F4EFE7;font-size:13px;font-family:inherit;border-radius:14px;cursor:pointer">שתף כטקסט</button>
+            <button onClick="{{ recalc }}" style="flex:1;height:50px;border:1px solid rgba(244,239,231,.14);background:#1E1913;color:#F4EFE7;font-size:13px;font-family:inherit;border-radius:14px;cursor:pointer">חשב מחדש</button>
+            <button onClick="{{ finishGame }}" style-hover="filter:brightness(1.05)" style="flex:1.2;height:50px;border:none;background:#E9A23C;color:#1A1508;font-size:15px;font-weight:700;font-family:inherit;border-radius:14px;cursor:pointer">סיים</button>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ SUMMARY ============ -->
+        <sc-if value="{{ isSummary }}" hint-placeholder-val="{{ true }}">
+        <div style="height:100%;display:flex;flex-direction:column">
+          <div style="padding:10px 18px 12px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(244,239,231,.07)">
+            <button onClick="{{ goHome }}" style="background:none;border:none;color:#F4EFE7;font-size:22px;cursor:pointer;padding:0">→</button>
+            <div><h1 style="margin:0;font-size:18px;font-weight:700">סיכום · פוקר חמישי</h1><div style="font-size:12px;color:rgba(244,239,231,.42)">26.07 · {{ playerCount }} שחקנים</div></div>
+          </div>
+          <div class="pt-scroll" style="flex:1;overflow:auto;padding:16px 16px 16px;display:flex;flex-direction:column;gap:18px">
+            <div>
+              <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">תוצאות</div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <sc-for list="{{ results }}" as="r" hint-placeholder-count="4">
+                  <div style="{{ r.wrap }}">
+                    <div style="display:flex;align-items:center;gap:9px"><span style="{{ r.rankStyle }}">{{ r.rank }}</span><span style="font-size:16px;font-weight:600">{{ r.name }}</span><sc-if value="{{ r.crown }}" hint-placeholder-val="x"><span style="font-size:15px">♛</span></sc-if></div>
+                    <span style="{{ r.resStyle }}">{{ r.result }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">מי מעביר למי</div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <sc-for list="{{ transfers }}" as="t" hint-placeholder-count="3">
+                  <div style="background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:9px">
+                    <span dir="rtl" style="font-size:14px"><span style="font-weight:600">{{ t.from }}</span> <span style="color:rgba(244,239,231,.4)">משלם ל</span><span style="font-weight:600">{{ t.to }}</span></span>
+                    <button onClick="{{ t.copy }}" dir="ltr" style="unicode-bidi:isolate;margin-inline-start:auto;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;background:none;border:none;color:inherit;font-family:inherit;cursor:pointer">{{ t.amount }}</button>
+                    <button onClick="{{ t.wa }}" style="width:32px;height:32px;border-radius:9px;background:rgba(79,201,138,.15);color:#4FC98A;border:none;display:grid;place-items:center;font-size:15px;cursor:pointer">✆</button>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="padding:12px 16px 26px;border-top:1px solid rgba(244,239,231,.07);display:flex;gap:10px">
+            <button onClick="{{ shareWa }}" style-hover="filter:brightness(1.05)" style="flex:1;height:52px;border:none;background:#4FC98A;color:#0c2417;font-size:15px;font-weight:700;font-family:inherit;border-radius:15px;cursor:pointer">שיתוף</button>
+            <button onClick="{{ copyTransfers }}" style="flex:1;height:52px;border:1px solid rgba(244,239,231,.16);background:#1E1913;color:#F4EFE7;font-size:15px;font-weight:600;font-family:inherit;border-radius:15px;cursor:pointer">העתק העברות</button>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ STATISTICS ============ -->
+        <sc-if value="{{ isStats }}" hint-placeholder-val="{{ true }}">
+        <div style="height:100%;display:flex;flex-direction:column">
+          <div style="padding:8px 20px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(244,239,231,.07)">
+            <h1 style="margin:0;font-size:24px;font-weight:800">סטטיסטיקה</h1>
+            <button onClick="{{ switchGroup }}" style="background:#1E1913;border:1px solid rgba(244,239,231,.12);color:rgba(244,239,231,.75);font-family:inherit;font-size:12px;padding:7px 12px;border-radius:10px;cursor:pointer">{{ groupName }} ⌄</button>
+          </div>
+          <div style="display:flex;gap:6px;padding:12px 16px 0">
+            <button onClick="{{ setTabMe }}" style="{{ tabMeStyle }}">שלי</button>
+            <button onClick="{{ setTabGroup }}" style="{{ tabGroupStyle }}">החבורה</button>
+          </div>
+          <div class="pt-scroll" style="flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:16px">
+
+            <sc-if value="{{ statsMe }}" hint-placeholder-val="{{ true }}">
+            <div style="background:linear-gradient(150deg,#241b1a,#1a1610);border:1px solid rgba(239,107,99,.22);border-radius:18px;padding:20px">
+              <div style="font-size:12px;color:rgba(244,239,231,.5)">סה"כ רווח / הפסד</div>
+              <div dir="ltr" style="unicode-bidi:isolate;font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;color:#EF6B63;line-height:1.1;margin-top:4px">−₪400</div>
+              <div style="display:flex;gap:22px;margin-top:14px">
+                <div><div style="font-size:22px;font-weight:700;direction:ltr">6</div><div style="font-size:11px;color:rgba(244,239,231,.45)">משחקים</div></div>
+                <div><div style="font-size:22px;font-weight:700;direction:ltr">17%</div><div style="font-size:11px;color:rgba(244,239,231,.45)">נצחונות</div></div>
+                <div><div dir="ltr" style="font-size:22px;font-weight:700;color:#EF6B63">−67%</div><div style="font-size:11px;color:rgba(244,239,231,.45)">תשואה</div></div>
+              </div>
+            </div>
+            <div style="display:flex;gap:9px">
+              <div style="flex:1;background:rgba(79,201,138,.1);border:1px solid rgba(79,201,138,.2);border-radius:12px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:#4FC98A">1</div><div style="font-size:11px;color:rgba(244,239,231,.5)">נצחונות</div></div>
+              <div style="flex:1;background:rgba(239,107,99,.1);border:1px solid rgba(239,107,99,.2);border-radius:12px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:#EF6B63">5</div><div style="font-size:11px;color:rgba(244,239,231,.5)">הפסדים</div></div>
+              <div style="flex:1;background:#1E1913;border:1px solid rgba(244,239,231,.1);border-radius:12px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:rgba(244,239,231,.7)">0</div><div style="font-size:11px;color:rgba(244,239,231,.5)">תיקו</div></div>
+            </div>
+            <div style="background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:16px;padding:16px">
+              <div style="font-size:12px;color:rgba(244,239,231,.5);margin-bottom:10px">רווח מצטבר</div>
+              <svg viewBox="0 0 300 70" style="width:100%;height:70px;display:block" preserveAspectRatio="none">
+                <line x1="0" y1="{{ sparkZeroY }}" x2="300" y2="{{ sparkZeroY }}" stroke="rgba(244,239,231,.14)" stroke-width="1" stroke-dasharray="3 3"/>
+                <polyline points="{{ sparkPoints }}" fill="none" stroke="#EF6B63" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+                <circle cx="{{ sparkDotX }}" cy="{{ sparkDotY }}" r="3.5" fill="#EF6B63"/>
+              </svg>
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(244,239,231,.35);margin-top:4px"><span>מרץ</span><span>יולי</span></div>
+            </div>
+            <div style="background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:16px;overflow:hidden">
+              <sc-for list="{{ detailStats }}" as="d" hint-placeholder-count="9">
+                <div style="display:flex;justify-content:space-between;padding:12px 15px;border-bottom:1px solid rgba(244,239,231,.05);font-size:14px">
+                  <span style="color:rgba(244,239,231,.6)">{{ d.label }}</span>
+                  <span dir="ltr" style="{{ d.style }}">{{ d.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">כיף לדעת</div>
+              <div style="display:flex;gap:11px;overflow-x:auto;padding-bottom:4px" class="pt-scroll">
+                <sc-for list="{{ funCards }}" as="f" hint-placeholder-count="3">
+                  <div style="flex:none;width:138px;background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:14px;padding:14px">
+                    <div style="font-size:22px">{{ f.icon }}</div>
+                    <div style="font-size:12px;color:rgba(244,239,231,.5);margin-top:8px">{{ f.label }}</div>
+                    <div dir="ltr" style="unicode-bidi:isolate;font-size:16px;font-weight:700;margin-top:2px">{{ f.value }}</div>
+                    <div style="font-size:11px;color:rgba(244,239,231,.4);margin-top:2px">{{ f.sub }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            </sc-if>
+
+            <sc-if value="{{ statsGroup }}" hint-placeholder-val="">
+            <div style="display:flex;gap:7px">
+              <sc-for list="{{ metricChips }}" as="m" hint-placeholder-count="3"><button onClick="{{ m.pick }}" style="{{ m.style }}">{{ m.label }}</button></sc-for>
+            </div>
+            <div style="background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:16px;overflow:hidden">
+              <sc-for list="{{ leaders }}" as="l" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid rgba(244,239,231,.05)">
+                  <span style="{{ l.rankStyle }}">{{ l.rank }}</span>
+                  <span style="flex:1;font-size:15px;font-weight:600">{{ l.name }}</span>
+                  <span style="font-size:11px;color:rgba(244,239,231,.4)">{{ l.games }}</span>
+                  <span dir="ltr" style="unicode-bidi:isolate;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;width:80px;text-align:left;{{ l.color }}">{{ l.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">כיף לדעת · בחבורה</div>
+              <div style="display:flex;gap:11px;overflow-x:auto;padding-bottom:4px" class="pt-scroll">
+                <sc-for list="{{ groupFunCards }}" as="f" hint-placeholder-count="6">
+                  <div style="flex:none;width:152px;background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:14px;padding:14px">
+                    <div style="font-size:22px">{{ f.icon }}</div>
+                    <div style="font-size:12px;color:rgba(244,239,231,.5);margin-top:8px">{{ f.label }}</div>
+                    <div style="font-size:16px;font-weight:700;margin-top:2px">{{ f.value }}</div>
+                    <div dir="ltr" style="unicode-bidi:isolate;font-size:11px;color:rgba(244,239,231,.4);margin-top:2px">{{ f.sub }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45)">החבורה במספרים</div>
+            <div style="display:flex;flex-wrap:wrap;gap:9px">
+              <sc-for list="{{ groupTiles }}" as="t" hint-placeholder-count="6">
+                <div style="flex:1 1 30%;min-width:96px;background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:12px;padding:13px">
+                  <div dir="ltr" style="unicode-bidi:isolate;font-size:18px;font-weight:800;font-variant-numeric:tabular-nums">{{ t.value }}</div>
+                  <div style="font-size:11px;color:rgba(244,239,231,.5);margin-top:3px">{{ t.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:rgba(244,239,231,.4);text-align:center;line-height:1.6">משחקים פרטיים לא נכללים בסטטיסטיקה של החבורה</div>
+            </sc-if>
+
+          </div>
+          <div style="padding:12px 16px 26px;border-top:1px solid rgba(244,239,231,.07);display:flex;justify-content:space-around;font-size:11px">
+            <button onClick="{{ goHome }}" style="background:none;border:none;font-family:inherit;color:rgba(244,239,231,.4);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;cursor:pointer"><span style="font-size:19px">♠</span>משחקים</button>
+            <span style="color:#E9A23C;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px"><span style="font-size:19px">▨</span>סטטיסטיקה</span>
+            <button onClick="{{ goProfile }}" style="background:none;border:none;font-family:inherit;color:rgba(244,239,231,.4);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;cursor:pointer"><span style="font-size:19px">◐</span>פרופיל</button>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ PROFILE ============ -->
+        <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ true }}">
+        <div style="height:100%;display:flex;flex-direction:column">
+          <div style="padding:8px 20px 12px;border-bottom:1px solid rgba(244,239,231,.07)"><h1 style="margin:0;font-size:24px;font-weight:800">פרופיל</h1></div>
+          <div class="pt-scroll" style="flex:1;overflow:auto;padding:20px 16px;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;align-items:center;gap:15px">
+              <span style="width:64px;height:64px;border-radius:50%;background:linear-gradient(150deg,#3a2f1f,#241d12);display:grid;place-items:center;font-size:26px;font-weight:700;color:#E9A23C">מ</span>
+              <div><div style="font-size:20px;font-weight:700">מור לוי</div><div dir="ltr" style="unicode-bidi:isolate;font-size:13px;color:rgba(244,239,231,.45)">@mor_l</div></div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">החבורות שלי</div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <sc-for list="{{ profileGroups }}" as="g" hint-placeholder-count="2">
+                  <button onClick="{{ g.open }}" style-hover="filter:brightness(1.06)" style="{{ g.style }}"><span style="display:flex;flex-direction:column;gap:2px;text-align:right"><span style="font-weight:600">{{ g.name }}</span><span style="font-size:11px;color:rgba(244,239,231,.4)">{{ g.meta }}</span></span><span style="font-size:18px;color:rgba(244,239,231,.35)">‹</span></button>
+                </sc-for>
+                <button onClick="{{ createGroup }}" style="width:100%;text-align:right;background:#1E1913;border:1px dashed rgba(244,239,231,.16);border-radius:14px;padding:13px 15px;font-family:inherit;font-size:14px;color:rgba(244,239,231,.55);cursor:pointer">+ צור חבורה</button>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">הגדרות</div>
+              <div style="background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:14px;overflow:hidden">
+                <button onClick="{{ toggleTheme }}" style="width:100%;text-align:right;background:none;border:none;font-family:inherit;color:inherit;display:flex;justify-content:space-between;align-items:center;padding:14px 15px;border-bottom:1px solid rgba(244,239,231,.05);cursor:pointer"><span style="font-size:14px">ערכת נושא</span><span style="font-size:13px;color:rgba(244,239,231,.5)">{{ themeLabel }} ⌄</span></button>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 15px;border-bottom:1px solid rgba(244,239,231,.05)"><span style="font-size:14px">שפה</span><span style="font-size:13px;color:rgba(244,239,231,.5)">עברית ⌄</span></div>
+                <button onClick="{{ openNick }}" style="width:100%;text-align:right;background:none;border:none;font-family:inherit;color:inherit;display:flex;justify-content:space-between;align-items:center;padding:14px 15px;border-bottom:1px solid rgba(244,239,231,.05);cursor:pointer"><span style="font-size:14px">כינוי ברירת מחדל</span><span style="font-size:13px;color:rgba(244,239,231,.5)">{{ defaultNick }} ⌄</span></button>
+                <button onClick="{{ toggleSettled }}" style="width:100%;text-align:right;background:none;border:none;font-family:inherit;color:inherit;display:flex;justify-content:space-between;align-items:center;padding:14px 15px;border-bottom:1px solid rgba(244,239,231,.05);cursor:pointer"><span style="font-size:14px">הצג שחקנים סגורים בסוף</span><span style="{{ settledTrack }}"><span style="{{ settledKnob }}"></span></span></button>
+                <button onClick="{{ togglePrivStats }}" style="width:100%;text-align:right;background:none;border:none;font-family:inherit;color:inherit;display:flex;justify-content:space-between;align-items:center;padding:14px 15px;cursor:pointer"><span style="font-size:14px">הסתר אותי בטבלת החבורה</span><span style="{{ privTrack }}"><span style="{{ privKnob }}"></span></span></button>
+              </div>
+            </div>
+            <button onClick="{{ signOut }}" style="background:none;border:1px solid rgba(239,107,99,.3);color:#EF6B63;font-family:inherit;font-size:14px;font-weight:600;padding:13px;border-radius:14px;cursor:pointer">התנתקות</button>
+            <div style="text-align:center;font-size:11px;color:rgba(244,239,231,.3)">Poker Tracker · v1.0</div>
+          </div>
+          <div style="padding:12px 16px 26px;border-top:1px solid rgba(244,239,231,.07);display:flex;justify-content:space-around;font-size:11px">
+            <button onClick="{{ goHome }}" style="background:none;border:none;font-family:inherit;color:rgba(244,239,231,.4);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;cursor:pointer"><span style="font-size:19px">♠</span>משחקים</button>
+            <button onClick="{{ goStats }}" style="background:none;border:none;font-family:inherit;color:rgba(244,239,231,.4);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;cursor:pointer"><span style="font-size:19px">▨</span>סטטיסטיקה</button>
+            <span style="color:#E9A23C;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px"><span style="font-size:19px">◐</span>פרופיל</span>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ VIEWER ============ -->
+        <sc-if value="{{ isViewer }}" hint-placeholder-val="{{ true }}">
+          <sc-if value="{{ viewerLive }}" hint-placeholder-val="{{ true }}">
+          <div style="height:100%;display:flex;flex-direction:column">
+            <div style="background:rgba(233,162,60,.1);text-align:center;padding:9px;font-size:13px;color:#E9A23C;display:flex;align-items:center;justify-content:center;gap:7px"><span style="width:7px;height:7px;border-radius:50%;background:#4FC98A;box-shadow:0 0 7px #4FC98A"></span>צפייה בלבד · משחק חי</div>
+            <div style="padding:10px 18px 12px;border-bottom:1px solid rgba(244,239,231,.07)">
+              <div style="display:flex;align-items:center;gap:12px"><button onClick="{{ goHome }}" style="background:none;border:none;color:#F4EFE7;font-size:22px;cursor:pointer;padding:0">→</button><div><div style="font-size:18px;font-weight:700">פוקר חמישי</div><div style="font-size:12px;color:rgba(244,239,231,.42)">{{ viewerTitleSub }}</div></div></div>
+              <div style="display:flex;gap:6px;margin-top:11px"><button onClick="{{ setViewerLive }}" style="{{ vmLiveStyle }}">משחק חי</button><button onClick="{{ setViewerFinished }}" style="{{ vmFinStyle }}">סיכום</button></div>
+            </div>
+            <div style="{{ potBannerStyle }}"><span style="{{ potDotStyle }}"></span><span style="font-size:14px;font-weight:600;{{ potTextColor }}">{{ potLabel }}</span><span dir="ltr" style="unicode-bidi:isolate;font-size:12px;color:rgba(244,239,231,.55);margin-inline-start:auto;font-variant-numeric:tabular-nums">{{ potDetail }}</span></div>
+            <div class="pt-scroll" style="flex:1;overflow:auto;padding:10px 16px 14px;display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ viewerLivePlayers }}" as="p" hint-placeholder-count="6">
+                <div style="{{ p.rowStyle }}">
+                  <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">{{ p.name }}<sc-if value="{{ p.meta }}" hint-placeholder-val="x"><span dir="ltr" style="unicode-bidi:isolate;font-size:12px;font-weight:400;color:rgba(244,239,231,.42);margin-inline-start:6px">({{ p.meta }})</span></sc-if></span><span style="font-size:11px;color:rgba(244,239,231,.42)">{{ p.buys }} קניות</span></div>
+                  <span dir="ltr" style="unicode-bidi:isolate;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums">{{ p.owedStr }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="padding:12px 16px 26px;border-top:1px solid rgba(244,239,231,.07)"><button onClick="{{ requestJoin }}" style-hover="filter:brightness(1.06)" style="width:100%;height:52px;border:none;background:#E9A23C;color:#1A1508;font-size:15px;font-weight:700;font-family:inherit;border-radius:15px;cursor:pointer">בקש להצטרף למשחק</button></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ viewerFinished }}" hint-placeholder-val="">
+          <div style="height:100%;display:flex;flex-direction:column">
+            <div style="background:rgba(244,239,231,.06);text-align:center;padding:9px;font-size:13px;color:rgba(244,239,231,.6);display:flex;align-items:center;justify-content:center;gap:7px"><span>👁</span>צפייה בלבד</div>
+            <div style="padding:10px 18px 12px;border-bottom:1px solid rgba(244,239,231,.07)">
+              <div style="display:flex;align-items:center;gap:12px"><button onClick="{{ goHome }}" style="background:none;border:none;color:#F4EFE7;font-size:22px;cursor:pointer;padding:0">→</button><div><div style="font-size:18px;font-weight:700">פוקר חמישי</div><div style="font-size:12px;color:rgba(244,239,231,.42)">{{ viewerTitleSub }}</div></div></div>
+              <div style="display:flex;gap:6px;margin-top:11px"><button onClick="{{ setViewerLive }}" style="{{ vmLiveStyle }}">משחק חי</button><button onClick="{{ setViewerFinished }}" style="{{ vmFinStyle }}">סיכום</button></div>
+            </div>
+            <div class="pt-scroll" style="flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:18px">
+              <div>
+                <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">תוצאות</div>
+                <div style="display:flex;flex-direction:column;gap:9px">
+                  <sc-for list="{{ viewerResults }}" as="r" hint-placeholder-count="4">
+                    <div style="{{ r.wrap }}">
+                      <div style="display:flex;align-items:center;gap:9px"><span style="font-size:16px;font-weight:600">{{ r.name }}</span><sc-if value="{{ r.mine }}" hint-placeholder-val="x"><span style="font-size:10px;background:rgba(233,162,60,.2);color:#E9A23C;padding:2px 7px;border-radius:6px">אני</span></sc-if></div>
+                      <span style="{{ r.resStyle }}">{{ r.result }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">מי מעביר למי</div>
+                <div style="display:flex;flex-direction:column;gap:9px">
+                  <sc-for list="{{ viewerTransfers }}" as="t" hint-placeholder-count="3">
+                    <div style="background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:9px">
+                      <span dir="rtl" style="font-size:14px"><span style="font-weight:600">{{ t.from }}</span> <span style="color:rgba(244,239,231,.4)">משלם ל</span><span style="font-weight:600">{{ t.to }}</span></span>
+                      <button onClick="{{ t.copy }}" dir="ltr" style="unicode-bidi:isolate;margin-inline-start:auto;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;background:none;border:none;color:inherit;font-family:inherit;cursor:pointer">{{ t.amount }}</button>
+                      <span style="color:rgba(244,239,231,.4);font-size:14px">⧉</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="font-size:12px;color:rgba(244,239,231,.4);text-align:center;line-height:1.6;padding:0 10px">הקישור מציג את סיכום ההעברות בלבד</div>
+            </div>
+            <div style="padding:12px 16px 26px;border-top:1px solid rgba(244,239,231,.07)"><button onClick="{{ shareViewer }}" style-hover="filter:brightness(1.05)" style="width:100%;height:52px;border:none;background:#4FC98A;color:#0c2417;font-size:15px;font-weight:700;font-family:inherit;border-radius:15px;cursor:pointer">שיתוף</button></div>
+          </div>
+          </sc-if>
+        </sc-if>
+
+        <!-- ============ GROUP MANAGEMENT ============ -->
+        <sc-if value="{{ isGroup }}" hint-placeholder-val="">
+        <div style="height:100%;display:flex;flex-direction:column">
+          <div style="padding:10px 18px 12px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(244,239,231,.07)">
+            <button onClick="{{ goProfile }}" style="background:none;border:none;color:#F4EFE7;font-size:22px;cursor:pointer;padding:0">→</button>
+            <div style="flex:1"><h1 style="margin:0;font-size:18px;font-weight:700">{{ groupTitle }}</h1><div style="font-size:12px;color:rgba(244,239,231,.42)">{{ groupSubtitle }}</div></div>
+            <sc-if value="{{ iAmOwner }}" hint-placeholder-val="x"><span style="font-size:10px;background:rgba(233,162,60,.2);color:#E9A23C;padding:3px 9px;border-radius:7px">יוצר</span></sc-if>
+          </div>
+          <div class="pt-scroll" style="flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:16px">
+            <div>
+              <div style="font-size:12px;font-weight:600;color:rgba(244,239,231,.45);margin-bottom:9px">חברים · {{ memberCount }}</div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <sc-for list="{{ groupMembers }}" as="m" hint-placeholder-count="5">
+                  <div style="background:#1E1913;border:1px solid rgba(244,239,231,.08);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:11px">
+                    <span style="width:34px;height:34px;border-radius:50%;background:#3a2f1f;display:grid;place-items:center;font-size:13px;font-weight:700;color:#E9A23C;flex:none">{{ m.initial }}</span>
+                    <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600">{{ m.name }}</div><div dir="ltr" style="unicode-bidi:isolate;font-size:11px;color:rgba(244,239,231,.42)">@{{ m.sub }}</div></div>
+                    <sc-if value="{{ m.roleBadge }}" hint-placeholder-val=""><span style="{{ m.badgeStyle }}">{{ m.roleBadge }}</span></sc-if>
+                    <sc-if value="{{ m.showToggle }}" hint-placeholder-val=""><button onClick="{{ m.toggle }}" style="background:#272119;border:1px solid rgba(244,239,231,.14);color:#E9A23C;font-family:inherit;font-size:11px;font-weight:600;padding:6px 11px;border-radius:9px;cursor:pointer;white-space:nowrap">{{ m.toggleLabel }}</button></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ iAmOwner }}" hint-placeholder-val=""><button onClick="{{ addMember }}" style="width:100%;text-align:right;margin-top:10px;background:#1E1913;border:1px dashed rgba(244,239,231,.16);border-radius:12px;padding:13px;font-size:14px;font-family:inherit;color:rgba(244,239,231,.5);cursor:pointer">+ הוסף חבר</button></sc-if>
+            </div>
+            <sc-if value="{{ iAmOwner }}" hint-placeholder-val="">
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="font-size:11px;color:rgba(244,239,231,.4);line-height:1.6">רק יוצר החבורה מנהל חברים, ממנה מנהלים נוספים או מוחק את החבורה. מנהל עוזר בניהול היום-יומי.</div>
+              <button onClick="{{ deleteGroup }}" style="background:none;border:1px solid rgba(239,107,99,.3);color:#EF6B63;font-family:inherit;font-size:14px;font-weight:600;padding:13px;border-radius:14px;cursor:pointer">מחיקת החבורה</button>
+            </div>
+            </sc-if>
+            <sc-if value="{{ notOwner }}" hint-placeholder-val=""><div style="font-size:11px;color:rgba(244,239,231,.4);text-align:center;line-height:1.6">רק יוצר החבורה יכול לנהל אותה. אתה חבר בחבורה זו.</div></sc-if>
+          </div>
+        </div>
+        </sc-if>
+
+      </div>
+
+      <!-- ============ BOTTOM SHEET LAYER ============ -->
+      <sc-if value="{{ sheetOpen }}" hint-placeholder-val="">
+      <button onClick="{{ closeSheet }}" style="position:absolute;inset:0;z-index:50;background:rgba(0,0,0,.55);border:none;animation:pt-fade .18s ease;cursor:default"></button>
+      <div dir="rtl" style="position:absolute;inset-inline:0;bottom:0;z-index:51;background:#1B1610;border-top:1px solid rgba(244,239,231,.1);border-radius:24px 24px 38px 38px;padding:10px 20px 30px;animation:pt-sheet .24s cubic-bezier(.2,.9,.3,1);max-height:82%;overflow:auto" class="pt-scroll">
+        <div style="width:38px;height:4px;border-radius:2px;background:rgba(244,239,231,.2);margin:4px auto 16px"></div>
+
+        <sc-if value="{{ sheetAction }}" hint-placeholder-val="">
+          <div style="font-size:17px;font-weight:700;margin-bottom:14px">{{ activeName }}</div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <sc-for list="{{ actionItems }}" as="a" hint-placeholder-count="4"><button onClick="{{ a.do }}" style="{{ a.style }}">{{ a.label }}</button></sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ sheetSettle }}" hint-placeholder-val="">
+          <div style="text-align:center;font-size:16px;font-weight:600;margin-bottom:16px">כמה ז'יטונים נשארו ל{{ activeName }}?</div>
+          <input value="{{ draft }}" onInput="{{ onDraft }}" type="number" inputmode="numeric" autofocus style="width:100%;background:#14110D;border:1px solid rgba(244,239,231,.14);border-radius:14px;padding:16px;font-size:30px;font-weight:700;text-align:center;color:#F4EFE7;direction:ltr;font-variant-numeric:tabular-nums;outline:none">
+          <div dir="ltr" style="text-align:center;font-size:14px;color:#4FC98A;margin-top:10px">{{ settleConv }}</div>
+          <div style="display:flex;gap:9px;margin-top:16px">
+            <sc-for list="{{ chipQuick }}" as="q" hint-placeholder-count="4"><button onClick="{{ q.set }}" style="flex:1;background:#272119;border:1px solid rgba(244,239,231,.12);color:#F4EFE7;font-family:inherit;font-size:15px;padding:12px;border-radius:12px;cursor:pointer;direction:ltr">{{ q.label }}</button></sc-for>
+          </div>
+          <button onClick="{{ confirmSettle }}" style="width:100%;height:52px;margin-top:18px;border:none;background:#E9A23C;color:#1A1508;font-size:16px;font-weight:700;font-family:inherit;border-radius:14px;cursor:pointer">סגור שחקן</button>
+        </sc-if>
+
+        <sc-if value="{{ sheetCash }}" hint-placeholder-val="">
+          <div style="text-align:center;font-size:16px;font-weight:600;margin-bottom:16px">מזומן ששולם · {{ activeName }}</div>
+          <input value="{{ draft }}" onInput="{{ onDraft }}" type="number" inputmode="numeric" autofocus style="width:100%;background:#14110D;border:1px solid rgba(244,239,231,.14);border-radius:14px;padding:16px;font-size:30px;font-weight:700;text-align:center;color:#F4EFE7;direction:ltr;font-variant-numeric:tabular-nums;outline:none">
+          <div style="display:flex;gap:9px;margin-top:16px">
+            <sc-for list="{{ cashQuick }}" as="q" hint-placeholder-count="3"><button onClick="{{ q.set }}" style="flex:1;background:#272119;border:1px solid rgba(244,239,231,.12);color:#F4EFE7;font-family:inherit;font-size:15px;padding:12px;border-radius:12px;cursor:pointer;direction:ltr">{{ q.label }}</button></sc-for>
+          </div>
+          <button onClick="{{ confirmCash }}" style="width:100%;height:52px;margin-top:18px;border:none;background:#E9A23C;color:#1A1508;font-size:16px;font-weight:700;font-family:inherit;border-radius:14px;cursor:pointer">שמירה</button>
+        </sc-if>
+
+        <sc-if value="{{ sheetText }}" hint-placeholder-val="">
+          <div style="text-align:center;font-size:16px;font-weight:600;margin-bottom:16px">{{ textTitle }}</div>
+          <input value="{{ draft }}" onInput="{{ onDraft }}" type="text" autofocus placeholder="{{ textPlaceholder }}" style="width:100%;background:#14110D;border:1px solid rgba(244,239,231,.14);border-radius:14px;padding:15px;font-size:18px;text-align:center;color:#F4EFE7;outline:none">
+          <sc-if value="{{ textHelper }}" hint-placeholder-val=""><div style="text-align:center;font-size:12px;color:rgba(244,239,231,.42);margin-top:8px">{{ textHelper }}</div></sc-if>
+          <button onClick="{{ confirmText }}" style="width:100%;height:52px;margin-top:18px;border:none;background:#E9A23C;color:#1A1508;font-size:16px;font-weight:700;font-family:inherit;border-radius:14px;cursor:pointer">{{ textCta }}</button>
+        </sc-if>
+
+        <sc-if value="{{ sheetAddPlayer }}" hint-placeholder-val="">
+          <div style="font-size:17px;font-weight:700;margin-bottom:4px">הוספת שחקנים</div>
+          <div style="font-size:12px;color:rgba(244,239,231,.42);margin-bottom:14px">בחר כמה שחקנים והוסף אותם יחד</div>
+
+          <sc-if value="{{ hasSel }}" hint-placeholder-val="">
+          <div style="background:#14110D;border:1px solid rgba(233,162,60,.22);border-radius:14px;padding:11px 12px;margin-bottom:16px">
+            <div style="font-size:11px;color:rgba(244,239,231,.45);margin-bottom:9px">נבחרו ({{ selCount }})</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ selChips }}" as="c" hint-placeholder-count="2"><button onClick="{{ c.remove }}" style="font-family:inherit;cursor:pointer;border-radius:999px;padding:7px 10px 7px 13px;font-size:13px;font-weight:600;background:#E9A23C;color:#1A1508;border:none;display:inline-flex;align-items:center;gap:7px">{{ c.name }}<span style="font-size:15px;line-height:1;opacity:.7">×</span></button></sc-for>
+            </div>
+          </div>
+          </sc-if>
+
+          <div style="max-height:230px;overflow:auto;margin:0 -4px 4px;padding:0 4px" class="pt-scroll">
+          <sc-if value="{{ hasGroupFriends }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12px;color:rgba(244,239,231,.45);margin-bottom:9px;display:flex;align-items:center;gap:7px"><span style="font-size:13px">◈</span>חברי החבורה</div>
+          <div style="display:flex;flex-wrap:wrap;gap:9px;margin-bottom:16px">
+            <sc-for list="{{ addFriendsGroup }}" as="f" hint-placeholder-count="4"><button onClick="{{ f.toggle }}" style="{{ f.style }}"><sc-if value="{{ f.check }}" hint-placeholder-val=""><span style="font-size:11px">{{ f.check }}</span></sc-if>{{ f.name }}</button></sc-for>
+          </div>
+          </sc-if>
+          <sc-if value="{{ hasOtherFriends }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12px;color:rgba(244,239,231,.45);margin-bottom:9px">חברים נוספים</div>
+          <div style="display:flex;flex-wrap:wrap;gap:9px;margin-bottom:8px">
+            <sc-for list="{{ addFriendsOther }}" as="f" hint-placeholder-count="4"><button onClick="{{ f.toggle }}" style="{{ f.style }}"><sc-if value="{{ f.check }}" hint-placeholder-val=""><span style="font-size:11px">{{ f.check }}</span></sc-if>{{ f.name }}</button></sc-for>
+          </div>
+          </sc-if>
+          </div>
+
+          <div style="font-size:12px;color:rgba(244,239,231,.45);margin:14px 0 9px">מישהו חדש? הוסף לרשימה</div>
+          <div style="display:flex;gap:9px;margin-bottom:18px">
+            <input value="{{ draft }}" onInput="{{ onDraft }}" type="text" placeholder="שם השחקן" style="flex:1;background:#14110D;border:1px solid rgba(244,239,231,.14);border-radius:12px;padding:13px;font-size:16px;text-align:right;color:#F4EFE7;outline:none">
+            <button onClick="{{ addSelName }}" style="background:#272119;color:#E9A23C;border:1px solid rgba(233,162,60,.3);font-family:inherit;font-size:15px;font-weight:700;padding:0 18px;border-radius:12px;cursor:pointer">+ לרשימה</button>
+          </div>
+
+          <button onClick="{{ commitAddSel }}" disabled="{{ addSelDisabled }}" style="{{ addSelBtnStyle }}">{{ addSelCta }}</button>
+        </sc-if>
+
+        <sc-if value="{{ sheetPicker }}" hint-placeholder-val="">
+          <div style="text-align:center;font-size:16px;font-weight:600;margin-bottom:16px">בחר שחקן</div>
+          <div style="display:flex;flex-wrap:wrap;gap:9px;justify-content:center">
+            <sc-for list="{{ pickerNames }}" as="n" hint-placeholder-count="5"><button onClick="{{ n.pick }}" style="{{ n.style }}">{{ n.name }}</button></sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ sheetAmount }}" hint-placeholder-val="">
+          <div style="text-align:center;font-size:16px;font-weight:600;margin-bottom:16px">סכום ההעברה</div>
+          <input value="{{ draft }}" onInput="{{ onDraft }}" type="number" inputmode="numeric" autofocus style="width:100%;background:#14110D;border:1px solid rgba(244,239,231,.14);border-radius:14px;padding:16px;font-size:30px;font-weight:700;text-align:center;color:#F4EFE7;direction:ltr;font-variant-numeric:tabular-nums;outline:none">
+          <button onClick="{{ confirmAmount }}" style="width:100%;height:52px;margin-top:18px;border:none;background:#E9A23C;color:#1A1508;font-size:16px;font-weight:700;font-family:inherit;border-radius:14px;cursor:pointer">שמירה</button>
+        </sc-if>
+
+        <sc-if value="{{ sheetMenu }}" hint-placeholder-val="">
+          <div style="font-size:17px;font-weight:700;margin-bottom:14px">הגדרות משחק</div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <sc-for list="{{ menuItems }}" as="a" hint-placeholder-count="6"><button onClick="{{ a.do }}" style="{{ a.style }}">{{ a.label }}</button></sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ sheetShare }}" hint-placeholder-val="">
+          <div style="font-size:17px;font-weight:700;margin-bottom:6px">שיתוף</div>
+          <div style="background:#14110D;border:1px solid rgba(244,239,231,.1);border-radius:12px;padding:13px;margin:12px 0;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:13px;color:#4FC98A">הקישור פעיל · 3 צופים</span>
+            <button onClick="{{ copyLink }}" style="background:#272119;border:1px solid rgba(244,239,231,.14);color:#E9A23C;font-family:inherit;font-size:12px;font-weight:600;padding:7px 13px;border-radius:9px;cursor:pointer">העתק קישור</button>
+          </div>
+          <div style="font-size:11px;color:rgba(244,239,231,.42);line-height:1.6;margin-bottom:12px">כל מי שיש לו את הקישור יוכל להצטרף לצפייה בזמן אמת — בלי לערוך.<br>פג תוקף: 7 ימים לאורחים · 30 יום לחברי החבורה.</div>
+          <div style="background:#14110D;border:1px solid rgba(244,239,231,.1);border-radius:12px;padding:13px;font-size:12px;color:rgba(244,239,231,.6);white-space:pre-line;line-height:1.7;direction:rtl">{{ shareText }}</div>
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <button onClick="{{ shareLive }}" style="flex:1;height:48px;border:none;background:#E9A23C;color:#1A1508;font-size:14px;font-weight:700;font-family:inherit;border-radius:13px;cursor:pointer">שתף</button>
+            <button onClick="{{ copyLive }}" style="flex:1;height:48px;border:1px solid rgba(244,239,231,.16);background:#272119;color:#F4EFE7;font-size:14px;font-weight:600;font-family:inherit;border-radius:13px;cursor:pointer">העתק</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ sheetLog }}" hint-placeholder-val="">
+          <div style="font-size:17px;font-weight:700;margin-bottom:12px">יומן פעילות</div>
+          <div style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap">
+            <span style="background:#E9A23C;color:#1A1508;font-size:12px;font-weight:600;padding:6px 12px;border-radius:999px">הכל</span>
+            <span style="background:#272119;border:1px solid rgba(244,239,231,.1);color:rgba(244,239,231,.6);font-size:12px;padding:6px 12px;border-radius:999px">קניות</span>
+            <span style="background:#272119;border:1px solid rgba(244,239,231,.1);color:rgba(244,239,231,.6);font-size:12px;padding:6px 12px;border-radius:999px">סגירות</span>
+          </div>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ logEntries }}" as="e" hint-placeholder-count="4">
+              <div style="display:flex;gap:10px;padding:11px 2px;border-bottom:1px solid rgba(244,239,231,.05);font-size:13px"><span dir="ltr" style="color:rgba(244,239,231,.4);font-variant-numeric:tabular-nums">{{ e.time }}</span><span style="color:rgba(244,239,231,.85)">{{ e.text }}</span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ sheetSync }}" hint-placeholder-val="">
+          <div style="font-size:17px;font-weight:700;margin-bottom:12px">סנכרון</div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#4FC98A;margin-bottom:8px"><span>✓</span>מסונכרן</div>
+          <div style="font-size:13px;color:rgba(244,239,231,.5);line-height:1.7">סונכרן לאחרונה: לפני פחות מדקה<br>אין שינויים ממתינים</div>
+          <button onClick="{{ closeSheet }}" style="width:100%;height:48px;margin-top:16px;border:1px solid rgba(244,239,231,.16);background:#272119;color:#F4EFE7;font-size:14px;font-weight:600;font-family:inherit;border-radius:13px;cursor:pointer">סגור</button>
+        </sc-if>
+
+        <sc-if value="{{ sheetConfirm }}" hint-placeholder-val="">
+          <div style="font-size:17px;font-weight:700;margin-bottom:10px">{{ confirmTitle }}</div>
+          <div style="font-size:13px;color:rgba(244,239,231,.6);line-height:1.7;margin-bottom:20px">{{ confirmBody }}</div>
+          <div style="display:flex;gap:10px">
+            <button onClick="{{ closeSheet }}" style="flex:1;height:50px;border:1px solid rgba(244,239,231,.16);background:#272119;color:#F4EFE7;font-size:15px;font-weight:600;font-family:inherit;border-radius:13px;cursor:pointer">ביטול</button>
+            <button onClick="{{ confirmAction }}" style="flex:1;height:50px;border:none;background:{{ confirmColor }};color:#fff;font-size:15px;font-weight:700;font-family:inherit;border-radius:13px;cursor:pointer">{{ confirmCta }}</button>
+          </div>
+        </sc-if>
+
+      </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  seed(){ return [
+    {id:'mor', name:'הכריש', account:'מור לוי', sub:'mor_l', buys:3, cash:100, chips:null, settled:false},
+    {id:'uri', name:'אורי', account:'אורי כהן', sub:'uri88', buys:2, cash:0, chips:null, settled:false},
+    {id:'rani', name:'רני', sub:null, buys:1, cash:50, chips:null, settled:false},
+    {id:'dana', name:'דנה', account:'דנה לוי', sub:'dana', buys:2, cash:0, chips:null, settled:false},
+    {id:'noa', name:'נועה', account:'נועה קפלן', sub:'noa_k', buys:2, cash:0, chips:null, settled:false},
+    {id:'itai', name:'איתי', sub:null, buys:1, cash:0, chips:null, settled:false, late:'23:40'},
+  ]; }
+  state = {
+    screen:'game', buyAmount:50, chipsPerBuy:100,
+    players:this.seed(),
+    undo:null, sheet:null, draft:'', toast:'',
+    transfers:[], balances:[], results:[], shareText:'',
+    statsTab:'me', groupMetric:'net',
+    picked:['הכריש','אורי','דנה','נועה'], priv:false,
+    showSettled:false, privStats:false, theme:'dark', defaultNick:'הכריש', addSel:[],
+    log:[{time:'23:58',text:'רני — קנייה 1'},{time:'23:40',text:'איתי הצטרף למשחק'},{time:'22:10',text:'המשחק נפתח · 6 שחקנים'}],
+    viewerMode:'live',
+    activeGroup:'g1',
+    groups:[
+      {id:'g1',name:'חבורת חמישי',members:[
+        {name:'מור לוי',sub:'mor_l',role:'owner',me:true},
+        {name:'דנה',sub:'dana',role:'admin'},
+        {name:'אורי',sub:'uri88',role:'member'},
+        {name:'גיל',sub:'gil_p',role:'member'},
+        {name:'נועה',sub:'noa_k',role:'member'},
+        {name:'רני',sub:'rani_b',role:'member'},
+      ]},
+      {id:'g2',name:'עבודה',members:[
+        {name:'מור לוי',sub:'mor_l',role:'member'},
+        {name:'שירן',sub:'shiran',role:'owner'},
+        {name:'טל',sub:'tal_k',role:'member'},
+        {name:'יואב',sub:'yoav',role:'member'},
+      ]},
+    ],
+  };
+  _t=null; _tt=null;
+  cv(){ return this.state.buyAmount/this.state.chipsPerBuy; }
+  money(n){ n=Math.round(n); return (n<0?'−':'')+'₪'+Math.abs(n).toLocaleString('en-US'); }
+  signed(n){ n=Math.round(n); return (n<0?'−':'+')+'₪'+Math.abs(n).toLocaleString('en-US'); }
+  toast(m){ clearTimeout(this._tt); this.setState({toast:m}); this._tt=setTimeout(()=>this.setState({toast:''}),1900); }
+  copy(t){ try{navigator.clipboard&&navigator.clipboard.writeText(t);}catch(e){} this.toast('הועתק ✓'); }
+  share(t){ if(navigator.share){navigator.share({text:t}).catch(()=>{});}else{this.copy(t);} }
+
+  arm(){ clearTimeout(this._t); this._t=setTimeout(()=>this.setState({undo:null}),4200); }
+  bump(id,d){
+    this.setState(s=>{
+      const players=s.players.map(p=>p.id===id?{...p,buys:Math.max(0,p.buys+d)}:p);
+      const p=players.find(x=>x.id===id);
+      let u=s.undo;
+      if(u&&u.id===id){ const nd=u.deltaBuys+d; u=nd===0?null:{...u,deltaBuys:nd,nowBuys:p.buys}; }
+      else { u={id,name:p.name,prevBuys:Math.max(0,p.buys-d),deltaBuys:d,nowBuys:p.buys}; }
+      return {players,undo:u};
+    },()=>{ if(this.state.undo)this.arm(); else clearTimeout(this._t); });
+  }
+  undoNow(){ const u=this.state.undo; if(!u)return; clearTimeout(this._t);
+    this.setState(s=>({players:s.players.map(p=>p.id===u.id?{...p,buys:u.prevBuys}:p),undo:null})); }
+
+  go(scr){ if(scr==='settle')return this.enterSettle(); if(scr==='summary')return this.enterSummary(); this.setState({screen:scr,sheet:null}); }
+  openSheet(t,extra){ let draft=''; const p=extra&&extra.id?this.state.players.find(x=>x.id===extra.id):null;
+    if(t==='settle')draft = p&&p.chips!=null?String(p.chips):'';
+    if(t==='cash')draft = p?String(p.cash):'';
+    if(t==='rename')draft = p?p.name:'';
+    if(t==='nick')draft = this.state.defaultNick;
+    if(t==='amount')draft = String(this.state.transfers[extra.i].amount);
+    this.setState({sheet:{type:t,...(extra||{})},draft}); }
+  closeSheet(){ this.setState({sheet:null,draft:'',addSel:[]}); }
+  onDraft(e){ this.setState({draft:e.target.value}); }
+  toggleSel(name,sub,member){ this.setState(s=>{ const ex=s.addSel.find(x=>x.name===name); return {addSel:ex?s.addSel.filter(x=>x.name!==name):[...s.addSel,{name,sub:sub||null,member:!!member,isNew:false}]}; }); }
+  addSelName(){ const n=(this.state.draft||'').trim(); if(!n)return; if(this.state.addSel.find(x=>x.name===n)||this.state.players.find(p=>p.name===n)){this.setState({draft:''});return;} this.setState(s=>({addSel:[...s.addSel,{name:n,sub:null,member:false,isNew:true}],draft:''})); }
+  removeSel(name){ this.setState(s=>({addSel:s.addSel.filter(x=>x.name!==name)})); }
+  commitAddSel(){ const sel=this.state.addSel; if(!sel.length)return; const base=Date.now();
+    this.setState(s=>({players:[...s.players,...sel.map((x,i)=>({id:'g'+(base+i),name:x.name,sub:x.sub,buys:0,cash:0,chips:null,settled:false}))],
+      log:[{time:'00:00',text:sel.map(x=>x.name).join(', ')+' נוספו למשחק'},...s.log],sheet:null,addSel:[],draft:''})); this.toast(sel.length+' שחקנים נוספו'); }
+
+  settlePlayer(id,chips){ this.setState(s=>({players:s.players.map(p=>p.id===id?{...p,chips,settled:true}:p),sheet:null,
+    log:[{time:'00:0'+(s.log.length%9),text:(s.players.find(p=>p.id===id).name)+' — נסגר עם '+chips+' ז\'יטונים'},...s.log]})); }
+  reopenPlayer(id){ this.setState(s=>({players:s.players.map(p=>p.id===id?{...p,settled:false,chips:null}:p),sheet:null})); }
+  setCash(id,amt){ this.setState(s=>({players:s.players.map(p=>p.id===id?{...p,cash:amt}:p),sheet:null})); this.toast('נשמר ✓'); }
+  renamePlayer(id,name){ if(!name.trim())return this.closeSheet(); this.setState(s=>({players:s.players.map(p=>p.id===id?{...p,name:name.trim()}:p),sheet:null})); }
+  removePlayer(id){ this.setState(s=>({players:s.players.filter(p=>p.id!==id),sheet:null,log:[{time:'00:00',text:'שחקן הוסר מהמשחק'},...s.log]})); this.toast('הוסר'); }
+  addPlayer(name){ if(!name.trim())return this.closeSheet(); const id='g'+Date.now();
+    this.setState(s=>({players:[...s.players,{id,name:name.trim(),sub:null,buys:0,cash:0,chips:null,settled:false}],sheet:null,
+      log:[{time:'00:00',text:name.trim()+' נוסף למשחק'},...s.log]})); }
+  addPlayerNamed(name,sub){ const id='g'+Date.now(); this.setState(s=>({players:[...s.players,{id,name,sub:sub||null,buys:0,cash:0,chips:null,settled:false}],sheet:null,log:[{time:'00:00',text:name+' נוסף למשחק'},...s.log]})); this.toast(name+' נוסף'); }
+
+  calc(s){ const cv=s.buyAmount/s.chipsPerBuy; const nodes=[];
+    s.players.forEach(p=>{ const owed=p.buys*s.buyAmount; const cashOut=p.settled?p.chips*cv:owed; const balance=Math.round(cashOut-owed+p.cash); nodes.push({name:p.name,balance}); });
+    const potCash=s.players.reduce((a,p)=>a+p.cash,0); if(potCash>0)nodes.push({name:'קופה',balance:-potCash});
+    const balances=nodes.map(n=>({name:n.name,balance:n.balance}));
+    const debt=nodes.filter(n=>n.balance<0).map(n=>({...n})).sort((a,b)=>a.balance-b.balance);
+    const cred=nodes.filter(n=>n.balance>0).map(n=>({...n})).sort((a,b)=>b.balance-a.balance);
+    const transfers=[]; let i=0,j=0;
+    while(i<debt.length&&j<cred.length){ const pay=Math.min(-debt[i].balance,cred[j].balance);
+      if(pay>0)transfers.push({from:debt[i].name,to:cred[j].name,amount:pay,manual:false});
+      debt[i].balance+=pay; cred[j].balance-=pay; if(Math.abs(debt[i].balance)<1)i++; if(cred[j].balance<1)j++; }
+    return {transfers,balances}; }
+  enterSettle(){ this.setState(s=>{ const {transfers,balances}=this.calc(s); return {screen:'settle',sheet:null,transfers,balances}; }); }
+  recalc(){ this.setState(s=>{ const {transfers,balances}=this.calc(s); return {transfers,balances}; }); this.toast('חושב מחדש ✓'); }
+  results(s){ const cv=s.buyAmount/s.chipsPerBuy;
+    return s.players.map(p=>{ const owed=p.buys*s.buyAmount; const cashOut=p.settled?p.chips*cv:owed; return {name:p.name,net:Math.round(cashOut-owed)}; }).sort((a,b)=>b.net-a.net); }
+  buildFinal(s){ const res=this.results(s); const lines=['🃏 סיכום — פוקר חמישי','','תוצאות:'];
+    res.forEach(r=>lines.push(r.name+' '+this.signed(r.net))); lines.push('','העברות:');
+    (s.transfers||[]).forEach(t=>lines.push(t.from+' משלם ל'+t.to+' — '+this.money(t.amount))); return lines.join('\n'); }
+  buildLive(s){ const lines=['🃏 פוקר חמישי — 26.07','קנייה ₪50 · ז\'יטון ₪0.5',''];
+    s.players.forEach(p=>lines.push(p.name+' — '+p.buys+' קניות ('+this.money(p.buys*s.buyAmount)+')'));
+    lines.push('','סה"כ במשחק: '+this.money(s.players.reduce((a,p)=>a+p.buys*s.buyAmount,0))); return lines.join('\n'); }
+  enterSummary(){ this.setState(s=>{ let st=s; if(!s.transfers||!s.transfers.length){const c=this.calc(s);st={...s,transfers:c.transfers,balances:c.balances};} return {screen:'summary',sheet:null,transfers:st.transfers,balances:st.balances,results:this.results(st)}; }); }
+
+  endGame(){ const open=this.state.players.filter(p=>!p.settled&&p.buys>0); if(open.length){ this.toast('יש '+open.length+' שחקנים שעדיין לא נסגרו'); return; } this.enterSettle(); }
+
+  startGame(){ const known={'הכריש':'mor_l','אורי':'uri88','דנה':'dana','נועה':'noa_k','גיל':'gil_p','שירן':'shiran'};
+    const players=this.state.picked.map((n,i)=>({id:'p'+i,name:n,sub:known[n]||null,buys:0,cash:0,chips:null,settled:false}));
+    this.setState({players,screen:'game',transfers:[],results:[],log:[{time:'00:00',text:'המשחק נפתח · '+players.length+' שחקנים'}]}); this.toast('משחק התחיל'); }
+  dupLast(){ this.setState({players:this.seed(),screen:'game',transfers:[],results:[]}); this.toast('שוכפל'); }
+
+  toggleChip(n){ this.setState(s=>({picked:s.picked.includes(n)?s.picked.filter(x=>x!==n):[...s.picked,n]})); }
+
+  editTransfer(i,patch){ this.setState(s=>({transfers:s.transfers.map((t,k)=>k===i?{...t,...patch,manual:true}:t)})); }
+  delTransfer(i){ this.setState(s=>({transfers:s.transfers.filter((_,k)=>k!==i)})); this.toast('נמחק'); }
+  addTransfer(){ this.setState(s=>{ const names=s.players.map(p=>p.name); return {transfers:[...s.transfers,{from:names[0]||'—',to:names[1]||'—',amount:0,manual:true}]}; }); }
+
+  openGroup(id){ this.setState({screen:'group',activeGroup:id,sheet:null}); }
+  toggleAdmin(gid,name){ this.setState(s=>({groups:s.groups.map(g=>g.id!==gid?g:{...g,members:g.members.map(m=>m.name===name?{...m,role:m.role==='admin'?'member':'admin'}:m)})})); this.toast('הרשאות עודכנו'); }
+  createGroupNow(name){ if(!name.trim())return this.closeSheet(); const id='cg'+Date.now(); this.setState(s=>({groups:[...s.groups,{id,name:name.trim(),members:[{name:'מור לוי',sub:'mor_l',role:'owner',me:true}]}],activeGroup:id,screen:'group',sheet:null})); this.toast('החבורה נוצרה'); }
+  deleteGroupNow(id){ this.setState(s=>{ const groups=s.groups.filter(g=>g.id!==id); return {groups,activeGroup:groups[0]?groups[0].id:null,screen:'profile',sheet:null}; }); this.toast('החבורה נמחקה'); }
+  setViewerMode(m){ this.setState({viewerMode:m}); }
+
+  renderVals(){
+    const S=this.state, B=S.buyAmount, scr=S.screen, cv=this.cv();
+    const nav=[['home','בית'],['new','חדש'],['game','משחק'],['settle','חישוב'],['summary','סיכום'],['stats',"סטט'"],['profile','פרופיל'],['group','חבורה'],['viewer','צופה']];
+    const navItems=nav.map(([k,l])=>({label:l,go:()=>this.go(k),
+      style:'border:none;border-radius:999px;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;'+(scr===k?'background:#E9A23C;color:#1A1508':'background:transparent;color:rgba(244,239,231,.55)')}));
+
+    // pot banner
+    const totalBuy=S.players.reduce((a,p)=>a+p.buys*B,0);
+    const totalChips=S.players.reduce((a,p)=>a+(p.settled?p.chips*cv:p.buys*B),0);
+    const disc=Math.round(totalBuy-totalChips); const bal=disc===0;
+    const potBannerStyle='margin:12px 16px 4px;border-radius:14px;padding:12px 15px;display:flex;align-items:center;gap:10px;border:1px solid '+(bal?'rgba(79,201,138,.28)':'rgba(239,107,99,.3)')+';background:'+(bal?'rgba(79,201,138,.12)':'rgba(239,107,99,.12)');
+    const potDetail=bal?('קניות '+this.money(totalBuy)+' = ז\'יטונים '+this.money(totalBuy)):('קניות '+this.money(totalBuy)+' · ז\'יטונים '+this.money(totalChips));
+
+    const livePlayers=S.players.map(p=>{ const owed=p.buys*B; const net=p.settled?Math.round(p.chips*cv-owed):0; const meta=p.account?(p.account+' · @'+p.sub):(p.sub?'@'+p.sub:'');
+      return { id:p.id,name:p.name,sub:p.sub,meta,late:p.late,buys:p.buys,active:!p.settled,settled:p.settled,
+        buysDisabled:p.buys===0, lock:p.settled?'🔒 ':'',
+        displayAmount:p.settled?this.signed(net):this.money(owed),
+        amountStyle:'direction:ltr;unicode-bidi:isolate;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:'+(p.settled?(net>0?'#4FC98A':(net<0?'#EF6B63':'rgba(244,239,231,.7)')):'#F4EFE7'),
+        rowStyle:'background:#1E1913;border:1px solid rgba(244,239,231,.07);border-radius:16px;padding:13px 15px;display:flex;flex-direction:column;gap:12px;'+(p.settled?'opacity:.55':''),
+        cashStr:p.cash>0?('💵 '+this.money(p.cash)):'💵 +',
+        cashStyle:'font-size:13px;direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums;'+(p.cash>0?'color:rgba(244,239,231,.7)':'color:rgba(244,239,231,.32)'),
+        decStyle:'width:44px;height:44px;border-radius:13px;border:1px solid rgba(244,239,231,.14);background:transparent;font-size:24px;font-family:inherit;line-height:1;cursor:pointer;color:'+(p.buys===0?'rgba(244,239,231,.2)':'rgba(244,239,231,.65)'),
+        inc:()=>this.bump(p.id,1), dec:()=>this.bump(p.id,-1),
+        cash:()=>this.openSheet('cash',{id:p.id}), menu:()=>this.openSheet('action',{id:p.id}), reopen:()=>this.reopenPlayer(p.id) }; });
+
+    let undoText=''; const u=S.undo;
+    if(u){ const chips=u.deltaBuys*S.chipsPerBuy; const bl=Math.abs(u.deltaBuys)>1?((u.deltaBuys<0?'−':'+')+Math.abs(u.deltaBuys)+' קניות'):('קנייה '+u.nowBuys);
+      undoText=u.name+' · '+bl+' · '+this.signed(chips)+' ז\'יטונים · '+this.signed(u.deltaBuys*B); }
+
+    const allSettled=S.players.filter(p=>p.buys>0).every(p=>p.settled)&&S.players.length>0;
+    const endBtnStyle='flex:1.15;height:50px;font-size:13px;font-weight:600;font-family:inherit;border-radius:14px;cursor:pointer;'+(allSettled?'border:none;background:#E9A23C;color:#1A1508':'border:1px solid rgba(233,162,60,.35);background:rgba(233,162,60,.12);color:#E9A23C');
+
+    const history=[
+      {name:'פוקר רביעי',meta:'25.07 · 5 שחקנים',result:'+₪120',net:1,tag:'',s:'viewer'},
+      {name:'ליל שבת',meta:'19.07 · 6 שחקנים',result:'−₪80',net:-1,tag:'',s:'viewer'},
+      {name:'פוקר חמישי',meta:'12.07 · 4 שחקנים',result:'+₪45',net:1,tag:'ארכיון',s:'viewer'},
+    ].map(g=>({...g, open:()=>this.go('viewer'),
+      wrap:'width:100%;text-align:right;font-family:inherit;color:inherit;cursor:pointer;background:#1E1913;border:1px solid rgba(244,239,231,.07)'+(g.tag?';opacity:.72':'')+';border-radius:16px;padding:15px 16px;display:flex;justify-content:space-between;align-items:center',
+      resStyle:'direction:ltr;unicode-bidi:isolate;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;color:'+(g.net>0?'#4FC98A':'#EF6B63')}));
+
+    const chipNames=['הכריש','אורי','דנה','נועה','רני','איתי','גיל','שירן'];
+    const nameChips=chipNames.map(n=>{const on=S.picked.includes(n);return{name:n,toggle:()=>this.toggleChip(n),
+      style:'font-family:inherit;cursor:pointer;border-radius:999px;padding:9px 15px;font-size:14px;'+(on?'background:#241d12;border:1px solid rgba(233,162,60,.4);color:#E9A23C;font-weight:600':'background:#1E1913;border:1px solid rgba(244,239,231,.1);color:rgba(244,239,231,.65)')};});
+
+    // settlement transfers (editable)
+    const players_names=S.players.map(p=>p.name).concat(S.players.some(p=>p.cash>0)?['קופה']:[]);
+    const transfers=(S.transfers||[]).map((t,i)=>({from:t.from,to:t.to,amount:this.money(t.amount),
+      pickFrom:()=>this.openSheet('picker',{i,side:'from'}), pickTo:()=>this.openSheet('picker',{i,side:'to'}),
+      editAmt:()=>this.openSheet('amount',{i}), del:()=>this.delTransfer(i),
+      copy:()=>this.copy(this.money(t.amount)), wa:()=>this.share(t.from+' — מהפוקר: '+this.money(t.amount)+' 🙏') }));
+    // recon
+    const recon=(S.balances||[]).map(b=>{ let actual=0; (S.transfers||[]).forEach(t=>{ if(t.to===b.name)actual+=t.amount; if(t.from===b.name)actual-=t.amount; });
+      const diff=Math.round(actual-b.balance); const pl=S.players.find(p=>p.name===b.name); const cash=pl?pl.cash:0;
+      return {name:b.name,cashChip:cash>0?('💵 '+this.money(cash)):'',should:this.signed(b.balance),actual:this.signed(actual),diff:diff===0?'✓':this.signed(diff),
+        diffColor:'color:'+(diff===0?'#4FC98A':'#EF6B63')}; });
+    const totalMove=(S.balances||[]).filter(b=>b.balance>0).reduce((a,b)=>a+b.balance,0);
+    const assigned=(S.transfers||[]).reduce((a,t)=>a+t.amount,0);
+    const complete=recon.every(r=>r.diff==='✓')&&recon.length>0;
+    const balanceLabel=complete?'הכל שויך ✓':('שויך '+this.money(assigned)+' מתוך '+this.money(totalMove));
+    const balanceBannerStyle='margin:12px 16px 0;border-radius:14px;padding:12px 15px;border:1px solid '+(complete?'rgba(79,201,138,.28)':'rgba(233,162,60,.28)')+';background:'+(complete?'rgba(79,201,138,.12)':'rgba(233,162,60,.1)');
+
+    // summary results
+    const results=(S.results||[]).map((r,i)=>({name:r.name,result:this.signed(r.net),crown:i===0&&r.net>0?true:null,rank:i+1,
+      wrap:'background:'+(i===0&&r.net>0?'linear-gradient(150deg,#1c2a1e,#1a1610)':'#1E1913')+';border:1px solid '+(i===0&&r.net>0?'rgba(79,201,138,.3)':'rgba(244,239,231,.08)')+';border-radius:14px;padding:13px 15px;display:flex;justify-content:space-between;align-items:center',
+      rankStyle:'width:22px;height:22px;border-radius:50%;background:rgba(244,239,231,.08);color:rgba(244,239,231,.5);display:grid;place-items:center;font-size:12px;font-weight:700;direction:ltr',
+      resStyle:'direction:ltr;unicode-bidi:isolate;font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:'+(r.net>0?'#4FC98A':(r.net<0?'#EF6B63':'rgba(244,239,231,.7)'))}));
+
+    // viewer static
+    const vr=[{name:'דנה',v:50},{name:'אורי',v:20},{name:'רני',v:-30},{name:'מור',v:-40,mine:true}];
+    const viewerResults=vr.map(r=>({name:r.name,result:this.signed(r.v),mine:r.mine?true:null,
+      wrap:'background:'+(r.mine?'#241d12':'#1E1913')+';border:1px solid '+(r.mine?'rgba(233,162,60,.3)':'rgba(244,239,231,.08)')+';border-radius:14px;padding:13px 15px;display:flex;justify-content:space-between;align-items:center',
+      resStyle:'direction:ltr;unicode-bidi:isolate;font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:'+(r.v>0?'#4FC98A':'#EF6B63')}));
+    const vt=[{from:'מור',to:'דנה',a:40},{from:'רני',to:'דנה',a:10},{from:'רני',to:'אורי',a:20}];
+    const viewerTransfers=vt.map(t=>({from:t.from,to:t.to,amount:this.money(t.a),copy:()=>this.copy(this.money(t.a))}));
+
+    // sparkline
+    const series=[0,-100,-200,-300,-200,-300,-400]; const W=300,H=70,pad=6; const mn=Math.min(...series),mx=Math.max(...series),rng=(mx-mn)||1;
+    const xy=series.map((v,i)=>[pad+i/(series.length-1)*(W-2*pad),pad+(mx-v)/rng*(H-2*pad)]);
+    const sparkPoints=xy.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' '); const last=xy[xy.length-1];
+
+    const detailStats=[
+      {label:'אחוז נצחונות',value:'17% (6 משחקים)'},{label:'תשואה (ROI)',value:'−67%',neg:true},
+      {label:'סה"כ כסף ששוחק',value:'₪600'},{label:'ממוצע קנייה למשחק',value:'₪100'},
+      {label:'ממוצע למשחק',value:'−₪67',neg:true},{label:'ממוצע קניות',value:'2.3'},
+      {label:'תשואה לשעה',value:'−₪34',neg:true},{label:'הערב הכי טוב',value:'+₪45',pos:true},
+      {label:'הערב הכי גרוע',value:'−₪100',neg:true},{label:'הוצאות משותפות',value:'₪340'},
+    ].map(d=>({label:d.label,value:d.value,style:'unicode-bidi:isolate;font-weight:700;font-variant-numeric:tabular-nums;color:'+(d.neg?'#EF6B63':(d.pos?'#4FC98A':'#F4EFE7'))}));
+
+    const funCards=[
+      {icon:'💸',label:'היריב שלך',value:'מור',sub:'−₪180 אליו'},
+      {icon:'🧊',label:'רצף קר',value:'2 ברצף',sub:'הכי ארוך: 4'},
+      {icon:'🔥',label:'הקאמבק',value:'פעם 1',sub:'הכי גדול ₪90'},
+    ];
+    const groupFunCards=[
+      {icon:'🎁',label:'הספונסר',value:'רני',sub:'−₪260 · הכי מפסיד'},
+      {icon:'👑',label:'המלך',value:'דנה',sub:'+₪420 · הכי מרוויח'},
+      {icon:'🏋️',label:'הברזל',value:'מור',sub:'12 משחקים ברצף'},
+      {icon:'🔥',label:'הרצף החם',value:'דנה',sub:'4 נצחונות ברצף'},
+      {icon:'🤖',label:'המכונה',value:'גיל',sub:'6 קניות בערב'},
+      {icon:'🧲',label:"מגנט ז'יטונים",value:'דנה',sub:'ממוצע 210'},
+    ];
+
+    const leadersRaw=[{name:'דנה',net:420,roi:38,g:12},{name:'אורי',net:150,roi:14,g:11},{name:'גיל',net:30,roi:4,g:8},{name:'מור',net:-90,roi:-9,g:12},{name:'רני',net:-260,roi:-31,g:9}];
+    const metric=S.groupMetric;
+    const sorted=[...leadersRaw].sort((a,b)=>metric==='games'?b.g-a.g:(metric==='roi'?b.roi-a.roi:b.net-a.net));
+    const leaders=sorted.map((l,i)=>{ const val=metric==='games'?l.g+' משחקים':(metric==='roi'?(l.roi>0?'+':'')+l.roi+'%':this.signed(l.net)); const pos=metric==='games'?true:(metric==='roi'?l.roi>0:l.net>0);
+      return {name:l.name,value:val,games:l.g+' משחקים',rank:i+1,
+        rankStyle:'width:24px;height:24px;border-radius:8px;background:'+(i===0?'rgba(233,162,60,.2)':'rgba(244,239,231,.08)')+';color:'+(i===0?'#E9A23C':'rgba(244,239,231,.55)')+';display:grid;place-items:center;font-size:12px;font-weight:700;direction:ltr',
+        color:metric==='games'?'color:#F4EFE7':('color:'+(pos?'#4FC98A':'#EF6B63'))}; });
+    const metricChips=[['net','רווח'],['roi','תשואה'],['games','משחקים']].map(([k,l])=>({label:l,pick:()=>this.setState({groupMetric:k}),
+      style:'font-family:inherit;cursor:pointer;border-radius:999px;padding:6px 13px;font-size:12px;'+(metric===k?'background:#E9A23C;color:#1A1508;font-weight:600;border:none':'background:#1E1913;border:1px solid rgba(244,239,231,.1);color:rgba(244,239,231,.6)')}));
+    const groupTiles=[
+      {value:'₪14,200',label:'סה"כ כסף ששוחק'},{value:'24',label:'משחקים'},{value:'96 ש\'',label:'שעות משחק'},
+      {value:'₪590',label:'ממוצע קופה'},{value:'5.4',label:'ממוצע שחקנים'},{value:'4:00',label:'משך ממוצע'},
+      {value:'₪180',label:'לא מזוהה / הבית'},{value:'₪1,240',label:'הוצאות משותפות'},{value:'חמישי',label:'היום הנפוץ'},
+    ];
+
+    const track=on=>'width:42px;height:24px;border-radius:999px;display:inline-flex;align-items:center;padding:2px;background:'+(on?'#E9A23C':'rgba(244,239,231,.15)')+';'+(on?'justify-content:flex-end':'justify-content:flex-start');
+    const knob='width:20px;height:20px;border-radius:50%;background:#fff;display:block';
+    const tabBtn=on=>'flex:1;border:none;border-radius:11px;padding:10px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;'+(on?'background:#1E1913;color:#F4EFE7;border:1px solid rgba(244,239,231,.12)':'background:transparent;color:rgba(244,239,231,.45)');
+
+    // ===== sheet data =====
+    const sh=S.sheet||{}; const ap=sh.id?S.players.find(p=>p.id===sh.id):null;
+    const item=(label,fn,danger)=>({label,do:fn,style:'width:100%;text-align:right;background:none;border:none;font-family:inherit;font-size:15px;padding:14px 4px;border-bottom:1px solid rgba(244,239,231,.05);cursor:pointer;color:'+(danger?'#EF6B63':'#F4EFE7')});
+    let actionItems=[];
+    if(ap){ actionItems = ap.settled
+      ? [item('פתיחה מחדש',()=>this.reopenPlayer(ap.id)), item('מזומן ששולם',()=>this.openSheet('cash',{id:ap.id})), item(ap.sub?'כינוי':'שינוי שם',()=>this.openSheet('rename',{id:ap.id})), item('הסרה מהמשחק',()=>this.openSheet('confirm',{kind:'remove',id:ap.id}),true)]
+      : [item('סגירת שחקן',()=>this.openSheet('settle',{id:ap.id})), item('מזומן ששולם',()=>this.openSheet('cash',{id:ap.id})), item(ap.sub?'כינוי':'שינוי שם',()=>this.openSheet('rename',{id:ap.id})), item('הסרה מהמשחק',()=>this.openSheet('confirm',{kind:'remove',id:ap.id}),true)]; }
+    const menuItems=[
+      item('שינוי שם המשחק',()=>this.toast('בקרוב')), item('הוצאות משותפות',()=>this.toast('בקרוב')),
+      item('שיתוף',()=>this.openSheet('share')), item('העברת ניהול',()=>this.toast('בקרוב')),
+      item('מחיקת המשחק',()=>this.openSheet('confirm',{kind:'delete'}),true)];
+
+    const chipsN=parseInt(S.draft)||0; const settleMoney=chipsN*cv; const settleNet=ap?Math.round(settleMoney-ap.buys*B):0;
+    const settleConv=ap?('= '+this.money(settleMoney)+' · תוצאה '+this.signed(settleNet)):'';
+    const chipQuick=[0,50,100,150].map(v=>({label:String(v),set:()=>this.setState({draft:String(v)})}));
+    const cashQuick=[50,100,150].map(v=>({label:'₪'+v,set:()=>this.setState({draft:String(v)})}));
+
+    const pickerNames=players_names.map(n=>({name:n,pick:()=>{ this.editTransfer(sh.i,{[sh.side]:n}); this.closeSheet(); },
+      style:'font-family:inherit;cursor:pointer;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:600;background:#272119;border:1px solid rgba(244,239,231,.12);color:#F4EFE7'}));
+
+    let textTitle='',textPlaceholder='',textHelper='',textCta='שמירה',confirmText=()=>{};
+    if(sh.type==='rename'&&ap){ textTitle=ap.sub?('כינוי ל'+(ap.name)):'שינוי שם'; textPlaceholder=ap.name; textHelper=ap.sub?'הכינוי יוצג לצד שם המשתמש':''; confirmText=()=>this.renamePlayer(ap.id,S.draft); }
+    if(sh.type==='add'){ textTitle='הוסף שחקן'; textPlaceholder='שם השחקן'; textCta='הוסף'; confirmText=()=>this.addPlayer(S.draft); }
+    if(sh.type==='newgroup'){ textTitle='צור חבורה'; textPlaceholder='שם החבורה'; textCta='צור'; confirmText=()=>this.createGroupNow(S.draft); }
+    if(sh.type==='nick'){ textTitle='כינוי ברירת מחדל'; textPlaceholder=S.defaultNick; textHelper='נבחר בעת יצירת החשבון — משמש כברירת מחדל בכל משחק חדש'; textCta='שמירה'; confirmText=()=>{ this.setState({defaultNick:((S.draft||'').trim()||S.defaultNick),sheet:null}); this.toast('הכינוי נשמר'); }; }
+
+    let confirmTitle='',confirmBody='',confirmCta='',confirmColor='#EF6B63',confirmFn=()=>{};
+    if(sh.kind==='remove'&&ap){ confirmTitle='להסיר את '+ap.name+'?'; confirmBody='השחקן יוסר מהמשחק. הפעולה תירשם ביומן.'; confirmCta='הסר'; confirmFn=()=>this.removePlayer(ap.id); }
+    if(sh.kind==='delete'){ confirmTitle='למחוק את המשחק?'; confirmBody='הנתונים המפורטים יימחקו: שחקנים, קניות, יומן וההעברות. הסטטיסטיקה תישמר — התוצאות ימשיכו להיספר.'; confirmCta='מחק משחק'; confirmFn=()=>{ this.setState({sheet:null,screen:'home'}); this.toast('המשחק נמחק'); }; }
+    if(sh.kind==='delgroup'){ const dg=S.groups.find(x=>x.id===sh.gid)||{}; confirmTitle='למחוק את '+(dg.name||'החבורה')+'?'; confirmBody='כל חברי החבורה יאבדו גישה לחבורה ולסטטיסטיקה שלה. הסטטיסטיקה האישית של כל שחקן תישמר.'; confirmCta='מחק חבורה'; confirmFn=()=>this.deleteGroupNow(sh.gid); }
+
+    const grp=S.groups.find(g=>g.id===S.activeGroup)||S.groups[0]||{name:'',members:[]};
+    const iAmOwner=grp.members.some(m=>m.me&&m.role==='owner');
+    const groupMembers=grp.members.map(m=>({name:m.name,sub:m.sub||'guest',initial:(m.name||'?').charAt(0),
+      roleBadge:m.role==='owner'?'יוצר':(m.role==='admin'?'מנהל':''),
+      badgeStyle:'font-size:10px;padding:3px 9px;border-radius:7px;'+(m.role==='owner'?'background:rgba(233,162,60,.2);color:#E9A23C':'background:rgba(79,201,138,.14);color:#7fe0ac'),
+      showToggle:iAmOwner&&!m.me&&m.role!=='owner', toggleLabel:m.role==='admin'?'בטל ניהול':'הפוך למנהל', toggle:()=>this.toggleAdmin(grp.id,m.name)}));
+    const profileGroups=S.groups.map(g=>({name:g.name, open:()=>this.openGroup(g.id),
+      meta:(g.members.some(m=>m.me&&m.role==='owner')?'יוצר · ':(g.members.some(m=>m.me&&m.role==='admin')?'מנהל · ':''))+g.members.length+' חברים',
+      style:'width:100%;font-family:inherit;color:inherit;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:#1E1913;border:1px solid '+(g.id===S.activeGroup?'rgba(233,162,60,.25)':'rgba(244,239,231,.08)')+';border-radius:14px;padding:13px 15px'}));
+    const inGameNames=new Set(S.players.map(p=>p.name));
+    const knownExtra=[{name:'שירן',sub:'shiran'},{name:'טל',sub:'tal_k'},{name:'יואב',sub:'yoav'},{name:'ליאור',sub:null},{name:'עידו',sub:null}];
+    const _seenF=new Set(); const _fp=[];
+    grp.members.filter(m=>!m.me).forEach(m=>{ if(inGameNames.has(m.name)||_seenF.has(m.name))return; _seenF.add(m.name); _fp.push({name:m.name,sub:m.sub,member:true}); });
+    knownExtra.forEach(f=>{ if(inGameNames.has(f.name)||_seenF.has(f.name))return; _seenF.add(f.name); _fp.push({name:f.name,sub:f.sub,member:false}); });
+    const selNames=new Set(S.addSel.map(x=>x.name));
+    const _fmap=f=>({name:f.name, sub:f.sub, sel:selNames.has(f.name), toggle:()=>this.toggleSel(f.name,f.sub,f.member),
+      style:'font-family:inherit;cursor:pointer;border-radius:999px;padding:9px 14px;font-size:14px;display:inline-flex;align-items:center;gap:6px;'+(selNames.has(f.name)?'background:#E9A23C;border:1px solid #E9A23C;color:#1A1508;font-weight:700':(f.member?'background:#241d12;border:1px solid rgba(233,162,60,.4);color:#E9A23C;font-weight:600':'background:#1E1913;border:1px solid rgba(244,239,231,.1);color:rgba(244,239,231,.7)')),
+      check:selNames.has(f.name)?'✓':(f.member?'◈':'')});
+    const addFriendsGroup=_fp.filter(f=>f.member).map(_fmap);
+    const addFriendsOther=_fp.filter(f=>!f.member).map(_fmap);
+    const selChips=S.addSel.map(x=>({name:x.name, badge:x.isNew?'חדש':(x.member?'חבורה':''), remove:()=>this.removeSel(x.name)}));
+
+    return {
+      navItems, toast:S.toast,
+      isHome:scr==='home',isNew:scr==='new',isGame:scr==='game',isSettle:scr==='settle',isSummary:scr==='summary',isStats:scr==='stats',isProfile:scr==='profile',isGroup:scr==='group',isViewer:scr==='viewer',
+      goHome:()=>this.go('home'),goNew:()=>this.go('new'),goGame:()=>this.go('game'),goStats:()=>this.go('stats'),goProfile:()=>this.go('profile'),
+      playerCount:S.players.length, potStr:this.money(totalBuy),
+      potBannerStyle, potDotStyle:'width:9px;height:9px;border-radius:50%;flex:none;background:'+(bal?'#4FC98A':'#EF6B63'), potTextColor:'color:'+(bal?'#7fe0ac':'#f0a5a0'), potLabel:bal?'מאוזן':('פער של '+this.money(Math.abs(disc))), potDetail,
+      livePlayers, undoShow:!!S.undo, undoText, doUndo:()=>this.undoNow(), endBtnStyle, endGame:()=>this.endGame(),
+      openAdd:()=>this.openSheet('addplayer'), openShare:()=>this.openSheet('share'), openLog:()=>this.openSheet('log'), openMenu:()=>this.openSheet('menu'), openSync:()=>this.openSheet('sync'),
+      history, nameChips, pickedCount:S.picked.length+' נבחרו', openAddGuest:()=>this.openSheet('add'),
+      priv:S.priv, togglePriv:()=>this.setState(s=>({priv:!s.priv})), checkMark:S.priv?'✓':'',
+      checkboxStyle:'width:22px;height:22px;border-radius:6px;flex:none;margin-top:1px;display:grid;place-items:center;font-size:14px;font-weight:800;'+(S.priv?'background:#E9A23C;color:#1A1508;border:1.5px solid #E9A23C':'border:1.5px solid rgba(244,239,231,.3);color:transparent'),
+      startGame:()=>this.startGame(), dupLast:()=>this.dupLast(),
+      transfers, recon, transferCount:(S.transfers||[]).length, addTransfer:()=>this.addTransfer(), recalc:()=>this.recalc(),
+      balanceLabel, balanceBannerStyle, balanceTextColor:'color:'+(complete?'#7fe0ac':'#E9A23C'), balancePct:(totalMove?Math.min(100,Math.round(assigned/totalMove*100)):100)+'%', balanceBarColor:complete?'#4FC98A':'#E9A23C',
+      shareSettleText:()=>this.share(this.buildFinal(S)), finishGame:()=>this.enterSummary(),
+      results, shareWa:()=>this.share(this.buildFinal(S)), copyTransfers:()=>this.copy(this.buildFinal(S)),
+      viewerResults, viewerTransfers, shareViewer:()=>this.share('🃏 סיכום פוקר חמישי — ראו העברות'),
+      statsMe:S.statsTab==='me', statsGroup:S.statsTab==='group', setTabMe:()=>this.setState({statsTab:'me'}), setTabGroup:()=>this.setState({statsTab:'group'}),
+      tabMeStyle:tabBtn(S.statsTab==='me'), tabGroupStyle:tabBtn(S.statsTab==='group'),
+      groupName:'חבורת חמישי', switchGroup:()=>this.toast('חבורה יחידה'),
+      sparkPoints, sparkZeroY:(pad+(mx-0)/rng*(H-2*pad)).toFixed(1), sparkDotX:last[0].toFixed(1), sparkDotY:last[1].toFixed(1),
+      detailStats, funCards, groupFunCards, leaders, metricChips, groupTiles,
+      toggleSettled:()=>this.setState(s=>({showSettled:!s.showSettled})), togglePrivStats:()=>this.setState(s=>({privStats:!s.privStats})),
+      toggleTheme:()=>this.toast('כהה · בהיר בקרוב'), themeLabel:'כהה', signOut:()=>this.toast('להתראות 👋'),
+      settledTrack:track(S.showSettled), settledKnob:knob, privTrack:track(S.privStats), privKnob:knob,
+      // sheets
+      sheetOpen:!!S.sheet, closeSheet:()=>this.closeSheet(), draft:S.draft, onDraft:e=>this.onDraft(e),
+      sheetAction:sh.type==='action', sheetSettle:sh.type==='settle', sheetCash:sh.type==='cash', sheetText:sh.type==='rename'||sh.type==='add'||sh.type==='newgroup'||sh.type==='nick',
+      sheetPicker:sh.type==='picker', sheetAmount:sh.type==='amount', sheetMenu:sh.type==='menu', sheetShare:sh.type==='share', sheetLog:sh.type==='log', sheetSync:sh.type==='sync', sheetConfirm:sh.type==='confirm',
+      activeName:ap?ap.name:'', actionItems, menuItems,
+      settleConv, chipQuick, cashQuick,
+      confirmSettle:()=>this.settlePlayer(sh.id,parseInt(S.draft)||0), confirmCash:()=>this.setCash(sh.id,parseInt(S.draft)||0),
+      textTitle, textPlaceholder, textHelper, textCta, confirmText,
+      pickerNames, confirmAmount:()=>{ this.editTransfer(sh.i,{amount:parseInt(S.draft)||0}); this.closeSheet(); },
+      shareText:this.buildLive(S), copyLink:()=>this.copy('https://poker.app/g/xY7k2'), shareLive:()=>this.share(this.buildLive(S)), copyLive:()=>this.copy(this.buildLive(S)),
+      logEntries:S.log,
+      isGroup:scr==='group', groupTitle:grp.name, groupSubtitle:'יוצר: '+((grp.members.find(m=>m.role==='owner')||{}).name||'—')+' · '+grp.members.length+' חברים',
+      memberCount:grp.members.length, iAmOwner, notOwner:!iAmOwner, groupMembers, profileGroups,
+      addMember:()=>this.toast('הזמנה תישלח לחבר'), createGroup:()=>this.openSheet('newgroup'), deleteGroup:()=>this.openSheet('confirm',{kind:'delgroup',gid:grp.id}),
+      viewerLive:S.viewerMode==='live', viewerFinished:S.viewerMode!=='live',
+      setViewerLive:()=>this.setViewerMode('live'), setViewerFinished:()=>this.setViewerMode('finished'),
+      vmLiveStyle:tabBtn(S.viewerMode==='live'), vmFinStyle:tabBtn(S.viewerMode!=='live'),
+      viewerTitleSub:S.viewerMode==='live'?('חי · '+S.players.length+' שחקנים · 3 צופים'):'26.07 · הסתיים · 4 שחקנים',
+      viewerLivePlayers:S.players.map(p=>({name:p.name,sub:p.sub,meta:p.account?(p.account+' · @'+p.sub):(p.sub?'@'+p.sub:''),buys:p.buys,owedStr:this.money(p.buys*B),rowStyle:'background:#1E1913;border:1px solid rgba(244,239,231,.07);border-radius:14px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center'})),
+      requestJoin:()=>this.toast('הבקשה נשלחה למנהל המשחק'),
+      openNick:()=>this.openSheet('nick'), defaultNick:S.defaultNick,
+      sheetAddPlayer:sh.type==='addplayer', addFriendsGroup, addFriendsOther, hasGroupFriends:addFriendsGroup.length>0, hasOtherFriends:addFriendsOther.length>0,
+      selChips, selCount:S.addSel.length, hasSel:S.addSel.length>0, addSelName:()=>this.addSelName(), commitAddSel:()=>this.commitAddSel(),
+      addSelCta:S.addSel.length?('הוסף '+S.addSel.length+' שחקנים'):'בחר שחקנים להוספה',
+      addSelDisabled:S.addSel.length===0,
+      addSelBtnStyle:'width:100%;height:52px;border:none;border-radius:14px;font-family:inherit;font-size:16px;font-weight:700;cursor:'+(S.addSel.length?'pointer':'default')+';'+(S.addSel.length?'background:#E9A23C;color:#1A1508':'background:#241d12;color:rgba(244,239,231,.35)'),
+      confirmTitle, confirmBody, confirmCta, confirmColor, confirmAction:confirmFn,
+    };
+  }
+}
+</script>
+</body>
+</html>
