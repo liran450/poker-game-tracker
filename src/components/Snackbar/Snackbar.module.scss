@@ -1,0 +1,13 @@
+@keyframes countdown-ring {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: 113;
+  }
+}
+
+.ring {
+  animation: countdown-ring 4s linear forwards;
+}

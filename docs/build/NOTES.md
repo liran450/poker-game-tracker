@@ -45,6 +45,27 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### Light-theme accent colour is below AA for body text
+**Step 3 · 2026-07-28 · trap**
+
+The light-theme accent (`#9a6812`) on surface-app (`#f5f2ee`) is 4.31:1 — below the 4.5:1 WCAG AA
+threshold for normal text. On surface-card (`#edeae4`) it drops to 4.01:1. Dark theme passes
+comfortably (8.69:1 and 8.06:1 respectively).
+
+This is the design-specified token from `docs/11`. The accent in light theme is used primarily at
+heading size (AA-large is 3:1, which it clears) or as button fill (where on-accent text on accent
+background passes at 8.4:1). Body-size accent text on these backgrounds should be avoided in light
+theme, or the token should be darkened — but that is a design decision, not a code fix.
+
+### Test files need eslint-disable for literal props
+**Step 3 · 2026-07-28 · trap**
+
+The `local/no-literal-jsx-text` rule correctly flags literal strings in `title`, `label`, and
+similar props — but in test files these are test data, not user-facing text. The fix is a file-level
+`/* eslint-disable local/no-literal-jsx-text */` after the imports. This is not a hole in the rule;
+it's working as designed. The rule's job is to catch literals in production components, and the
+disable comment is the right opt-out for tests.
+
 ### The pseudo-locale hijacked every English device
 **Step 1 · 2026-07-28 · trap**
 
