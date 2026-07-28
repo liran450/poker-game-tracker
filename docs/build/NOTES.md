@@ -39,54 +39,42 @@ Questions the specification doesn't answer, found while building. Ask the user; 
 `README.md` says every planning question was closed across five review rounds, so anything landing
 here is genuinely new — which makes it worth asking rather than quietly inventing an answer.
 
-### Where does the Supabase session live, given "no tokens in localStorage"?
-**Raised step 0 · needed by step 12**
-
-The rule is right — `localStorage` and `sessionStorage` are readable by any script on the origin,
-so an XSS turns into a stolen session. But Supabase Auth persists the access and refresh tokens in
-`localStorage` by default, and **the airtight answer — httpOnly cookies — needs a server to set
-them, which we don't have.** GitHub Pages is static, and adding a backend to fix this would cost
-the zero-hosting-cost constraint that decided the whole architecture. So this is a genuine
-three-way trade, not an oversight to code around:
-
-| Option | Cost |
-|---|---|
-| `persistSession: false` — memory only | Honours the rule exactly. Every reload signs the host out mid-game, and a magic link means going back to email. Harsh for an all-night PWA |
-| Custom `storage` adapter on IndexedDB (Dexie is already there) | Honours the letter of the rule. **Marginal real gain** — IndexedDB is script-readable too. Keeps the session across reloads |
-| Accept the default | Rejected: contradicts a stated rule |
-
-Worth being clear-eyed: against XSS the storage choice is a speed bump. What actually protects the
-session is the stuff we already require — never `dangerouslySetInnerHTML`, React's escaping, a
-strict CSP, sanitising anything a user typed, and dependency hygiene.
-
-**Recommendation:** the IndexedDB adapter plus a strict CSP, with the honest note that it is
-defence in depth rather than a fix. **Ask before building step 12** — if the preference is
-strictness over convenience, `persistSession: false` is the answer and the sign-in flow has to be
-designed around it.
-
-_No other questions open._
+_(none open — see the settled entry below on session storage.)_
 
 ---
 
 ## Entries
 
-### SCSS modules replace Tailwind — doc 02 updated, not contradicted
+### Session persists across reloads; XSS gets the whole security budget
 **Step 0 · 2026-07-28 · decision**
 
-`02-architecture.md` originally specified Tailwind with logical utility classes. The owner's
-stated preference is SCSS modules, one per component, `camelCase` class names, no inline styles.
-Doc 02's stack table and its i18n section were **edited** rather than left to rot, so the spec and
-the code agree; the full conventions are in `CLAUDE.md`.
+Settled by the owner, closing the open question this file previously carried. Signing the host out
+mid-game because they backgrounded the app is unacceptable, so **the session persists** — IndexedDB
+preferred over `localStorage`, though that preference is a marginal gain and not a defence, since
+both are readable by any script on the origin. The airtight option (httpOnly cookies) needs a
+server, and we deliberately don't have one.
 
-What this changes beyond the obvious: **the RTL guard is now a stylelint rule, not an ESLint one.**
-It bans physical CSS properties (`left`, `right`, `margin-left`, `border-top-left-radius`…) in the
-SCSS modules, where Tailwind's version banned utility classes. Same rule, different enforcement
-point — a session that goes looking for the old ESLint rule won't find it. There is also a second
-new rule banning the `style` prop outright.
+**The consequence is the important half:** if a script runs on our origin it takes the session, so
+XSS is *the* security problem in this app and the effort goes there rather than into storage
+theatre. That made the CSP a real step-1 deliverable rather than a nice-to-have — a
+`<meta http-equiv>` tag, because GitHub Pages can't set headers, with `script-src 'self'` and no
+`unsafe-inline`/`unsafe-eval`. Two earlier decisions are what make a policy that strict actually
+hold: self-hosted fonts (no Google Fonts request) and no inline styles. The full rule set is in
+`CLAUDE.md` under Security.
 
-The reasoning for the original choice ("RTL for free") survives intact: logical properties give the
-same result, and SCSS variables hold the design tokens from `11` more naturally than a Tailwind
-config would.
+### Tailwind first, SCSS module as the fallback
+**Step 0 · 2026-07-28 · decision · supersedes an earlier reversal**
+
+Doc 02 always specified Tailwind. A preference for SCSS modules briefly replaced it, then the owner
+restored Tailwind as the default with SCSS modules as the fallback — reach for a module when
+Tailwind can't express something (keyframes, complex selectors, vendor pseudo-elements) or when the
+component needs real CSS work anyway. Docs 02 and 09 are back to their original wording; this entry
+exists so the round trip doesn't look like drift.
+
+The lasting consequence is that **the RTL guard now needs both halves**: an ESLint rule over
+physical Tailwind utilities (`ml-`, `mr-`, `left-`…) *and* a stylelint rule over physical CSS
+properties in whatever SCSS exists. Enforcing only one leaves the other side unguarded. A third
+rule bans the `style` prop, which the CSP also depends on.
 
 ### Four collisions between the prototype and the spec — spec wins in all four
 **Step 0 · 2026-07-28 · trap**

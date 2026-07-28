@@ -93,11 +93,16 @@ re-deriving what the last one decided.
 **Build.**
 - Vite + React + TypeScript, `strict` on, path aliases, the folder layout from
   [`02 — Repository layout`](../02-architecture.md#repository-layout) created empty.
-- **SCSS modules** wired in Vite with `camelCase` class-name conversion; a reset file; the design
-  tokens from [`11`](../11-visual-design.md) as SCSS variables in one place. A **stylelint** rule
-  that fails the build on physical properties (`left`, `right`, `margin-left`, `padding-right`,
-  `border-top-left-radius`…) in favour of their logical equivalents, and an ESLint rule banning
-  the `style` prop.
+- **Tailwind** with the design tokens from [`11`](../11-visual-design.md) as its theme, mirrored as
+  CSS custom properties; **logical utilities only**. SCSS modules wired in Vite with `camelCase`
+  class-name conversion, as the fallback for what Tailwind can't express.
+- Three lint rules that fail the build: an ESLint rule on physical Tailwind utilities (`ml-`,
+  `mr-`, `pl-`, `pr-`, `left-`, `right-`), a stylelint rule on physical CSS properties in any SCSS,
+  and an ESLint rule banning the `style` prop.
+- **A strict CSP as a `<meta http-equiv>` tag** — GitHub Pages can't set headers. `script-src
+  'self'` with no `unsafe-inline` and no `unsafe-eval`, `connect-src` scoped to self and the
+  Supabase project, `object-src 'none'`, `base-uri 'self'`. Self-hosted fonts and no CDN are what
+  make it hold.
 - `i18next` + `react-i18next`, a single `he.json`, `<html lang dir>` set at runtime **from the
   locale**, never hardcoded. An ESLint rule banning literal user-facing strings in components.
 - A **pseudo-locale** (`en-XA`: LTR, ~40% longer) selectable in dev. This exists from day one so
@@ -121,11 +126,13 @@ re-deriving what the last one decided.
 - [ ] The deployed Pages URL loads, installs to a home screen, and shows the offline page with the
       network off.
 - [ ] The document direction flips to LTR when the pseudo-locale is selected, with no code change.
-- [ ] The lint rules actually fail: a deliberate `margin-left`, a deliberate `style={{…}}` prop and
-      a deliberate literal string each break the build. Verify by writing them, watching it fail,
-      and removing them.
+- [ ] The lint rules actually fail: a deliberate `ml-2`, a deliberate `margin-left` in SCSS, a
+      deliberate `style={{…}}` prop and a deliberate literal string each break the build. Verify by
+      writing them, watching it fail, and removing them.
 - [ ] No component contains a raw hex, a magic pixel value, or an inline style. Every value comes
-      from the token variables.
+      from the tokens.
+- [ ] The CSP is active and the app runs clean under it — no console violations, no
+      `unsafe-inline` anywhere. Check the deployed build, not just dev.
 
 **Out of scope.** Any game concept. Any Supabase. Any real screen.
 
@@ -187,8 +194,7 @@ bar — not a floating action button** ([`04`](../04-ux-spec.md#action-bar)), ev
 in the bottom third, tap targets ≥ 48px with ≥ 8px between adjacent targets.
 
 - The **shared primitives folder** these are built from — buttons, cards, icons, inputs, tags —
-  each in its own folder with its own SCSS module. Anything a feature step would otherwise write
-  twice belongs here.
+  each in its own folder. Anything a feature step would otherwise write twice belongs here.
 - A dev-only gallery route rendering every component in every state, including the states from
   [`10`](../10-design-brief.md#states-to-design-not-just-the-happy-path) — loading, empty, error,
   offline, long strings.
@@ -487,7 +493,9 @@ and a tested export path.
 **Depends on** — 5, 11.
 
 **Build.**
-- Supabase Auth: Google, and email magic link.
+- Supabase Auth: Google, and email magic link. **The session persists across reloads** — decided;
+  prefer an IndexedDB storage adapter over `localStorage`. The defence is the CSP and the XSS rules
+  from step 1, not the storage choice.
 - The repository layer in `src/data/` — the swappable seam
   ([`02`](../02-architecture.md#database-choice)). Nothing above it imports `supabase-js`.
 - The real `SyncTransport` behind step 5's interface: push the outbox, pull and merge, conflict-free

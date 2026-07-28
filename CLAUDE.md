@@ -44,10 +44,10 @@ symbol and nothing else. → [03](docs/03-data-model.md#money-representation)
 share text. Signed, LTR-isolated with LRI/PDI, tabular figures. A number rendered any other way
 will eventually render backwards in Hebrew. → [04](docs/04-ux-spec.md#rtl-and-hebrew)
 
-**RTL** — logical properties only: `margin-inline-start`, `padding-inline-end`,
-`inset-inline-start`, `border-start-start-radius`, `text-align: start`. Never `left`, `right`,
-`margin-left`, `padding-right` or their friends. Direction comes from the locale at runtime; no
-component may assume RTL is true. Stylelint enforces this.
+**RTL** — logical properties only. In Tailwind that's `ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`;
+in SCSS it's `margin-inline-start`, `inset-inline-start`, `text-align: start`. Never `ml-`, `mr-`,
+`left-`, `right-`, `margin-left`, `padding-right` or their friends. Direction comes from the locale
+at runtime; no component may assume RTL is true. Lint enforces this on both sides.
 → [02](docs/02-architecture.md#internationalisation)
 
 **Strings** — every user-visible string goes through `i18next` with named parameters. No literals
@@ -108,17 +108,18 @@ Two access rules everything else keys off:
 
 ## Code conventions
 
-**Styling — SCSS modules, always.** One `.module.scss` per component, class names in `camelCase`
-(`styles.playerRow`), consumed as `styles.x`. **Never inline styles** — the only exception is a
-value that genuinely cannot be known at build time (a computed transform, a live progress width),
-and even then the static half stays in the module. Note that the design prototype in
-`docs/design/` is entirely inline styles; that is one more reason it is a reference and not code
-to lift.
+**Styling — Tailwind first, SCSS module as the fallback.** Reach for a `.module.scss` when Tailwind
+can't express it (keyframes, complex selectors, `::-webkit-` bits) or when the component needs real
+CSS work anyway. One module per component, class names in `camelCase` (`styles.playerRow`).
+**Never inline styles** — the only exception is a value that genuinely cannot be known at build
+time (a computed transform, a live progress width), and even then the static half stays in the
+class. Note that the design prototype in `docs/design/` is entirely inline styles; that is one more
+reason it is a reference and not code to lift.
 
-**The design system is SCSS.** A reset file, and tokens as variables — the colours, type scale,
-radii and spacing in [`11`](docs/11-visual-design.md). Every module consumes those variables; a
-raw hex or a magic pixel value in a component module is a bug. Change a token in one place and the
-app follows.
+**The design tokens live in one place** — the Tailwind theme, with the same values mirrored as CSS
+custom properties for the SCSS side to consume. The colours, type scale, radii and spacing come
+from [`11`](docs/11-visual-design.md). A raw hex or a magic pixel value in a component is a bug:
+change a token once and the app follows.
 
 **Component layout.** A folder per component: the component, its module, its test, its index.
 Reusable primitives live together in a shared folder — buttons, cards, icons, inputs, tags — and
@@ -146,19 +147,32 @@ passing props through two levels. Game state is Zustand; server state is TanStac
 key is the sole exception, and only because it is public by design and carries no privileges
 without RLS. → [02](docs/02-architecture.md#security-model)
 
-**No tokens in `localStorage` or `sessionStorage`.** Both are readable by any script on the origin,
-so an XSS becomes a stolen session. This constrains how Supabase Auth is configured — see the open
-question in [`NOTES.md`](docs/build/NOTES.md) before building step 12.
+**The session persists across reloads** — decided, not a compromise to revisit. Signing the host
+out mid-game because they backgrounded the app is unacceptable, and the airtight alternative
+(httpOnly cookies) needs a server we deliberately don't have. Prefer IndexedDB over `localStorage`
+as the store; it is a marginal gain, not a defence.
 
-**Sanitise anything a user typed before it is rendered**, and validate it on the way in — player
-names, nicknames, game names, notes. React escapes by default, which handles most of it; the risk
-lives wherever we leave that path.
+**Which means XSS is *the* security problem in this app.** If a script runs on our origin it takes
+the session, so the whole budget goes here. Every rule below is load-bearing:
 
-**Never `dangerouslySetInnerHTML`.** For rich or interpolated translations use i18next's `<Trans>`
-with real components, not an HTML string.
-
-**Keep dependencies current** — patch promptly, and don't let a major version drift so far that
-upgrading becomes its own project.
+- **A strict Content-Security-Policy**, shipped as a `<meta http-equiv>` tag since GitHub Pages
+  can't set headers: `default-src 'self'`, `script-src 'self'` with no `unsafe-inline` and no
+  `unsafe-eval`, `connect-src` limited to self and the Supabase project, `object-src 'none'`,
+  `base-uri 'self'`. Self-hosted fonts and no CDN are what make this achievable — and it is a
+  second reason inline styles are banned.
+- **Never `dangerouslySetInnerHTML`.** It is the single largest XSS vector in React. For rich or
+  interpolated translations use i18next's `<Trans>` with real components, not an HTML string.
+- **No `eval`, no `new Function`**, and nothing dynamically imported from a user-controlled string.
+- **Validate on the way in, escape on the way out.** Player names, nicknames, game names and notes
+  get length caps and control characters stripped at the boundary; React's escaping handles the
+  render. The risk lives wherever we leave that path.
+- **Sanitise any user-supplied URL scheme** before it reaches an `href` — `javascript:` is still a
+  live vector.
+- **The share token lives in the URL fragment.** Never write it into the DOM, a log, or an
+  analytics call.
+- **Keep dependencies current** — a compromised transitive dependency is XSS by another route.
+  Patch promptly, audit in CI, and don't let a major version drift until upgrading is its own
+  project.
 
 ## Working style in this repo
 
