@@ -162,7 +162,12 @@ re-deriving what the last one decided.
 **Goal.** Build the component inventory once, in isolation, so the feature steps assemble screens
 instead of inventing a new button each time.
 
-**Depends on** — 1, 2.
+**Depends on** — 1, 2, and the design assets in [`docs/design/`](../design/README.md).
+
+**Input.** The chosen visual design, plus `docs/11-visual-design.md` derived from it. `docs/10` is
+the brief and leaves the palette and typeface open; the design closes them. **Read
+[`docs/design/README.md`](../design/README.md) first** — it carries the precedence rule that keeps
+a mockup from overriding a spec'd interaction, and the list of states the mockup won't cover.
 
 **Build.** The non-game-specific half of
 [`10 — Component inventory`](../10-design-brief.md#component-inventory):
@@ -186,6 +191,9 @@ in the bottom third, tap targets ≥ 48px with ≥ 8px between adjacent targets.
 - [ ] No component reads `dir` to decide its layout; direction comes only from logical properties.
 - [ ] Contrast checked in dark and light for every text/background pair used.
 - [ ] Every meaning carried by colour is also carried by a glyph or a sign.
+- [ ] Side-by-side against the design's screens: the tokens match, and every departure from the
+      mockup is a spec'd interaction rule, recorded in `NOTES.md` with the rule it serves.
+- [ ] States the mockup doesn't cover are derived in its visual language, not invented in another.
 
 **Out of scope.** Components that need game data to be meaningful (player row, buy counter, pot
 banner, transfer row) — those are built with their screens in steps 6–9.
@@ -645,6 +653,16 @@ time in `PROGRESS.md`:
 - [ ] No amount anywhere renders backwards.
 
 ---
+
+## Optional, once step 3 exists: sync the components back
+
+`/design-sync` pushes a **built component library** up to Claude Design so its design agent builds
+new screens out of the real components instead of generic ones. It runs in the opposite direction
+to what step 3 consumes, and it needs compiled components to exist — so it is meaningless before
+step 3 and useful after it, when designing a screen the spec doesn't already cover in detail.
+
+It also needs `DesignSync` to authorise, which requires an interactive terminal rather than a web
+session. Not a step, not a dependency; noted so nobody goes looking for it early.
 
 ## Deliberately not in this plan
 

@@ -45,15 +45,16 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** step 1 — toolchain and app skeleton.
+**Next up:** step 1 — toolchain and app skeleton. It has no blockers; step 3 is the first that
+needs the design assets, so they can arrive any time before then.
 
 ### Checkpoints that are not steps
 
-Two things gate progress but aren't build work. They are recorded here so they can't be quietly
-skipped:
+Things that gate progress but aren't build work, recorded here so they can't be quietly skipped:
 
 | Checkpoint | Gates | Status |
 |---|---|---|
+| **Design assets committed to `docs/design/`, `docs/11` written from them** | Step 3 | ⏳ waiting on the user |
 | **Play a real game on the step-7 build** | Step 8 | not reached |
 | **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached |
 

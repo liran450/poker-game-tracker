@@ -45,6 +45,35 @@ _(none yet)_
 
 ## Entries
 
+### The mockup decides appearance; the spec decides behaviour
+**Step 0 · 2026-07-28 · decision**
+
+The poker tracker design from Claude Design is the chosen visual direction, and its assets belong
+in `docs/design/` with `docs/11-visual-design.md` written from them. `docs/10-design-brief.md`
+stays as the brief that asked for it — it leaves the palette and typeface explicitly open, which is
+exactly the hole the design fills, and step 3 could not otherwise start from anything firmer than
+"deep amber or teal".
+
+The rule that matters, because a future session will otherwise faithfully reproduce a mockup and
+break a spec'd rule doing it: **the design is authoritative for colour, type, spacing, density,
+iconography and motion; `docs/01`–`docs/09` are authoritative for what a control does, where it
+lives, what it's called, and which states exist.** The predictable collisions — dropdowns vs bottom
+sheets, a floating action button vs the bottom action bar, colour-only win/loss, and any label that
+drifts from the glossary in `07` — are enumerated in `docs/design/README.md`. A mockup is also
+silent on ~40 of the states `10` requires; silence there is a gap to fill in the design's language,
+never a decision that the state isn't needed.
+
+### `/design-sync` runs the other way, and not from here
+**Step 0 · 2026-07-28 · environment**
+
+`/design-sync` uploads an existing compiled component library *to* Claude Design so its agent
+builds with real components. It does not pull a design *from* Claude Design into a repo, and this
+repo has no components to upload until step 3. Separately, `DesignSync` cannot authorise in a web
+session — it wants an interactive terminal — so design assets arrive either through Claude Design's
+"Send to Claude Code Web", which seeds them into the workspace, or by being exported and committed
+by hand. Worth re-reading after step 3, when syncing the real components up becomes genuinely
+useful.
+
 ### Sequencing: the offline app before the database
 **Step 0 · 2026-07-28 · decision**
 
