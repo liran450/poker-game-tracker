@@ -30,7 +30,7 @@ change — otherwise the history stops meaning anything.
 | 1 | Toolchain and app skeleton | in progress | | |
 | 2 | Money core | done | 2026-07-28 | _(this commit)_ |
 | 3 | Design system primitives | done | 2026-07-28 | _(this commit)_ |
-| 4 | Event model and fold | not started | | |
+| 4 | Event model and fold | done | 2026-07-28 | _(this commit)_ |
 | 5 | Local persistence and the outbox | not started | | |
 | 6 | Game setup, player list, add-players sheet | not started | | |
 | 7 | The buy-in counter and the game page | not started | | |
@@ -45,7 +45,7 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** step 4 — event model and fold.
+**Next up:** step 5 — local persistence and the outbox.
 
 ### Checkpoints that are not steps
 
@@ -232,3 +232,59 @@ i18n, all layout uses logical properties) but not visually verified in this sess
 **Watch out.** The `local/no-literal-jsx-text` lint rule flags `title` and `label` props in test
 files — test files need `/* eslint-disable local/no-literal-jsx-text */` at the top when passing
 literal strings to component props that users read. This is test data, not user-facing text.
+
+---
+
+### Step 4 — Event model and fold
+**Status:** done  **Sessions:** 1  **Commits:** 1
+
+**Built.** `src/core/events.ts` — the complete event-sourcing kernel:
+
+- `EVENT_TYPES` const array (31 entries, single source of truth for the Postgres enum in step 10).
+- `EventPayloadMap` interface mapping every event type to its payload shape.
+- `GameEvent` discriminated union built from a mapped type over `EventType`.
+- Zod v4 schemas: base envelope + per-type payload schemas + `z.discriminatedUnion` for runtime
+  boundary validation.
+- State types: `PlayerState`, `SharedCostState`, `JoinRequestState`, `ClaimState`,
+  `TransferState`, `GameState` (all readonly interfaces).
+- `fold()`: dedup by `clientEventId` → exclude undone pairs → deterministic sort
+  (`clientCreatedAt` + `clientEventId` tiebreaker) → reduce via `applyEvent`. The sort makes fold
+  order-independent (any permutation produces the same state).
+- `applyEvent()`: 31-case switch covering every event type. Commutative increments for buy-ins,
+  last-writer-wins for set events, map insert/update/delete for shared costs, join requests,
+  claims, and transfers. Log-only events (`note`, `player_invited`) are no-ops.
+- `createUndoEvent()`: links original ↔ inverse via `undoneBy`. Undo-of-undo does not resurrect
+  because the original's `undoneBy` remains set.
+- `generateClientEventId()` via `crypto.randomUUID()`.
+
+38 tests in `src/core/events.test.ts`:
+- `EVENT_TYPES`: 31 entries, no duplicates, snake_case.
+- `emptyState`: correct defaults, fold of empty list matches.
+- Fixture tests: player_added, buy_in_added/removed, cash_paid_set, chips_set, player_settled/
+  reopened, player_removed, player_renamed, nickname_set, game lifecycle (setup → active →
+  settling → finished → reopened), host_changed/host_taken_over, viewer_added/removed,
+  shared_cost lifecycle, join request lifecycle, claim lifecycle, unaccounted_set, transfer_edited,
+  note/player_invited are log-only.
+- **Idempotent application** (exit criterion): duplicate events produce the same state as single
+  copies. One fixture test + one property test with fast-check over random game scenarios.
+- **Commutativity** (exit criterion): fold of any permutation converges to the same state. One
+  fixture test with 10 random shuffles + one property test with fast-check.
+- **Undo** (exit criterion): undoing an event restores prior state; undoing the undo does NOT
+  resurrect; undoing player_added removes the player; undoing game_started restores setup.
+- Zod schema validation: well-formed events pass, unknown type fails, missing envelope field fails.
+- `generateClientEventId`: UUID format, uniqueness.
+- Full game scenario: realistic complete game lifecycle produces expected state.
+
+Total test count: 185. `npm run verify` is green.
+
+**Deviated.** The spec says "30 event types" (`03-data-model.md`); the actual list has 31 because
+`note` was counted separately. Not a real divergence — the list is the single source of truth and
+all 31 are in the spec's table.
+
+**Left undone.** Nothing. All four exit criteria are met.
+
+**Watch out.** The Zod `discriminatedUnion` uses a `as unknown as [...]` type assertion to satisfy
+zod v4's internal type constraints. This is a known zod v4 ergonomic gap and works correctly at
+runtime. The `InternalState` → `GameState` cast at the fold boundary was flagged as unnecessary by
+eslint and removed — the types are structurally compatible because `InternalState` uses mutable
+`Map`/`Set` which are assignable to `ReadonlyMap`/`ReadonlySet`.

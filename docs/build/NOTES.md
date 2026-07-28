@@ -256,3 +256,22 @@ wrong will build the wrong thing several steps deep:
 - **Into a game:** either the host's share link, or — if you're already in the group — you ask and
   the host approves. Both paths end in host approval. Adding someone to a game never adds them to
   the group.
+
+---
+
+### Zod v4 discriminatedUnion type assertion
+**Step 4 · 2026-07-28 · trap**
+
+`z.discriminatedUnion` in zod v4 expects a tuple type `[ZodObject, ZodObject, ...ZodObject[]]`
+built from its internal `$ZodLooseShape` type. When the variants are built dynamically via
+`.map()`, TypeScript cannot prove the tuple shape, so a `as unknown as [...]` cast is needed. This
+is purely a type-level issue — the runtime works correctly. The cast references
+`z.core.$ZodLooseShape`, which is a stable public API surface in zod 4.x.
+
+### Event count: spec says 30, reality is 31
+**Step 4 · 2026-07-28 · decision**
+
+`03-data-model.md` says "~30 event types" but the actual table lists 31 distinct types (the `note`
+event is present in the table but may have been excluded from the count). The `EVENT_TYPES` array
+is the single source of truth; the spec's "~30" is treated as approximate. All 31 types are
+implemented and tested.
