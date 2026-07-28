@@ -11,7 +11,7 @@ statistics) is amplification. So the first milestone deliberately ships without 
 ### M0 — Foundations
 *Nothing user-visible. Do not skip; every item here is expensive to retrofit.*
 
-- Vite + React + TS + Tailwind with logical properties only, direction derived from the locale
+- Vite + React + TS + SCSS modules with logical properties only, direction derived from the locale
 - **i18n from day one** — `i18next`, Hebrew bundle, a lint rule banning literal user-facing strings
   ([02](02-architecture.md#internationalisation))
 - `<Money>` component and the minor-unit integer arithmetic module, with tests

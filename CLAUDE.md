@@ -44,9 +44,11 @@ symbol and nothing else. → [03](docs/03-data-model.md#money-representation)
 share text. Signed, LTR-isolated with LRI/PDI, tabular figures. A number rendered any other way
 will eventually render backwards in Hebrew. → [04](docs/04-ux-spec.md#rtl-and-hebrew)
 
-**RTL** — logical properties only (`ms-`, `me-`, `ps-`, `pe-`, `start`, `end`). Never `left` or
-`right`. Direction comes from the locale at runtime; no component may assume RTL is true. Lint
-enforces this. → [02](docs/02-architecture.md#internationalisation)
+**RTL** — logical properties only: `margin-inline-start`, `padding-inline-end`,
+`inset-inline-start`, `border-start-start-radius`, `text-align: start`. Never `left`, `right`,
+`margin-left`, `padding-right` or their friends. Direction comes from the locale at runtime; no
+component may assume RTL is true. Stylelint enforces this.
+→ [02](docs/02-architecture.md#internationalisation)
 
 **Strings** — every user-visible string goes through `i18next` with named parameters. No literals
 in components, no string concatenation to build a sentence. Lint enforces this. Share-text
@@ -103,6 +105,60 @@ Two access rules everything else keys off:
   link, no other path.
 - **Into a game:** the host's share link, or — if you're in the group — you ask and the host
   approves. Both end in host approval, and joining a game never joins you to the group.
+
+## Code conventions
+
+**Styling — SCSS modules, always.** One `.module.scss` per component, class names in `camelCase`
+(`styles.playerRow`), consumed as `styles.x`. **Never inline styles** — the only exception is a
+value that genuinely cannot be known at build time (a computed transform, a live progress width),
+and even then the static half stays in the module. Note that the design prototype in
+`docs/design/` is entirely inline styles; that is one more reason it is a reference and not code
+to lift.
+
+**The design system is SCSS.** A reset file, and tokens as variables — the colours, type scale,
+radii and spacing in [`11`](docs/11-visual-design.md). Every module consumes those variables; a
+raw hex or a magic pixel value in a component module is a bug. Change a token in one place and the
+app follows.
+
+**Component layout.** A folder per component: the component, its module, its test, its index.
+Reusable primitives live together in a shared folder — buttons, cards, icons, inputs, tags — and
+anything used twice belongs there rather than being copied. DRY applies to styles as much as to
+code.
+
+**Components stay small.** When one grows past comfortable reading, split it, and lift the
+business logic out into a hook or a `core/` function. Logic that can live in `core/` as a pure
+function should — that is where it can be tested properly.
+
+**React 19, functional components only.** No classes. **Do not reach for `useMemo`, `useCallback`
+or `memo` by default** — React 19 handles this differently, and reflexive memoisation is noise that
+hides the cases where it is genuinely needed. Add it when a measurement says to, and say why.
+
+**Context is for truly global state only** — the session, the locale, the theme. Never for state
+that updates frequently (anything per-tap, per-tick, per-keystroke) and never as a way to avoid
+passing props through two levels. Game state is Zustand; server state is TanStack Query.
+→ [02](docs/02-architecture.md#frontend-stack)
+
+**Single quotes** for strings, in TypeScript and SCSS alike.
+
+## Security
+
+**No secrets in the source, ever** — no API keys, no service-role key, nothing. The Supabase anon
+key is the sole exception, and only because it is public by design and carries no privileges
+without RLS. → [02](docs/02-architecture.md#security-model)
+
+**No tokens in `localStorage` or `sessionStorage`.** Both are readable by any script on the origin,
+so an XSS becomes a stolen session. This constrains how Supabase Auth is configured — see the open
+question in [`NOTES.md`](docs/build/NOTES.md) before building step 12.
+
+**Sanitise anything a user typed before it is rendered**, and validate it on the way in — player
+names, nicknames, game names, notes. React escapes by default, which handles most of it; the risk
+lives wherever we leave that path.
+
+**Never `dangerouslySetInnerHTML`.** For rich or interpolated translations use i18next's `<Trans>`
+with real components, not an HTML string.
+
+**Keep dependencies current** — patch promptly, and don't let a major version drift so far that
+upgrading becomes its own project.
 
 ## Working style in this repo
 

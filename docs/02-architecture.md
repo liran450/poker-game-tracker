@@ -154,7 +154,7 @@ Fall back to polling every 15s if the WebSocket fails (some restrictive networks
 | Concern | Choice | Why |
 |---|---|---|
 | Framework | React + TypeScript + Vite | Ubiquitous, fast builds, good PWA plugins |
-| Styling | Tailwind CSS with **logical properties** (`ms-`, `me-`, `ps-`, `pe-`) | RTL for free; never use `left`/`right` |
+| Styling | **SCSS modules**, one per component, with **logical properties** (`margin-inline-start`, `inset-inline-end`, `text-align: start`) | Scoped by default, no class collisions, real variables for the design tokens; never `left`/`right`, never inline styles |
 | State | Zustand for local game state + TanStack Query for server sync | Small, no boilerplate |
 | Local DB | Dexie (IndexedDB) | Outbox + cached games |
 | PWA | `vite-plugin-pwa` (Workbox) | Service worker, offline shell, install prompt |
@@ -177,8 +177,8 @@ but the few things it does change are expensive to retrofit:
   pluralisation (Hebrew has its own rules), interpolation, and lazy-loaded language bundles for
   free, and costs a few kilobytes.
 - **Direction is derived from the locale.** `<html dir>` and `lang` are set at runtime; no
-  component may assume RTL, and layout uses logical properties exclusively
-  ([04](04-ux-spec.md#rtl-and-hebrew)).
+  component may assume RTL, and layout uses logical properties exclusively — enforced by a
+  stylelint rule over the SCSS modules ([04](04-ux-spec.md#rtl-and-hebrew)).
 - **No string concatenation.** Every user-visible sentence is a template with named parameters, so
   word order can differ per language.
 - **Currency and number formatting via `Intl`**, keyed on the active locale and the game's currency

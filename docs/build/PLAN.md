@@ -93,8 +93,11 @@ re-deriving what the last one decided.
 **Build.**
 - Vite + React + TypeScript, `strict` on, path aliases, the folder layout from
   [`02 — Repository layout`](../02-architecture.md#repository-layout) created empty.
-- Tailwind configured with **logical properties only**; an ESLint rule that fails the build on
-  `left-`/`right-`/`ml-`/`mr-`/`pl-`/`pr-` and on raw `left:`/`right:` in any stylesheet.
+- **SCSS modules** wired in Vite with `camelCase` class-name conversion; a reset file; the design
+  tokens from [`11`](../11-visual-design.md) as SCSS variables in one place. A **stylelint** rule
+  that fails the build on physical properties (`left`, `right`, `margin-left`, `padding-right`,
+  `border-top-left-radius`…) in favour of their logical equivalents, and an ESLint rule banning
+  the `style` prop.
 - `i18next` + `react-i18next`, a single `he.json`, `<html lang dir>` set at runtime **from the
   locale**, never hardcoded. An ESLint rule banning literal user-facing strings in components.
 - A **pseudo-locale** (`en-XA`: LTR, ~40% longer) selectable in dev. This exists from day one so
@@ -118,8 +121,11 @@ re-deriving what the last one decided.
 - [ ] The deployed Pages URL loads, installs to a home screen, and shows the offline page with the
       network off.
 - [ ] The document direction flips to LTR when the pseudo-locale is selected, with no code change.
-- [ ] The lint rules actually fail: a deliberate `ml-2` and a deliberate literal string each break
-      the build. Verify this by writing them, watching it fail, and removing them.
+- [ ] The lint rules actually fail: a deliberate `margin-left`, a deliberate `style={{…}}` prop and
+      a deliberate literal string each break the build. Verify by writing them, watching it fail,
+      and removing them.
+- [ ] No component contains a raw hex, a magic pixel value, or an inline style. Every value comes
+      from the token variables.
 
 **Out of scope.** Any game concept. Any Supabase. Any real screen.
 
@@ -180,6 +186,9 @@ Plus the layout shell: sticky header for persistent context, scrolling content, 
 bar — not a floating action button** ([`04`](../04-ux-spec.md#action-bar)), everything interactive
 in the bottom third, tap targets ≥ 48px with ≥ 8px between adjacent targets.
 
+- The **shared primitives folder** these are built from — buttons, cards, icons, inputs, tags —
+  each in its own folder with its own SCSS module. Anything a feature step would otherwise write
+  twice belongs here.
 - A dev-only gallery route rendering every component in every state, including the states from
   [`10`](../10-design-brief.md#states-to-design-not-just-the-happy-path) — loading, empty, error,
   offline, long strings.
