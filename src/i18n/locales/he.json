@@ -10,6 +10,15 @@
     "empty": "עוד לא שיחקת. נתחיל?",
     "startFirstGame": "התחל משחק ראשון"
   },
+  "money": {
+    "chipValue": "ז'יטון = {{value}}",
+    "buyAmount": "סכום קנייה",
+    "chipsPerBuy": "ז'יטונים לקנייה",
+    "pot": "קופה",
+    "balanced": "מאוזן · קניות {{buyTotal}} = ז'יטונים {{chipTotal}}",
+    "discrepancy": "פער של {{amount}} · קניות {{buyTotal}} · ז'יטונים {{chipTotal}}",
+    "total": "סה\"כ"
+  },
   "offline": {
     "title": "אין חיבור",
     "body": "המשחק ממשיך לעבוד. השינויים יסתנכרנו כשהחיבור יחזור."

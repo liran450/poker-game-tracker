@@ -28,7 +28,7 @@ change — otherwise the history stops meaning anything.
 |---|---|---|---|---|
 | 0 | Plan and memory scaffolding | done | 2026-07-28 | _(this commit)_ |
 | 1 | Toolchain and app skeleton | in progress | | |
-| 2 | Money core | not started | | |
+| 2 | Money core | done | 2026-07-28 | _(this commit)_ |
 | 3 | Design system primitives | not started | | |
 | 4 | Event model and fold | not started | | |
 | 5 | Local persistence and the outbox | not started | | |
@@ -45,8 +45,7 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** finish step 1 — everything is built and `npm run verify` is green; two exit criteria
-need a real GitHub Pages deployment, which needs the repository owner (see the step 1 entry).
+**Next up:** step 3 — design system primitives.
 
 ### Checkpoints that are not steps
 
@@ -140,3 +139,42 @@ Everything else is checked. The step flips to `done` once those two are confirme
 rename breaks every asset URL. And `connect-src` in the CSP is `'self'` only until
 `VITE_SUPABASE_URL` is set — step 12 must set it or every Supabase call is blocked, silently, in
 production only.
+
+---
+
+### Step 2 — Money core
+**Status:** done  **Sessions:** 1  **Commits:** 1
+
+**Built.** `src/core/money.ts` — branded `Minor` type (integer in the currency's minor unit),
+arithmetic (add, subtract, negate, sum, compare, abs, isZero), `splitWithResidue` with banker's
+rounding and exact-sum invariant, chip arithmetic (chipValue, owed, chipsToMoney, moneyToChips,
+net), formatting via `Intl.NumberFormat` keyed on locale + currency (never a hardcoded symbol),
+`formatMoneyPlainText` with LRI/PDI bidi isolation for share text, `formatChipValue`, `toMajor`,
+`fromMajor`, `currencyDecimals`.
+
+`src/components/Money/Money.tsx` — the single `<Money>` component: `dir="ltr"` for bidi isolation,
+tabular figures, size variants (sm/md/lg/xl via design token text sizes), positive/negative colour
+classes when `showSign` is true (always paired with an explicit +/−, never colour alone). U+2212
+minus throughout.
+
+46 unit tests in `money.test.ts` covering: minor-unit arithmetic, chips ⇄ money both ways, the
+residue rule, per-currency formatting for ₪ and $, sign rendering, U+2212 minus, trailing-zero
+suppression, chip value display, `currencyDecimals` for ILS/USD/JPY, `fromMajor` conversions, and
+a ban on "agorot"/"cents"/"minor units" in any formatted output. Two property-based tests with
+fast-check: `splitWithResidue` sums to the original for arbitrary (amount, n) pairs, and the
+chipsToMoney ∘ moneyToChips round-trip is within 1 minor unit.
+
+9 component tests in `Money.test.tsx` covering: `dir="ltr"` attribute, tabular-nums class, sign
+rendering, U+2212 minus, colour classes gated on `showSign`, size variants, custom className, and
+the critical RTL test — a negative amount embedded in a Hebrew sentence has the minus leading
+inside an LTR-isolated span.
+
+Hebrew i18n keys added under `money.*` for chip value display, pot balance/discrepancy messages.
+
+**Deviated.** Nothing. The implementation matches PLAN.md exactly.
+
+**Left undone.** Nothing. All exit criteria are met and `npm run verify` is green.
+
+**Watch out.** `formatMoney` returns a plain string without bidi marks — the `<Money>` component
+adds isolation via `dir="ltr"`, and `formatMoneyPlainText` adds LRI/PDI. Callers must use one or
+the other; raw `formatMoney` output in an RTL context will render backwards.
