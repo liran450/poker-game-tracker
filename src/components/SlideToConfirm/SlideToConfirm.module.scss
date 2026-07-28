@@ -1,0 +1,60 @@
+.track {
+  position: relative;
+  block-size: 56px;
+  border-radius: var(--radius-xl);
+  background-color: var(--color-surface-raised);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: calc(var(--slide-progress, 0) * 100%);
+  background-color: var(--color-negative);
+  opacity: 0.2;
+  transition: inline-size 50ms linear;
+}
+
+.thumb {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-start: calc(4px + var(--slide-progress, 0) * (100% - 52px - 4px));
+  display: grid;
+  place-items: center;
+  inline-size: 48px;
+  block-size: 48px;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-negative);
+  color: var(--color-fg);
+  font-weight: 700;
+  font-size: var(--text-title);
+  cursor: grab;
+  transition: inset-inline-start 50ms linear;
+}
+
+.label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: var(--text-body);
+  color: var(--color-fg-muted);
+  pointer-events: none;
+}
+
+.confirmed .fill {
+  inline-size: 100%;
+  opacity: 0.3;
+}
+
+.confirmed .thumb {
+  inset-inline-start: calc(100% - 52px);
+}
+
+.confirmed .label {
+  color: var(--color-fg);
+}

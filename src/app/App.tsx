@@ -1,8 +1,13 @@
+import { lazy, Suspense } from 'react';
 import { HashRouter, Route, Routes } from 'react-router';
 
 import { HomePage } from './routes/HomePage';
 import { NotFoundPage } from './routes/NotFoundPage';
 import { DevBar } from './DevBar';
+
+const GalleryPage = lazy(() =>
+  import('./routes/GalleryPage').then((m) => ({ default: m.GalleryPage })),
+);
 
 /**
  * Hash routing, not history routing: GitHub Pages has no SPA fallback, and the
@@ -15,6 +20,16 @@ export function App() {
     <HashRouter>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        {import.meta.env.DEV && (
+          <Route
+            path="/gallery"
+            element={
+              <Suspense>
+                <GalleryPage />
+              </Suspense>
+            }
+          />
+        )}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       {import.meta.env.DEV && <DevBar />}

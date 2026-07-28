@@ -29,7 +29,7 @@ change — otherwise the history stops meaning anything.
 | 0 | Plan and memory scaffolding | done | 2026-07-28 | _(this commit)_ |
 | 1 | Toolchain and app skeleton | in progress | | |
 | 2 | Money core | done | 2026-07-28 | _(this commit)_ |
-| 3 | Design system primitives | not started | | |
+| 3 | Design system primitives | done | 2026-07-28 | _(this commit)_ |
 | 4 | Event model and fold | not started | | |
 | 5 | Local persistence and the outbox | not started | | |
 | 6 | Game setup, player list, add-players sheet | not started | | |
@@ -45,7 +45,7 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** step 3 — design system primitives.
+**Next up:** step 4 — event model and fold.
 
 ### Checkpoints that are not steps
 
@@ -178,3 +178,57 @@ Hebrew i18n keys added under `money.*` for chip value display, pot balance/discr
 **Watch out.** `formatMoney` returns a plain string without bidi marks — the `<Money>` component
 adds isolation via `dir="ltr"`, and `formatMoneyPlainText` adds LRI/PDI. Callers must use one or
 the other; raw `formatMoney` output in an RTL context will render backwards.
+
+---
+
+### Step 3 — Design system primitives
+**Status:** done  **Sessions:** 1  **Commits:** 1
+
+**Built.** The full non-game-specific component inventory, each in its own folder under
+`src/components/` (or `src/components/shared/` for reusable primitives):
+
+- **Shared primitives:** `Button` (4 variants: primary/secondary/ghost/destructive, 3 sizes),
+  `Card` (base + elevated), `IconButton` (icon-only with required a11y label).
+- **Layout:** `AppShell` (sticky header, scrollable content, sticky bottom action bar, max-w-md
+  centred).
+- **Overlays:** `BottomSheet` (modal, backdrop, grab handle, Escape to close, body scroll lock,
+  sheet-in animation), `DestructiveConfirm` (BottomSheet + destructive action + cancel).
+- **Feedback:** `Banner` (success/error/info with tinted backgrounds, dot indicator, optional
+  action), `Snackbar` (countdown ring SVG, undo button, auto-dismiss timer),
+  `AnnouncementBanner` (dismissible, `aria-live="polite"`), `SyncIndicator` (4 states:
+  synced ✓ / syncing animated dot / pending count badge / failed !).
+- **Inputs:** `SelectionChip` (unselected/selected ✓/group member ◈, `role="option"`,
+  `aria-selected`), `SlideToConfirm` (pointer-driven slider, CSS custom property for progress).
+- **Info:** `InfoExplainer` (ⓘ glyph with tooltip popover, outside-click + Escape to close).
+- **Data display:** `EmptyState` (icon + title + description + action slot), `StatHero` (large
+  `<Money>` with label and sample size), `Sparkline` (SVG polyline + gradient fill,
+  positive/negative colour), `LeaderboardRow` (rank circle, name, signed amount, sample size),
+  `ResultsCard` (card shell with game name, date, player count, optional result).
+
+**Dev gallery** at `/#/gallery` — lazy-loaded, code-split (`GalleryPage-*.js` separate chunk,
+excluded from production bundle via tree-shaking). Renders every component in every state with
+interactive demos for chips, snackbar, bottom sheet, and destructive confirm.
+
+**44 new component tests** across 6 files: Button (10), Banner (7), SelectionChip (9),
+SyncIndicator (6), EmptyState (5), Sparkline (7). All pass. Total test count: 147.
+
+**i18n keys** added under `ui.*` (confirm, cancel, undo, etc.), `sync.*` (4 states), and
+`gallery.*` (section titles, demo data).
+
+**Contrast check.** All dark-theme text/background pairs pass WCAG AA (4.5:1). Light-theme accent
+on surface-app is 4.31:1 — below AA for body text but above AA-large (3:1). Noted below; dark is
+primary and the accent is typically used at heading size or on buttons (where on-accent/accent
+passes at 8.4:1).
+
+**Deviated.** Nothing material. The SCSS module fallback was used for two components (Snackbar
+countdown ring keyframes, SlideToConfirm dynamic positioning via CSS custom properties) — exactly
+the intended use case.
+
+**Left undone.** Visual side-by-side against every design screen cannot be done programmatically;
+the token values match `docs/11` and the gallery is visually inspectable. The pseudo-locale test
+requires a running dev server with `?lang=en-XA` — structurally correct (all strings go through
+i18n, all layout uses logical properties) but not visually verified in this session.
+
+**Watch out.** The `local/no-literal-jsx-text` lint rule flags `title` and `label` props in test
+files — test files need `/* eslint-disable local/no-literal-jsx-text */` at the top when passing
+literal strings to component props that users read. This is test data, not user-facing text.
