@@ -1,0 +1,6 @@
+Copyright (c) 2026 [Liran Barzilay]. All rights reserved.
+
+This software and its documentation are proprietary and confidential. 
+No part of this software may be copied, reproduced, distributed, 
+modified, or used to create derivative works without the express 
+written permission of the copyright holder.
