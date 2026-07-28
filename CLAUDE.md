@@ -187,8 +187,19 @@ the session, so the whole budget goes here. Every rule below is load-bearing:
 
 ## Commands
 
-_(Filled in by step 1; nothing to run yet.)_
-
 | Command | What it does |
 |---|---|
-| `npm run verify` | typecheck + lint + unit tests + build — must be green before any step is `done` |
+| `npm run verify` | typecheck → lint → lint:css → test → audit:prod → build. **Must be green before any step is `done`** |
+| `npm run dev` | Vite dev server. No CSP in dev — HMR needs inline scripts, so the policy is build-only |
+| `npm run e2e` | Playwright against a real production build, including the CSP assertions |
+| `npm test` / `npm run test:watch` | Vitest |
+| `npm run lint` / `npm run lint:css` | ESLint (incl. the local rules) / stylelint |
+| `npm run audit:prod` | Production-tree advisories only — the dev tree has unfixable build-time ones ([NOTES](docs/build/NOTES.md)) |
+| `ICON_OUT=public/icons python3 scripts/make-icons.py` | Regenerate the PWA icons from the tokens |
+
+**The pseudo-locale is dev-only** and reached explicitly: `npm run dev`, then `?lang=en-XA`, or the
+DevBar toggle in the corner. It never ships and can never be auto-detected — that was a real bug,
+see `NOTES.md`.
+
+**Adding a lint rule?** It is not enforced until a test in `src/test/lint-rules.test.ts` proves it
+fires. Both local rules shipped with holes that only surfaced under test.

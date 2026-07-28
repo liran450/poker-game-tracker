@@ -27,7 +27,7 @@ change — otherwise the history stops meaning anything.
 | # | Step | Status | Finished | Commit |
 |---|---|---|---|---|
 | 0 | Plan and memory scaffolding | done | 2026-07-28 | _(this commit)_ |
-| 1 | Toolchain and app skeleton | not started | | |
+| 1 | Toolchain and app skeleton | in progress | | |
 | 2 | Money core | not started | | |
 | 3 | Design system primitives | not started | | |
 | 4 | Event model and fold | not started | | |
@@ -45,8 +45,8 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** step 1 — toolchain and app skeleton. No blockers, and none ahead: the design assets
-landed before step 1 started, so step 3's input is already in place.
+**Next up:** finish step 1 — everything is built and `npm run verify` is green; two exit criteria
+need a real GitHub Pages deployment, which needs the repository owner (see the step 1 entry).
 
 ### Checkpoints that are not steps
 
@@ -94,3 +94,49 @@ build the napkin replacement first — is preserved and in fact strengthened.
 **Watch out.** `CLAUDE.md` is deliberately lean. Each step is expected to append to it the
 commands and conventions that have become real, so it stays a description of the repo rather than
 a wish list.
+
+---
+
+### Step 1 — Toolchain and app skeleton
+**Status:** in progress — code complete, blocked on a deployment only the owner can make
+**Sessions:** 1  **Commits:** 1
+
+**Built.** Vite 8 + React 19 + TypeScript 5.9 (strict, `noUncheckedIndexedAccess`,
+`exactOptionalPropertyTypes`), path aliases, and the `docs/02` folder layout. Tailwind v4 with the
+`docs/11` tokens as its `@theme`, SCSS modules wired with `camelCaseOnly`, a reset, and a light
+theme that is structurally present but provisional. i18next with the Hebrew bundle, runtime
+`lang`/`dir` from the locale, and the dev-only pseudo-locale. Self-hosted Rubik (Hebrew + Latin
+subsets, ~5 KB each). Hash router. `vite-plugin-pwa` with manifest, service worker, generated icons
+and a standalone offline page. Vitest + Testing Library, Playwright against the pre-installed
+Chromium. A strict CSP injected at build. `npm run verify` and the Pages deploy workflow.
+
+**Four lint guards, each proven by test** (`src/test/lint-rules.test.ts`, 34 assertions):
+physical Tailwind utilities, physical CSS properties in SCSS, the `style` prop and
+`dangerouslySetInnerHTML`, and literal user-facing strings. The i18n and RTL guards are **local
+rules**, not off-the-shelf ones — both off-the-shelf options had holes big enough to make the rule
+decorative. See `NOTES.md`.
+
+**Deviated.**
+- `react-router-dom` → `react-router@8`. The `-dom` package is unmaintained and unpatched; details
+  in `NOTES.md`.
+- The i18next language detector was **removed**, not configured. It booted English devices into the
+  pseudo-locale. Locale resolution is explicit until a second real language exists.
+- `PLAN.md` said "an ESLint rule banning literal user-facing strings"; it took two rules, one of
+  them written here, because the plugin ignores arrow components.
+- Sourcemaps are off in production: the repo is public, so they reveal nothing new and cost ~1.4 MB
+  per deploy.
+
+**Left undone — needs the repository owner.** Two exit criteria cannot be checked from here:
+1. *The deployed Pages URL loads, installs to a home screen, and shows the offline page with the
+   network off.* Needs **Pages enabled with source = GitHub Actions** on `main`, and a merge to
+   `main` to trigger `deploy.yml`.
+2. *The CSP is active on the deployed build.* Verified against the local production build via
+   `vite preview` — the e2e test asserts zero CSP violations — but not yet against Pages, where the
+   `/poker-game-tracker/` base path is live rather than simulated.
+
+Everything else is checked. The step flips to `done` once those two are confirmed.
+
+**Watch out.** The base path is hardcoded to `/poker-game-tracker/` in `vite.config.ts`; a repo
+rename breaks every asset URL. And `connect-src` in the CSP is `'self'` only until
+`VITE_SUPABASE_URL` is set — step 12 must set it or every Supabase call is blocked, silently, in
+production only.

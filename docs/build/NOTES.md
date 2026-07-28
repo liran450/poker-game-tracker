@@ -45,6 +45,85 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### The pseudo-locale hijacked every English device
+**Step 1 · 2026-07-28 · trap**
+
+Registering `en-XA` in `supportedLngs` alongside `i18next-browser-languagedetector` meant that a
+phone reporting `en-US` booted **into the pseudo-locale** — pseudo-translated Hebrew, in LTR, as the
+real UI. i18next's `getBestMatchFromCodes` falls back from `en-US` to `en`, finds no exact match,
+and then accepts any supported tag sharing the language part. `en-XA` shares it.
+
+The e2e smoke test caught it on the first run, which is the argument for having written it.
+
+Fix: **the language detector is gone**. With exactly one shipping language there is nothing to
+detect, so the locale is resolved explicitly — `?lang=` or a value this app itself stored, dev-only
+— and the pseudo bundle is excluded from production builds entirely (verified: `en-XA` does not
+appear in `dist/`). Real detection comes back when a second real language ships, and whoever adds it
+must not re-introduce this: **never put a pseudo or partial locale in `supportedLngs` next to a
+detector.**
+
+### eslint-plugin-i18next silently ignores arrow components
+**Step 1 · 2026-07-28 · trap**
+
+`i18next/no-literal-string` reports JSX returned from a function *declaration* and says nothing
+about `export const Page = () => <p>שלום</p>`. Half of any React codebase is arrow components, so
+the rule would have looked enforced while enforcing nothing — the worst failure mode for a guard.
+
+Fix: a local rule, `local/no-literal-jsx-text`, covering every component shape plus the attributes
+users actually read (`alt`, `title`, `placeholder`, `aria-label`…), with `<Trans>` children exempt.
+The plugin stays as a second net. `src/test/lint-rules.test.ts` asserts the arrow case specifically.
+
+**The general lesson, worth applying to every rule added later:** a lint rule is not enforced until
+a test proves it fires. Both local rules had holes that only surfaced under test — the Tailwind rule
+also missed `clsx('flex', cond && 'pr-3')`, because a `CallExpression > Literal` selector only sees
+direct children and the class was nested inside a `LogicalExpression`.
+
+### react-router: use `react-router`, not `react-router-dom`
+**Step 1 · 2026-07-28 · environment**
+
+`react-router-dom` tops out at 7.18.1 and every 7.x from 7.12.0 carries an unpatched high advisory
+(RSC-mode CSRF). The patched line is `react-router` **8.3.0** — v8 folded the `-dom` package in and
+stopped publishing it.
+
+Note the trap: `npm audit fix` proposes downgrading to 7.11.0, which made things **worse** — it
+re-opened several advisories fixed in 7.18.0. Always read the version ranges rather than trusting
+the suggested fix. Result: `react-router@8` and a clean production audit.
+
+### TypeScript is pinned to 5.9.3 on purpose
+**Step 1 · 2026-07-28 · environment**
+
+TypeScript's latest is 7.0.2, but `typescript-eslint@8.65.0` declares `typescript >=4.8.4 <6.1.0`,
+so TS 6 and 7 have no type-aware linting yet. Lint enforcement is load-bearing here, so TypeScript
+is pinned exactly (`"typescript": "5.9.3"`, no caret) rather than floating. Revisit when
+typescript-eslint ships TS 7 support; do not bump it casually.
+
+### CI audits production dependencies, not the dev tree
+**Step 1 · 2026-07-28 · decision**
+
+`vite-plugin-pwa@1.3.0` (latest) pulls `workbox-build`, which drags in 8 packages with high
+advisories — `ejs`, `jake`, `brace-expansion`, `minimatch` and friends. There is no upgrade: the
+plugin is already current. All 8 are **build-time only** and absent from the production tree
+(verified with `npm ls --omit=dev`).
+
+So `npm run verify` gates on `npm audit --omit=dev --audit-level=high`, which must stay clean. Dev
+advisories are visible in a plain `npm audit` but do not fail the build — a gate nobody can pass
+gets disabled, and then nothing is gated. Re-check when vite-plugin-pwa updates workbox.
+
+### Smaller environment facts
+**Step 1 · 2026-07-28 · environment**
+
+- **stylelint autofix strips `-webkit-text-size-adjust`**, which iOS Safari — a primary target —
+  still needs. `property-no-vendor-prefix` is off for that reason; don't turn it back on.
+- **Playwright**: the sandbox ships Chromium build 1194 while `@playwright/test@1.62` wants 1234,
+  and downloading is not an option here. `playwright.config.ts` points at `/opt/pw-browsers/chromium`
+  when it exists and otherwise lets Playwright resolve its own, so CI is unaffected.
+- **Tailwind v4's `@theme` gives both halves for free**: each token becomes a utility *and* a CSS
+  custom property, which is exactly the "one definition, two consumers" that `CLAUDE.md` asks for.
+  No separate mirror file is needed.
+- **The CSP is injected at build only.** Vite's dev server needs inline scripts for HMR, so a policy
+  loose enough for dev would be a policy nobody tested. Dev has no CSP; the built output has the
+  strict one, and the e2e test asserts the real build raises no violations.
+
 ### Session persists across reloads; XSS gets the whole security budget
 **Step 0 · 2026-07-28 · decision**
 
