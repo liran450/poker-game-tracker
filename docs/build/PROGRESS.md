@@ -34,7 +34,7 @@ change — otherwise the history stops meaning anything.
 | 5 | Local persistence and the outbox | done | 2026-07-29 | _(this commit)_ |
 | 6 | Game setup, player list, add-players sheet | done | 2026-07-29 | _(this commit)_ |
 | 7 | The buy-in counter and the game page | in progress — code complete, blocked on a real game only the owner can play | | |
-| 8 | Settlement core | not started | | |
+| 8 | Settlement core | done | 2026-07-29 | _(this commit)_ |
 | 9 | End game, edit mode, share text | not started | | |
 | 10 | Database foundation and RLS | not started | | |
 | 11 | Snapshots, statistics source, retention | not started | | |
@@ -45,7 +45,11 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** finish step 7 — play a real game on this build, then flip it to `done` and start step 8 🎯.
+**Next up:** step 7 still needs a real game played on it before it can flip to `done` (needs the
+repository owner — see its entry). Step 8 (settlement core) doesn't depend on that playtest, only
+on step 7's code, so it was built in the meantime. **Start step 9** once step 7's playtest lands;
+until then, step 9's own exit criteria ("a full game runs start to finish... on a phone") are
+blocked on the same playtest anyway 🎯.
 
 ### Checkpoints that are not steps
 
@@ -586,3 +590,86 @@ screenshotted per new sheet — see Left undone.
   keys and behaviour; the handful of modules whose actual *wording* matters
   (`buyInText.ts`, `auditLogText.ts`) import the real singleton from `@i18n/index` instead and
   assert on real Hebrew sentences.
+
+---
+
+### Step 8 — Settlement core
+**Status:** done  **Sessions:** 1  **Commits:** 1
+
+**Built.** `src/core/settlement.ts`, zero imports beyond `./money`, covering all three exit-facing
+pieces of `05-settlement.md`:
+
+- **The money model.** `computeBalances()` — per player: `owedMinor`, `cashOutMinor`, `netMinor`
+  (statistics), `sharedMinor` (paid − their share of shared costs), `balanceMinor` (settlement).
+  Reuses `owed`/`chipsToMoney`/`net` from `core/money.ts` rather than recomputing them. The pot's
+  balance is `−Σ cashPaid(p)` plus any shared cost the pot itself paid for (reduces what it owes
+  out). The house/unaccounted node's balance is `unaccountedMinor` verbatim — derived, not
+  spec-quoted, and proven to close the whole graph exactly when the host has assigned the full raw
+  discrepancy to it (matches `core/pot.ts`'s banner turning green). See `NOTES.md`.
+- **The minimum-transfer algorithm**, all three stages: exact-pair cancellation
+  (`cancelExactPairs`), a bitmask DP for `n ≤ 14` that finds the optimal partition into disjoint
+  zero-sum groups and reconstructs it via parent pointers (`partitionIntoZeroSumGroups`), then
+  greedy *within* each group (`settleGroupGreedy`, always exactly `|group| − 1` transfers for a
+  DP-irreducible group, regardless of match order — proven, not assumed). Above 14 nodes, greedy
+  runs once over everything as a single group, per spec. `POT_ID`/`HOUSE_ID` are exported sentinel
+  ids, structurally distinct from a real player id.
+- **Tie-breaking.** "Prefer the pot as payer" is applied *inside* each group's greedy step (pot is
+  always the active debtor while it's alive), not as a separate pre-pass — see Deviated. Ties
+  otherwise broken by seat order, for a deterministic, finger-safe re-render. "Rounder numbers"
+  (the third tie-break) is not implemented — see Left undone.
+- **The snapshot builder**, `buildGameSnapshot()`, producing `GameSummarySnapshot` /
+  `PlayerResultSnapshot[]` / `TransferSummarySnapshot[]` shaped after `03-data-model.md`'s three
+  permanent tables. Pure: `finishedAt`/`durationMinutes` are inputs, not wall-clock reads, and the
+  player-result id generator is injectable (defaults to `crypto.randomUUID()`) for deterministic
+  tests. Nothing persists it yet — step 11's job — but no finished game can now exist without one
+  being buildable from its final state.
+
+**20 new tests** in `settlement.test.ts`: the two spec-worked fixtures (Rani's pot example,
+07's four-player final settlement — transfer for transfer), shared-cost-paid-by-player and
+paid-by-pot balance checks, the house-node-closes-the-graph check, a hand-built counterexample
+regression (see Deviated), and five `fast-check` property suites: the settlement invariants
+(sums to each player's balance, no negative/zero/self transfers, ≤ n−1 transfers, deterministic,
+idempotent), "adding shared costs never breaks the balance invariant," and — cross-checked against
+an independent brute-force reference implemented only in the test file — "transfer count equals
+the true optimum (`n − k`) for randomly generated small balance sets." Total test count: 366,
+`npm run verify` green (typecheck, lint, lint:css, test, audit:prod, build all pass; the existing
+purity lint rule already covers `core/settlement.ts` since it's a direct child of `core/`).
+
+**Deviated.**
+- **The pot is not drained in a separate pass before the general algorithm runs**, even though
+  05-settlement.md's prose describes it that way and claims doing so "never increases the transfer
+  count." Implemented literally, it does: a concrete 5-node counterexample (kept as a permanent
+  regression test) shows global pot-draining costing a 4th transfer where the DP optimum is 3.
+  "Prefer the pot as payer" is instead scoped to *inside* each DP-selected zero-sum group, which is
+  provably count-safe. Full reasoning in `NOTES.md`.
+- **"Rounder numbers"** (05's third tie-break priority) is not implemented. The spec gives no
+  rigorous definition of what counts as "rounder," and building a real secondary optimisation for
+  an informally-specified, non-testable preference risked exactly the kind of premature abstraction
+  `CLAUDE.md` warns against. The two implemented tie-breaks (pot-as-payer, seat-order determinism)
+  are the ones with clear, testable meaning.
+- **`TransferSummarySnapshot` exposes `fromId`/`toId` (real player id or a `POT_ID`/`HOUSE_ID`
+  sentinel)**, not the `from_name`/`to_name` text `03-data-model.md`'s `transfer_summaries` table
+  actually stores. Resolving an id to display text needs player names and i18next, both off-limits
+  under the Purity rule — deferred to step 11, which writes the real DB rows. See `NOTES.md`.
+- **`sharedCostsShareMinor` on `PlayerResultSnapshot`** is populated with `sharedMinor` (paid minus
+  their share of shared costs) — `03`'s column comment just says "a single amount," so this is a
+  reasoned reading rather than a spec quote, consistent with how the money model already defines
+  `shared(p)`.
+
+**Left undone.** Nothing against `PLAN.md`'s exit criteria — all five are met. The "rounder
+numbers" tie-break (see Deviated) is the one piece of `05`'s prose not implemented; it's a
+preference, not a correctness invariant, and nothing in `PLAN.md`'s exit criteria names it.
+
+**Watch out.**
+- **Don't reintroduce global pot-draining.** See Deviated/`NOTES.md` — it looks like a reasonable
+  reading of the spec's prose and is provably wrong. The counterexample in `settlement.test.ts`
+  (`computeTransfers — fixed regressions`) will fail if this regresses.
+- **`computeTransfers` throws if its input doesn't sum to zero.** This is intentional — it's the
+  precondition 05-settlement.md's whole model assumes, and the safeguard (`core/pot.ts`) is what's
+  supposed to make it true before settlement runs. Step 9's ending flow must ensure the safeguard
+  is resolved (or explicitly overridden via `unaccountedMinor`) before calling into this module;
+  don't add a silent fallback here if that call site is ever wired up incorrectly — surfacing the
+  bug immediately is the correct behaviour for this module.
+- **`buildGameSnapshot` needs already-settled players.** `SnapshotPlayerInput.chipsFinal` is a
+  plain `number`, not nullable — the caller (step 9's ending flow) is responsible for the
+  missing-players check before assembling this input; this module doesn't re-derive it.
