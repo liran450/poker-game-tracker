@@ -45,6 +45,114 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### `fold()`'s tie-break is a random UUID compare — stamp a monotonic clock, don't rely on it
+**Step 7 · 2026-07-29 · trap**
+
+`fold()` sorts events by `clientCreatedAt`, falling back to `clientEventId` only when two events
+tie. `clientEventId` is `crypto.randomUUID()` — a string compare against it has no relationship to
+the order the events actually happened in. Millisecond-resolution `Date.now()` ties easily: a
+`settlePlayer` immediately followed by `editSettledChips` (a sequence this step's settle-sheet reuse
+makes completely ordinary) landed in the same millisecond in a real test run, and the random
+tie-break applied `player_settled`'s payload *after* `chips_set`'s — silently reverting the edit.
+
+Fixed at the call site, not in `fold()`: `core/offline/clock.ts`'s `nextTimestamp()` keeps a
+module-level `lastMs` and returns `Math.max(Date.now(), lastMs + 1)`, guaranteeing every timestamp
+this device stamps is strictly greater than the last. `core/offline/gameActions.ts` uses it for
+every `clientCreatedAt`; `createUndoEvent` (`core/events.ts`) now takes an optional explicit
+`clientCreatedAt` override so `undoEvent` can supply a monotonic one too, without `core/events.ts`
+itself importing anything impure. **`fold()`'s comparator was deliberately left untouched** — it's
+one of the two provably-correct modules, and the fix belongs at the (impure, device-local) source of
+the timestamps, not in the (pure, deterministic) function that sorts them. Any new event-appending
+call site should use `nextTimestamp()`, not bare `new Date().toISOString()`.
+
+### `createUndoEvent`'s generic payload copy can't invert `shared_cost_removed`
+**Step 7 · 2026-07-29 · trap**
+
+`createUndoEvent` builds the inverse event by copying the *original* event's payload onto the
+*inverse* type. That's safe when the inverse's payload is a subset of the original's — true for
+every pair in `INVERSE_TYPES` except one: `shared_cost_removed`'s payload is `{ costId }` alone,
+but its inverse (`shared_cost_added`) needs label/amount/payer/split/shares. Undoing a removal
+through the generic path would append a `shared_cost_added` event missing all of that, and
+`applyEvent` would throw on `Object.entries(undefined)`.
+
+Not fixed generically (that needs `createUndoEvent` to accept an explicit inverse-payload override,
+which nothing needed until now). Instead, `core/events.ts` exports `GENERICALLY_REVERSIBLE_TYPES` /
+`isGenericallyReversible` — a *narrower* allow-list than `INVERSE_TYPES` — and every "offer undo"
+UI (the audit log's long-press-equivalent) is gated on that, not on `INVERSE_TYPES` membership.
+`isGenericallyReversible` also excludes every last-writer-wins "set" event (`cash_paid_set`,
+`chips_set`, `nickname_set`, `player_renamed`, `unaccounted_set`, `shared_cost_updated`,
+`transfer_edited`) for a different reason: none of those are in `INVERSE_TYPES` at all, so
+`createUndoEvent` would fall back to re-emitting the *same* type with the *same* payload — a no-op,
+not an undo.
+
+### Component tests can't see interpolated i18next content — verified, not assumed
+**Step 7 · 2026-07-29 · environment**
+
+`useTranslation()` outside an initialised `i18next` instance (true of every existing component test
+— nothing imports `src/i18n/index.ts`) makes `t(key, params)` return the bare `key` string, params
+dropped entirely. This was already the working convention (`PlayerActionsSheet.test.tsx` asserts
+`screen.getByText('players.rename')`, not real Hebrew) but this step is the first to depend on it
+being *exactly* that — confirmed directly with a one-line probe rather than assumed, because two
+modules here (`buyInText.ts`, `auditLogText.ts`) compose the actual spec-worded sentence and needed
+real verification. Their tests import the real singleton — `import i18next from '@i18n/index'` —
+and bind `i18next.t`, which loads the genuine Hebrew bundle and lets the test assert on real
+sentences ("מור · קנייה 3 · +100 ז'יטונים · +₪50") instead of raw keys. Every other new component
+test in this step follows the existing raw-key convention. **Rule of thumb:** if a module's whole
+job is producing the *wording*, test it against the real `i18next` singleton; if a component just
+renders `t()` calls, raw-key assertions are correct and sufficient.
+
+### Hebrew currency formatting puts the symbol after the number
+**Step 7 · 2026-07-29 · trap**
+
+`Intl.NumberFormat('he', { style: 'currency', currency: 'ILS' }).format(50)` produces `‏50 ‏₪`
+(RLM marks, symbol *after* the digits), not `₪50`. `formatMoney`'s own tests already only assert
+substrings (`.toContain('50')`, separately `.toContain('−')`) for exactly this reason — a first
+draft of this step's component tests asserted a combined `'−₪50'` and failed against the real
+formatter. Assert the sign and the digits as separate substrings; never assume symbol-adjacent
+placement for Hebrew.
+
+### The pot banner's "still playing" semantics: a build-time reading, not a spec quote
+**Step 7 · 2026-07-29 · decision**
+
+05-settlement.md defines `discrepancy = totalBuyIns − totalChips` but every worked example in the
+doc is settlement-time, where everyone has a counted chip stack. The banner is shown live, from the
+moment the game starts, when most players haven't settled yet and the app has never observed their
+chips (chips are only ever entered at `player_settled`/`chips_set`). Treating an unsettled player's
+contribution to `totalChips` as *unknown* (and thus red) would paint the banner red for the entire
+active phase of every game, which can't be the intent of a "compact and green" persistent banner.
+
+`core/pot.ts` instead treats an unsettled player as neutral: their assumed chip value equals exactly
+what they bought, so they contribute zero to the discrepancy either way. Only a *settled* player,
+whose chips were actually counted, can push the banner red. This is a considered reading, tested
+directly (`core/pot.test.ts` has a fixture with all-unsettled players asserting `isBalanced: true`),
+not a literal spec quote — worth confirming against a real game (see PROGRESS.md's step 7 "Left
+undone") since it's the one place this step made a call the spec didn't settle.
+
+### Zustand, for real, for the first time
+**Step 7 · 2026-07-29 · decision**
+
+`02-architecture.md#frontend-stack` names Zustand for local game state from day one, but nothing
+before this step needed cross-component, high-frequency-update state — `dexie-react-hooks`'
+`useLiveQuery` covered everything through step 6. The buy-in counter's coalescing-undo window
+(`features/game/buyInBatch.ts`) is the first genuine fit: it updates on every tap, is read by
+sibling components (the snackbar, the batch bar) that don't share a DOM ancestor worth lifting state
+into, and is exactly the "per-tap, frequently-updating" state `CLAUDE.md` says must never go in
+Context. `create<BuyInBatchState>(...)` from a `createBuyInBatchStore()` factory (so tests get an
+isolated instance with its own timer closure, and production uses one default export). Zero
+production-audit impact.
+
+### Hebrew grammar has no gender field to key off — audit log wording is deliberately neutral
+**Step 7 · 2026-07-29 · decision**
+
+`07-hebrew-glossary.md`'s own share-text example conjugates by gender ("נסגרה" for דנה, feminine,
+vs. "נסגר" for אורי, masculine) — but no event or player-state field carries a gender, and adding
+one just for string agreement is out of scope for a money-tracking app. `auditLogText.ts` sidesteps
+this by phrasing every action as a gender-neutral noun phrase ("סגירה עם 120 ז'יטונים", "פתיחה
+מחדש", "הצטרפות למשחק") rather than a conjugated verb — the same trick the spec's own buy-in
+examples already use ("קנייה 3" is a noun, not "he bought"). Keep this pattern for any future
+audit-log or activity-feed string; don't introduce a conjugated verb without a real gender field to
+key it off.
+
 ### Hebrew pluralization needs `_two`, not just `_one`/`_other`
 **Step 6 · 2026-07-29 · trap**
 

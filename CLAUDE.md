@@ -141,6 +141,12 @@ passing props through two levels. Game state is Zustand; server state is TanStac
 
 **Single quotes** for strings, in TypeScript and SCSS alike.
 
+**Event timestamps go through `nextTimestamp()`** (`core/offline/clock.ts`), never a bare
+`new Date().toISOString()`, for any `clientCreatedAt` on an appended `GameEvent`. `fold()`'s sort
+falls back to a random `clientEventId` compare on a tie, and two appends in the same millisecond
+(entirely ordinary — e.g. settling a player and then correcting their chip count right after) can
+land in the wrong order silently otherwise. See `docs/build/NOTES.md`.
+
 ## Security
 
 **No secrets in the source, ever** — no API keys, no service-role key, nothing. The Supabase anon

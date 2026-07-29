@@ -156,9 +156,9 @@ export function net(cashOutMinor: Minor, owedMinor: Minor): Minor {
 // Formatting — Intl.NumberFormat, never a hardcoded symbol
 // ---------------------------------------------------------------------------
 
-const LRI = '⁦';
-const PDI = '⁩';
-const MINUS = '−'; // U+2212, not hyphen
+export const LRI = '⁦';
+export const PDI = '⁩';
+export const MINUS = '−'; // U+2212, not hyphen
 
 export interface FormatMoneyOptions {
   locale: string;

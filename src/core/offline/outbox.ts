@@ -36,6 +36,63 @@ export async function loadGameEvents(gameId: string): Promise<GameEvent[]> {
   return db.events.where('gameId').equals(gameId).toArray();
 }
 
+/**
+ * Undo (03-data-model.md#undo): appends the inverse event and stamps
+ * `undoneBy` on the original in one transaction, so a crash between the two
+ * writes can't happen. Both the inverse and the (now-corrected) original are
+ * put in the outbox — the original needs re-queueing because its
+ * `undoneBy` change has to reach the server even if the original event
+ * already left the outbox on an earlier successful push.
+ *
+ * If the original event is missing locally (shouldn't happen — it's an
+ * append-only log — but a step-12 merge from another device could plausibly
+ * race this), the inverse still gets appended: fold() computes the same net
+ * state either way for the commutative/toggle event types this is used for
+ * (see `isGenericallyReversible`), so the only thing lost is the audit log's
+ * collapsed rendering of the pair.
+ */
+export async function appendUndoEvent(
+  inverseEvent: GameEvent,
+  originalEventId: string,
+  undoneByEventId: string,
+): Promise<void> {
+  await db.transaction('rw', db.games, db.events, db.outbox, async () => {
+    const original = await db.events.get(originalEventId);
+    const updatedOriginal: GameEvent | undefined = original
+      ? { ...original, undoneBy: undoneByEventId }
+      : undefined;
+
+    await db.events.put(inverseEvent);
+    if (updatedOriginal) await db.events.put(updatedOriginal);
+
+    await db.outbox.put({
+      clientEventId: inverseEvent.clientEventId,
+      gameId: inverseEvent.gameId,
+      event: inverseEvent,
+      status: 'pending',
+      attempts: 0,
+      lastError: null,
+      enqueuedAt: new Date().toISOString(),
+    });
+
+    if (updatedOriginal) {
+      const queuedEntry = await db.outbox.get(originalEventId);
+      await db.outbox.put({
+        clientEventId: originalEventId,
+        gameId: updatedOriginal.gameId,
+        event: updatedOriginal,
+        status: 'pending',
+        attempts: queuedEntry?.attempts ?? 0,
+        lastError: null,
+        enqueuedAt: queuedEntry?.enqueuedAt ?? new Date().toISOString(),
+      });
+    }
+
+    const existingGame = await db.games.get(inverseEvent.gameId);
+    await db.games.put({ ...existingGame, id: inverseEvent.gameId, updatedAt: new Date().toISOString() });
+  });
+}
+
 export interface OutboxSummary {
   readonly pendingCount: number;
   readonly failedCount: number;
