@@ -207,6 +207,7 @@ the session, so the whole budget goes here. Every rule below is load-bearing:
 | `npm run dev` | Vite dev server. No CSP in dev — HMR needs inline scripts, so the policy is build-only |
 | `npm run e2e` | Playwright against a real production build, including the CSP assertions |
 | `npm test` / `npm run test:watch` | Vitest |
+| `npm run test:db` | The schema/RLS/RPC test suite against a real local Postgres (`supabase/tests/`) — rebuilds the schema from `supabase/migrations/` first. Needs a running Postgres (`service postgresql start`); never part of `verify`, same as `e2e` |
 | `npm run lint` / `npm run lint:css` | ESLint (incl. the local rules) / stylelint |
 | `npm run audit:prod` | Production-tree advisories only — the dev tree has unfixable build-time ones ([NOTES](docs/build/NOTES.md)) |
 | `ICON_OUT=public/icons python3 scripts/make-icons.py` | Regenerate the PWA icons from the tokens |

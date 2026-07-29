@@ -1,0 +1,35 @@
+name: Maintenance
+
+# Keeps the Supabase free-tier project from pausing after 7 days of inactivity
+# (docs/02-architecture.md#database-choice). Set up in step 10, ahead of any game depending on
+# the network, per docs/09-roadmap.md#m0--foundations — "do not discover it the night of a
+# game." The retention purge (purge_expired_game_data()) joins this cron in step 16, once it
+# exists; for now this job only pings.
+on:
+  schedule:
+    - cron: '0 6 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::warning::SUPABASE_URL/SUPABASE_ANON_KEY repo secrets aren't set yet, so \
+          there's no project to ping. This is expected until the Supabase project exists — see \
+          docs/build/PROGRESS.md step 10. Once it does, add both secrets and this starts \
+          actually keeping it awake."
+            exit 0
+          fi
+          curl -sSf -o /dev/null \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/"

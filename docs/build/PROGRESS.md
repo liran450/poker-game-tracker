@@ -36,7 +36,7 @@ change — otherwise the history stops meaning anything.
 | 7 | The buy-in counter and the game page | in progress — code complete, blocked on a real game only the owner can play | | |
 | 8 | Settlement core | done | 2026-07-29 | _(this commit)_ |
 | 9 | End game, edit mode, share text | in progress — code complete, blocked on a real WhatsApp paste test | | |
-| 10 | Database foundation and RLS | not started | | |
+| 10 | Database foundation and RLS | in progress — code complete, blocked on the owner creating a real Supabase project | | |
 | 11 | Snapshots, statistics source, retention | not started | | |
 | 12 | Auth and cloud sync | not started | | |
 | 13 | Sharing, viewers, join requests, takeover | not started | | |
@@ -45,10 +45,13 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** steps 7 and 9 are both code-complete and both blocked on the repository owner — step 7
-on a real game played on the build, step 9 on pasting its share text into real WhatsApp on iOS and
-Android. Neither blocks step 10 (database foundation and RLS), which has no dependency on either
-playtest. **Start step 10** next; flip 7 and 9 to `done` whenever the owner has run those checks 🎯.
+**Next up:** steps 7, 9 and 10 are all code-complete and each blocked on a real-world action only
+the repository owner can take — step 7 on a real game played on the build, step 9 on pasting its
+share text into real WhatsApp on iOS and Android, step 10 on actually creating a Supabase project
+(a cloud signup, not something buildable from here) and applying `supabase/migrations/` to it.
+None of the three block **step 11** (snapshots, statistics source, retention functions), which —
+like step 10 — is pure SQL testable against a local Postgres with no live project needed. **Start
+step 11** next; flip 7, 9 and 10 to `done` whenever their respective checkpoints clear 🎯.
 
 ### Checkpoints that are not steps
 
@@ -59,6 +62,7 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Design assets committed to `docs/design/`, `docs/11` written from them** | Step 3 | ✅ done 2026-07-28 |
 | **Play a real game on the step-7 build** | Step 7 `done` | not reached — needs the repository owner |
 | **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached — needs the repository owner |
+| **Create the real Supabase project, run `supabase link && supabase db push` (or paste `supabase/migrations/*.sql` into its SQL editor) against it, and set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` repo secrets `maintenance.yml` needs** | Step 10 `done`, and step 12 can't start without it | not reached — needs the repository owner |
 
 ---
 
@@ -785,3 +789,116 @@ the Playwright test — is built and verified.
 - **Deleting a transfer zeroes it; it does not remove the row.** Every list derived from
   `state.transfers` must filter `amountMinor > 0` before rendering or summing — `SettlementRoute`
   and `SummaryRoute` both do this at the point they read `state.transfers`, not downstream.
+
+---
+
+### Step 10 — Database foundation and RLS
+**Status:** in progress — code complete, blocked on the owner creating a real Supabase project
+**Sessions:** 1  **Commits:** 1
+
+**Built.** The whole schema and permission model, in `supabase/migrations/` (14 files, Supabase's
+own timestamp-prefixed naming so `supabase link && supabase db push` will accept them unmodified
+whenever a real project exists):
+
+- **All 17 tables from `03-data-model.md`** — not just the 14 "live" ones `PLAN.md` names for this
+  step, but also `game_summaries`/`player_results`/`transfer_summaries` (see Deviated) — every
+  enum (`game_status`, `stats_visibility`, `group_role`, `invite_status`, `split_mode`,
+  `approval_status`, `join_request_role`, `join_request_source`, `settlement_party`, and
+  `game_event_type` with all 31 values matching `core/events.ts`'s `EVENT_TYPES` verbatim), the
+  reserved columns for locations/scheduled games (no table, per `PLAN.md`), and one real
+  correctness trigger: `buy_amount_minor`/`chips_per_buy` become immutable on `games` the moment a
+  `buy_in_added` event exists for it, exactly as `03-data-model.md#games` requires.
+- **RLS helper functions** (`is_host`, `is_game_player`, `is_game_viewer`, `is_group_member`,
+  `is_group_admin_or_owner`, `is_group_owner`, `is_in_game`, `can_read_game`, plus
+  `game_group_id`/`group_created_by`, added to fix a real cross-table visibility bug — see
+  Deviated), all `SECURITY DEFINER STABLE` so a policy can call one without recursing into its own
+  restricted view of the table it's protecting.
+- **RLS enabled on every table, with real policies matching `03-data-model.md`'s table** — writes
+  host-only throughout, `game_events` insert-only with no update/delete grant for any role, the
+  permanent tables writable by nobody, and a `profiles_public` security-definer view doing the
+  column-level narrowing (username/display_name/avatar_url to co-members; everything else
+  self-only) that a row-level policy alone can't express.
+- **The `game_events` → `game_players` cache trigger** (`apply_game_event_to_player_cache`,
+  `AFTER INSERT`), scoped deliberately narrow — see Deviated.
+- **The two audited RPCs `PLAN.md` names**, plus what they actually needed: `take_over_host`
+  (matches `03-data-model.md#host-takeover` exactly — updates `host_id`, then appends
+  `host_taken_over`), `decide_join_request` (host-only; approval atomically seats a player via a
+  `player_added` event or inserts a `game_viewers` row, and appends `join_approved`/
+  `join_rejected`), a small trigger (`log_join_requested`) so the plain-RLS "ask to join" insert
+  still produces an audit-log entry, and `mark_event_undone` — the one narrow, forward-only
+  exception to "insert-only, no update, ever" that the undo model actually needs (see Deviated).
+- **The test harness**, `supabase/tests/` — a separate Vitest config (`npm run test:db`, never part
+  of `verify`) whose `globalSetup` rebuilds a real local Postgres database from
+  `supabase/tests/support/auth-shim.sql` (a local/CI-only stand-in for the `auth` schema a real
+  Supabase project already provides) plus every migration, in order, before any test runs.
+  18 tests across three files:
+  - `eventEnumParity.test.ts` — reads `pg_enum` for `game_event_type` and asserts it equals
+    `core/events.ts`'s `EVENT_TYPES` exactly (the step's third exit criterion, mechanically).
+  - `rlsEnabled.test.ts` — asserts all 17 tables have RLS on, **and** a dedicated test that
+    disables RLS on a real table inside a rolled-back transaction and confirms the same query
+    flags it — the "prove it" exit criterion, not just a check that currently happens to pass.
+  - `rlsPolicies.test.ts` — a non-host can't write a `game_event` (and the row is simply invisible
+    to them, not just unwritable); anon can't read or write at all; `game_events` truly can't be
+    updated or deleted by any role; nobody, including the host, can insert into the permanent
+    snapshot tables; someone not in the game can't `take_over_host`, a bogus game id and "not in
+    the game" produce the byte-identical error message (the generic-rejection-shape criterion), a
+    player *or* a viewer can take over; the join-request path end to end (ask → logged as an event
+    → only the host decides → approval seats the player), including that a group member can't
+    submit a request impersonating someone else.
+- **CI**: a new `db-tests` job in `deploy.yml` (a plain `postgres:16` service container — GitHub
+  Actions runs Docker natively even though this sandbox can't, see `NOTES.md`), gating `deploy`
+  alongside `verify`. A new `maintenance.yml` with the `0 6 */3 * *` keep-alive cron, which warns
+  (not fails) and no-ops until `SUPABASE_URL`/`SUPABASE_ANON_KEY` repo secrets exist.
+- **No service-role key anywhere** — trivially true, never introduced one; the fourth exit
+  criterion.
+
+**Deviated.**
+- **All 17 tables were built here, not the 14 `PLAN.md` names for this step.** `03-data-model.md`'s
+  own RLS table covers all 17 together, and CLAUDE.md's "RLS on every table, no exceptions" reads
+  better as "no exceptions, ever" than "no exceptions once step 11 gets around to it." `PLAN.md`'s
+  step 11 section is edited to match — see `NOTES.md`.
+- **`transfers` gained a `from_party`/`to_party settlement_party` column pair**, not the single
+  nullable `from_player_id`/`to_player_id uuid` ("NULL = pot") `03-data-model.md` actually
+  documents — that shape predates step 8's house/unaccounted settlement node. Full reasoning in
+  `NOTES.md`; step 12's repository layer will need to map `POT_ID`/`HOUSE_ID` ⇄ `party`.
+- **A real, reproduced Postgres RLS+`RETURNING` bug, found and fixed**: a table's own policies
+  must never call a helper that re-queries that same table (`games_select` no longer uses
+  `is_host(id)`/`can_read_game(id)`, using `host_id = auth.uid()` directly instead) — see
+  `NOTES.md` for the full mechanism and the two other places the identical bug pattern showed up
+  (`join_requests_insert`, `player_claims_insert`, `group_members_insert_owner`).
+- **`group_members` has no general INSERT policy at all** — only a narrow exception for a group's
+  creator to insert themselves as the one `owner` row. Every other membership row is meant to come
+  from step 14's accept-invite RPC. See `NOTES.md`.
+- **The join-request "ask" path is a plain RLS insert, not an RPC**; `decide_join_request` is the
+  one that's genuinely an RPC (multi-table, host-only, atomic). `PLAN.md` names "the join-request
+  path" as one of two RPCs — this is the reasoned split, in `NOTES.md`.
+- **`mark_event_undone` wasn't named in `PLAN.md`**, but "insert-only, no update, ever" and "undo
+  sets `undone_by` on the original" both appear in `03-data-model.md` and can't both be true
+  without some sanctioned exception. Added one, narrow and forward-only. See `NOTES.md`.
+
+**Left undone.** All four of `PLAN.md`'s exit criteria are met and `npm run test:db` (alongside
+`npm run verify`) is green — but **no real Supabase project exists yet**. That's the one thing
+this session structurally cannot do: creating one is a cloud signup under the repository owner's
+own account, not a build step. The new checkpoint in the table above tracks it. Until it clears:
+`supabase/migrations/` is untested against a live project (only against local Postgres, which
+implements the same RLS/auth semantics but isn't Supabase itself), and `maintenance.yml`'s
+keep-alive ping stays a no-op. None of this blocks step 11, which is exactly as local-Postgres-
+testable as step 10 was.
+
+**Watch out.**
+- **Never give a table's own RLS policy a helper function that re-queries that same table.** See
+  `NOTES.md`'s RETURNING entry — it's silent (no error) until something does `INSERT ...
+  RETURNING`, which the real Supabase JS client's `.insert().select()` idiom does routinely, so
+  this would otherwise resurface the moment step 12 wires up real writes.
+- **`game_events`' cache trigger only touches `game_players`.** Don't extend it to also derive
+  `shared_costs`/`transfers`/`join_requests`/`player_claims`/`game_viewers`/`games.status`/
+  `host_id` from the log — those are meant to be direct writes in the same transaction as the
+  matching event append, per `NOTES.md`'s reasoning. If step 12's repository layer ever finds
+  itself wanting to derive one of those from replay instead, that's a real design change, not an
+  oversight to quietly fix here.
+- **`supabase/tests/support/auth-shim.sql` is local/CI-only.** Never apply it to a real Supabase
+  project — it would collide with the platform's own `auth` schema.
+- **RLS is enabled on every table, but nobody has granted `anon`/`authenticated` access to the
+  `profiles_public`, `groups`, etc. *view* objects beyond what's already there** — if a future step
+  adds a new view, remember views need their own `grant select` even when the underlying tables
+  already have RLS-gated access; view privileges and table privileges are separate.

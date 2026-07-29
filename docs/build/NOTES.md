@@ -45,6 +45,214 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### No Docker in this sandbox — the Supabase CLI's local stack can't run here
+**Step 10 · 2026-07-29 · environment**
+
+`docs/02-architecture.md` and `PLAN.md` both assume "local dev via the Supabase CLI" for
+step 10 — `supabase start` spins up Postgres + GoTrue + PostgREST + Studio via Docker Compose.
+This sandbox has `docker` installed but no daemon (`/var/run/docker.sock` doesn't exist, and
+`service docker start` fails on `ulimit` — no permission to fix that here), so that path is
+closed. It also has no real Supabase account/project to fall back on — creating one is a
+cloud-resource signup only the repository owner can do.
+
+What *is* available and used instead: `postgresql-16` is installed as a real server (not just
+`psql`/`pg_dump` client tools) — `pg_lsclusters` showed a stopped `main` cluster; `service
+postgresql start` brings it up, `pg_hba.conf` already allows password auth over TCP on
+127.0.0.1/::1. Migrations are hand-authored with Supabase's own timestamp-prefixed filename
+convention (`YYYYMMDDHHMMSS_name.sql`) even though the CLI never touched them, so `supabase
+link && supabase db push` should accept `supabase/migrations/*.sql` unmodified whenever a real
+project exists — nothing here depends on a CLI-specific extension.
+
+`supabase/tests/support/auth-shim.sql` recreates the two things a real Supabase project
+provides before any app migration runs — an `auth` schema with `auth.users`/`auth.uid()`/
+`auth.role()`, and default privileges granting `anon`/`authenticated` coarse table access so
+RLS is the only real gate — and is applied only to the local test database, never to a real
+project (which already has both, and reapplying `create schema auth` there would conflict with
+the platform's own). CI mirrors this with a plain `postgres:16` service container (GitHub
+Actions runs Docker natively even though this sandbox can't) — see `.github/workflows/
+deploy.yml`'s `db-tests` job.
+
+**Consequence for "a CI check that supabase/migrations is the single source of schema truth"**
+(a step-10 build line, not one of its four exit criteria): the meaningful version of this today
+is "the migrations directory alone, applied in order to nothing, reconstitutes a working
+schema" — which `supabase/tests/support/globalSetup.ts` proves on every `test:db` run, local or
+CI. A real drift check (does the *live* project's schema still match the migrations, i.e. did
+someone edit a table from the dashboard?) needs a live project to diff against and has to wait
+for step 12.
+
+### Postgres RLS + `RETURNING` can miss a row this same statement just inserted
+**Step 10 · 2026-07-29 · trap**
+
+`insert into games (...) returning id` spuriously failed `new row violates row-level security
+policy for table "games"` even though the insert's own `with check` (`host_id = auth.uid() and
+created_by = auth.uid()`) was obviously true — confirmed directly: the identical boolean
+condition, and a separate `select can_read_game(id), is_host(id) from games where …` run as a
+follow-up statement in the same transaction, both evaluated `true`. Only the `RETURNING` form
+failed; the same insert without `RETURNING` succeeded outright.
+
+Root cause: `games_select` was originally `using (can_read_game(id))`, and `can_read_game` →
+`is_host` is a `SECURITY DEFINER` function that re-queries `games` itself (`select 1 from games
+where id = p_game_id and host_id = auth.uid()`). For `INSERT ... RETURNING`, Postgres also
+evaluates the table's SELECT policy against the new row, and a *separate* nested query inside a
+security-definer function evidently doesn't reliably see this same command's own just-inserted
+row — a self-referential helper is the specific thing that breaks, not RLS+RETURNING in
+general.
+
+**Fix:** for a table's *own* policies, never reference a helper function that re-queries that
+same table. `games_select`/`games_update`/`games_delete` now compare `host_id = auth.uid()`
+directly (a plain column read off the row already being evaluated, no subquery) and only call
+`is_game_player`/`is_game_viewer` for the *other* two clauses — both of those query different,
+already-committed tables, which is safe. `is_host`/`can_read_game` remain exactly right for
+*other* tables' policies (`game_players`, `game_events`, `shared_costs`, …), where the row being
+written and the row `is_host` queries are never the same table. Rule of thumb: a table's own
+RLS policies should read its own row's columns directly wherever possible; reach for a
+cross-table helper only when the policy genuinely needs a different table.
+
+The identical trap resurfaced for `join_requests_insert`/`player_claims_insert`: both had an
+inline `(select group_id from games g where g.id = game_id)`, evaluated under the *caller's*
+own (much more restricted) RLS on `games` — and a group member asking to join a game they can't
+see yet is exactly a caller who fails `games_select`. Fixed by adding `game_group_id()`, a
+`SECURITY DEFINER` helper that looks up a *different* table (`games`, not the policy's own
+table), which is the safe case. Same fix for `group_members_insert_owner`'s
+`(select created_by from groups …)` → `group_created_by()`, for the same reason (a group's
+brand-new creator can't yet pass `groups_select`, since `is_group_member` is false until this
+very insert succeeds).
+
+### `game_events`'s cache trigger is scoped to `game_players` only, on purpose
+**Step 10 · 2026-07-29 · decision**
+
+`PLAN.md`'s own step-10 wording is narrow — "the game_events trigger maintaining the
+game_players caches" — not the other five live tables event payloads also describe
+(`shared_costs`, `transfers`, `join_requests`, `player_claims`, `game_viewers`, plus
+`games.status`/`host_id`). Read literally and kept that way: `apply_game_event_to_player_cache()`
+(an `AFTER INSERT ON game_events` trigger) only handles the event types whose *entire* effect is
+a `game_players` column — `player_added` (creates the row), `player_removed`, `player_renamed`,
+`nickname_set`, `buy_in_added`/`removed`, `cash_paid_set`, `chips_set`, `player_settled`/
+`reopened`, and `claim_approved` (only its `user_id` side-effect).
+
+Everything else stays a **direct write** by whoever calls it — `take_over_host` updates
+`games.host_id` itself in the same statement it appends `host_taken_over`, exactly as
+`03-data-model.md#host-takeover` describes it ("sets host_id, appends a … event"), not "appends
+an event, and something derives `host_id` from it." `decide_join_request` directly inserts the
+`game_viewers` row on a viewer approval. The repository layer (step 12) is expected to keep
+doing this — write the specific live table *and* append the matching event in the same
+transaction — rather than trying to replay the whole event log through triggers for tables that
+already hold full current state, not just a scalar cache. `game_players`' handful of columns are
+the one case cheap and unambiguous enough to derive purely incrementally from the log.
+
+**Known limitation, out of step 10's scope (confirmed against `PLAN.md`'s own step
+dependencies — step 12 owns concurrent merge):** the trigger applies events in **server arrival
+order**, not `core/events.ts`'s `clientCreatedAt`-based fold order, and doesn't replicate
+`fold()`'s undo-pair *exclusion* — it applies every event's effect cumulatively, including
+inverse events, and relies on downstream consumers already filtering on `is_removed`/
+`is_settled` for the observable result to match. That's fine for one host pushing their own
+outbox in order (all step 10 needs); revisit if step 12's concurrent-multi-device merge exposes
+a case where incremental application and fold-with-exclusion actually diverge in something
+user-visible.
+
+### `game_events` is "insert-only, no update, no delete, ever" — except one narrow, forward-only RPC
+**Step 10 · 2026-07-29 · decision**
+
+`03-data-model.md` states both halves of a real tension: "an undo appends an inverse event and
+sets `undone_by` on the original" (implying an update), and separately, in the same document,
+that `game_events` is "insert-only — no update, no delete, ever … enforced with a rule denying
+update/delete … to all roles including the host." Resolved the same way Postgres resolves it
+for any table: **no RLS policy and no grant permits `UPDATE`/`DELETE` on `game_events` for
+`anon`/`authenticated`** (`revoke update, delete on game_events from anon, authenticated;`, on
+top of RLS's own default-deny with no update/delete policy defined) — that is the literal
+"insert-only, no exceptions for any API-facing role" half. `mark_event_undone(original,
+inverse)` is a single `SECURITY DEFINER` function, host-only, that performs the one sanctioned
+mutation: `undone_by` can move from `null` to a value once, never again (already-linked is a
+silent no-op, not an error, so a retried push stays idempotent) and no other column is ever
+touched. This is the same shape as `take_over_host` — a narrow, audited escape hatch — not a
+general write path.
+
+### `transfers` needs a `party` column — the schema doc predates the house node
+**Step 10 · 2026-07-29 · decision**
+
+`03-data-model.md#transfers` has a single nullable `from_player_id`/`to_player_id` pair ("NULL =
+the pot"), written before step 8 added a second non-player settlement node (the
+house/unaccounted node, `core/settlement.ts`'s `HOUSE_ID`). `core/events.ts`'s `transfer_edited`
+payload already moved off that convention for the same reason, in step 9 (see that entry
+below) — plain `string` fields carrying `POT_ID`/`HOUSE_ID` sentinels instead of `null`.
+
+Rather than inventing two magic non-null UUID constants to keep `from_player_id uuid` a single
+nullable column, `transfers` gained `from_party`/`to_party settlement_party` (`'player' |
+'pot' | 'house'`) alongside `from_player_id`/`to_player_id uuid references game_players(id)`,
+with a check constraint tying them together (`party = 'player'` iff the id column is set). A
+real player reference stays FK-checked; pot/house are named, not smuggled into the uuid space.
+Step 12's repository layer will need to map `POT_ID`/`HOUSE_ID` ⇄ `party = 'pot' | 'house',
+player_id = null` when it starts writing real `transfers` rows.
+
+### The step-10 RPCs, and what's deliberately *not* one
+**Step 10 · 2026-07-29 · decision**
+
+`PLAN.md` names exactly two RPCs for step 10: `take_over_host` and "the join-request path."
+Built as three functions plus one trigger, reasoned out as follows — a plain RLS-gated
+`INSERT` already covers "ask to join" for a signed-in group member (`join_requests_insert`), so
+that's not an RPC at all; a small `AFTER INSERT` trigger on `join_requests`
+(`log_join_requested`) appends the matching `join_requested` game_event so the ask still shows
+up in the audit log, since a direct table insert wouldn't otherwise produce one.
+`decide_join_request(request_id, approve)` is the actual "join-request path" RPC — host-only,
+and genuinely needs to be one function since approval atomically creates a `game_players` (via
+a `player_added` event, letting the existing trigger seat them) or `game_viewers` row *and*
+appends the decision event. `take_over_host` matches `03-data-model.md#host-takeover` directly.
+`mark_event_undone` (see the entry above) rounds out the set — not named in `PLAN.md`, but
+without it "sets `undone_by`" has no real implementation at all.
+
+**Deliberately not built here** (all step 13's, once `share_links` has real token-validation
+logic behind it): the anonymous/share-link variant of asking to join, `find_user_by_username`
+(that's step 14's, per its own exit criteria), and any RPC that lets an anonymous caller read or
+write anything — `join_requests_insert`/`player_claims_insert` only cover the signed-in,
+in-app, same-group path for exactly this reason.
+
+### `profiles_public`: a security-definer view is how column-level privacy actually works under RLS
+**Step 10 · 2026-07-29 · decision**
+
+`03-data-model.md#row-level-security` wants `profiles.username`/`display_name`/`avatar_url`
+readable to co-members of a shared group, with everything else (phone, locale,
+`stats_visibility`, `default_nickname`) self-only. RLS is strictly row-level — a single row
+policy can't show one caller the full row and a different caller only three columns of the same
+row. The base `profiles` table's own RLS is plain self-only (`id = auth.uid()`); a separate
+view, `profiles_public`, declared `with (security_invoker = false)` so it runs as the view
+*owner* rather than the caller and therefore isn't blocked by the base table's self-only
+policy, does the actual narrowing — its own `where` clause (self, or a shared `group_members`
+row) is what enforces "co-members only," not a table policy. `auth.uid()` still correctly
+reflects the real caller inside a `security_invoker = false` view since it reads a per-session
+GUC, not anything tied to the view's ownership.
+
+### `group_members` has no general INSERT policy — only the creator-becomes-owner exception
+**Step 10 · 2026-07-29 · decision**
+
+`03-data-model.md#joining-a-group`: "Rows only ever appear when someone accepts an invite …
+Nobody is ever added to a group by someone else's action alone." A permissive INSERT policy for
+owner/admin would violate that directly (an admin could insert a member row bypassing the
+accept-invite gate). So `group_members` has **no** general INSERT policy at all — every regular
+membership row is meant to come from an `accept_invite()`-style `SECURITY DEFINER` RPC, which
+step 14 builds. The one necessary exception: a brand-new group needs *someone* to become its
+first owner, and there's no invite to accept for that. `group_members_insert_owner` allows
+exactly that one row — `role = 'owner' and user_id = auth.uid() and user_id =
+group_created_by(group_id)` — tying it to being the group's own creator, enforced together with
+the `one_owner_per_group` partial unique index. `group_members_update`/`_delete` are baseline
+guards only (nobody can touch a row currently `role = 'owner'`, nobody can set `role = 'owner'`
+via a plain update) — step 14's own exit criteria ("no path demotes or removes the owner") is
+where this gets its real test coverage, once promotion/demotion RPCs exist to test against.
+
+### Step 10 built all 17 tables, not just the 14 "live" ones — PLAN.md's step 11 is updated to match
+**Step 10 · 2026-07-29 · decision**
+
+`03-data-model.md` splits tables into "Live tables" (14, ending at `player_claims`) and
+"Permanent tables" (`game_summaries`, `player_results`, `transfer_summaries`) as two separate
+sections, and `PLAN.md` assigns the permanent three to step 11. But `03-data-model.md`'s own RLS
+table covers all 17 in one list, and CLAUDE.md's non-negotiable is "RLS on every table, no
+exceptions" — not "no exceptions, eventually." Rather than leave three tables without RLS until
+step 11, all 17 were created and RLS-enabled here, with the permanent three getting exactly the
+read policies `03-data-model.md#row-level-security` specifies and **no write policy for any
+role** ("Nobody. Written only by `finalize_game()`" — which doesn't exist until step 11 and, per
+the doc, runs as the table owner and bypasses RLS entirely regardless of what policies exist).
+`PLAN.md`'s step 11 section is edited accordingly: it no longer lists creating these tables as
+new work, since they already exist with RLS in place.
+
 ### `tsc --noEmit -p .` is not `npm run typecheck` — it silently misses real errors
 **Step 9 · 2026-07-29 · trap · environment**
 

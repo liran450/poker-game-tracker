@@ -110,7 +110,7 @@ export default tseslint.config(
 
   // Node-side config files.
   {
-    files: ['*.config.{ts,js}', 'eslint-local/**/*.js', 'e2e/**/*.ts'],
+    files: ['*.config.{ts,js}', 'eslint-local/**/*.js', 'e2e/**/*.ts', 'supabase/tests/**/*.ts'],
     languageOptions: { globals: globals.node },
     rules: {
       'i18next/no-literal-string': 'off',

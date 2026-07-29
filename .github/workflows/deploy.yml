@@ -48,8 +48,44 @@ jobs:
         with:
           path: dist
 
+  db-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Rebuilds the schema from supabase/migrations against a bare Postgres service
+      # container (no Supabase CLI/Docker-in-Docker needed — see docs/build/NOTES.md for why),
+      # then asserts: RLS is enabled on every table (and that check has teeth), a non-host
+      # cannot write, someone not in the game cannot take over host, every rejection is the
+      # same generic shape, and the game_event_type enum matches core/events.ts exactly.
+      - name: Schema, RLS and event-enum-parity tests
+        env:
+          SUPABASE_TEST_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: npm run test:db
+
   deploy:
-    needs: verify
+    needs: [verify, db-tests]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
