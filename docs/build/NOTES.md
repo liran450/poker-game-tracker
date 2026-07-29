@@ -45,6 +45,67 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### Draining the pot globally first can beat the DP optimum — a real counterexample, not a hunch
+**Step 8 · 2026-07-29 · trap**
+
+05-settlement.md's prose reads as a literal two-phase algorithm: "drain the pot first... before
+the general algorithm runs, greedily match the pot against the largest creditors," and separately
+claims "this never increases the transfer count." Implemented literally (repeatedly match the pot
+against whichever creditor is currently largest *across the whole node set*, before running
+exact-pair-cancellation/DP on what's left), it produces a concrete counterexample:
+
+```
+pot = −₪60, A = +₪50, B = +₪10, C = −₪30, D = +₪30      (all ×100 for minor units)
+```
+
+The true optimum is 3 transfers — partition into `{pot, A, B}` (sums to 0, needs 2 transfers) and
+`{C, D}` (sums to 0, needs 1) — but draining the pot globally first pulls `D` (the largest
+remaining creditor after `A`) into the pot's payments instead, which breaks the `{C, D}` pair and
+forces a 4th transfer.
+
+**Fix:** don't drain the pot as a separate pass. Run the DP partition (`core/settlement.ts`'s
+`partitionIntoZeroSumGroups`) over *all* nodes uniformly, pot included, then apply "prefer the pot
+as payer" only as a tie-break *inside* each group's greedy resolution — pick the pot as the active
+debtor every round while it's still alive, before falling back to largest-magnitude. This is
+provably safe: for a DP-irreducible (atomic) zero-sum group, greedy always produces exactly
+`|group| − 1` transfers regardless of match order (proof sketch: any mid-greedy coincidental
+double-zero would imply a smaller zero-sum subset existed in the group's original values, which
+contradicts the DP having found the group atomic in the first place) — so reordering *within* a
+group to prefer the pot can never cost an extra transfer, unlike reordering *across* groups before
+they're even determined. `settlement.test.ts` keeps the counterexample above as a permanent
+regression (`computeTransfers — fixed regressions`).
+
+**The general lesson:** when a spec's prose describes an algorithm as two sequential passes, check
+whether the second pass's optimality actually depends on the first pass not having run yet, before
+implementing it that way.
+
+### The house/unaccounted node's settlement balance is literally `unaccountedMinor`
+**Step 8 · 2026-07-29 · decision**
+
+05-settlement.md's safeguard section says "assign to the house — `unaccounted_minor` absorbs the
+difference. It becomes a node in the settlement graph so the math closes" but never states the
+node's balance formula. Derived it from the invariant the doc *does* state (`Σ balance(p) +
+balance(pot) = 0` when chips balance): adding a house node with `balance(house) = unaccountedMinor`
+makes the whole graph (players + pot + house) sum to exactly `−(rawDiscrepancy − unaccountedMinor)`
+— which is zero precisely when the host has set `unaccountedMinor` to the full raw discrepancy,
+i.e. exactly when `core/pot.ts`'s `computePotStatus` reports the banner as green. The two modules
+agree on when "balanced" means balanced without importing each other — tested directly in
+`settlement.test.ts` ("the house's balance is unaccountedMinor verbatim, and closes the graph").
+
+### `TransferSummarySnapshot` carries ids, not the `from_name`/`to_name` text the DB schema wants
+**Step 8 · 2026-07-29 · decision**
+
+03-data-model.md's `transfer_summaries` table stores denormalised display text (`קופה` for the
+pot) directly, not a foreign key — reasonable for a table that must still read correctly after the
+live rows are purged. But resolving a party id to display text needs player names and i18next (for
+the pot/house labels), neither of which `core/settlement.ts` may import under the Purity rule.
+`buildGameSnapshot` therefore emits `Transfer`'s own `fromId`/`toId` (a real player id, or the
+`POT_ID`/`HOUSE_ID` sentinel) and leaves the id→text resolution to whichever layer actually writes
+the DB row — step 11, which has both the player list and the real i18n singleton available. Same
+shape decision as `transfer_edited`'s existing `fromPlayerId`/`toPlayerId: string | null` payload
+(step 4), just without collapsing the pot case to `null` here since a second sentinel (`HOUSE_ID`)
+needed representing too.
+
 ### `fold()`'s tie-break is a random UUID compare — stamp a monotonic clock, don't rely on it
 **Step 7 · 2026-07-29 · trap**
 
