@@ -29,7 +29,8 @@
     "backToHome": "חזרה לבית",
     "headerSummary": "ז'יטון {{chipValue}} · קנייה {{buyAmount}} · {{count}} שחקנים",
     "addPlayer": "+ שחקן",
-    "menu": "אפשרויות משחק"
+    "menu": "אפשרויות משחק",
+    "endGame": "סיום משחק"
   },
   "addPlayers": {
     "title": "הוספת שחקנים",
@@ -135,14 +136,92 @@
       "undone": "בוטלים"
     }
   },
+  "endGame": {
+    "title": "סיום המשחק",
+    "playerCount": "{{count}} שחקנים",
+    "pot": "קופה במשחק",
+    "sharedCosts": "הוצאות משותפות",
+    "pendingSync": "יש שינויים שעדיין לא סונכרנו",
+    "playersStillOpen_one": "יש שחקן אחד שעדיין לא נסגר",
+    "playersStillOpen_two": "יש 2 שחקנים שעדיין לא נסגרו",
+    "playersStillOpen_other": "יש {{count}} שחקנים שעדיין לא נסגרו",
+    "discrepancyPrompt": "יש פער של {{amount}}. תקנו את ספירת הז'יטונים, או שייכו את ההפרש ל\"לא מזוהה / הבית\" לפני החישוב.",
+    "acknowledgeDiscrepancy": "להמשיך למרות הפער",
+    "slideLabel": "החלק לסיום המשחק"
+  },
+  "settlement": {
+    "title": "סיכום וחישוב",
+    "resultsHeading": "תוצאות",
+    "transfersHeading": "העברות",
+    "recalculate": "חשב מחדש",
+    "recalculateConfirmTitle": "לחשב מחדש?",
+    "recalculateConfirmDesc": "כל העריכות הידניות שבוצעו יימחקו ויוחלפו בחישוב טרי.",
+    "recalculateConfirmLabel": "חשב מחדש",
+    "addTransfer": "+ הוסף העברה",
+    "finish": "סיים",
+    "pickerTitle": "בחר צד להעברה",
+    "amountField": "סכום ההעברה",
+    "deleteTransfer": "מחיקת העברה",
+    "progress": {
+      "incomplete": "שויך {{assigned}} מתוך {{total}} · חסר {{missing}}",
+      "complete": "הכל שויך ✓"
+    },
+    "reconciliation": {
+      "name": "שם",
+      "shouldMove": "אמור",
+      "actuallyAssigned": "בפועל",
+      "difference": "פער",
+      "ok": "תואם"
+    }
+  },
+  "summary": {
+    "title": "סיכום המשחק",
+    "share": "שיתוף",
+    "copyTransfers": "העתק העברות",
+    "copied": "הועתק",
+    "noTransfers": "אין העברות לביצוע",
+    "menu": "אפשרויות משחק",
+    "reopen": "פתח מחדש",
+    "reopenCountdown": "אפשר לפתוח מחדש עוד {{hours}} שעות",
+    "reopenExpired": "חלון הפתיחה מחדש נסגר",
+    "reopenConfirmTitle": "פתיחת המשחק מחדש",
+    "reopenConfirmDesc": "המשחק ייפתח מחדש לעריכה. הסיכום הנוכחי יימחק ויחושב שוב בסיום הבא.",
+    "reopenConfirmLabel": "פתח מחדש"
+  },
+  "install": {
+    "title": "התקנת האפליקציה",
+    "body": "הוסיפו למסך הבית לגישה מהירה יותר, גם בלי חיבור.",
+    "action": "הוספה למסך הבית",
+    "dismiss": "לא עכשיו"
+  },
   "money": {
     "chipValue": "ז'יטון = {{value}}",
     "buyAmount": "סכום קנייה",
     "chipsPerBuy": "ז'יטונים לקנייה",
     "pot": "קופה",
+    "unaccountedBucket": "לא מזוהה / הבית",
     "balanced": "מאוזן · קניות {{buyTotal}} = ז'יטונים {{chipTotal}}",
     "discrepancy": "פער של {{amount}} · קניות {{buyTotal}} · ז'יטונים {{chipTotal}}",
     "total": "סה\"כ"
+  },
+  "share": {
+    "liveHeader": "🃏 {{name}} — {{date}}",
+    "stakesLine": "קנייה {{buyAmount}} · ז'יטון {{chipValue}}",
+    "stakesLineWithCount": "קנייה {{buyAmount}} · ז'יטון {{chipValue}} · {{count}} שחקנים",
+    "playerLine": "{{name}} — {{buyPhrase}} ({{money}})",
+    "buyInCount_one": "{{count}} קנייה",
+    "buyInCount_two": "{{count}} קניות",
+    "buyInCount_other": "{{count}} קניות",
+    "cashPaidFlag": "שילם במזומן",
+    "settledFlag": "סגירה עם {{chips}} ז'יטונים",
+    "totalInGame": "סה\"כ במשחק: {{amount}}",
+    "finalHeader": "🃏 סיכום — {{name}} {{date}}",
+    "resultsHeading": "תוצאות:",
+    "resultLine": "{{name}} {{amount}}",
+    "sharedCostsLine": "הוצאות משותפות: {{label}} {{amount}} ({{perPerson}} לאחד)",
+    "transfersHeading": "העברות:",
+    "transferLine": "{{from}} משלם ל{{to}} — {{amount}}",
+    "transferLinePot": "מהקופה ל{{to}} — {{amount}}"
   },
   "ui": {
     "confirm": "אישור",

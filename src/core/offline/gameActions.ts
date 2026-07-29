@@ -1,5 +1,17 @@
-import { createUndoEvent, fold, generateClientEventId, type GameEvent } from '../events';
-import type { Minor } from '../money';
+import { createUndoEvent, fold, generateClientEventId, type GameEvent, type GameState } from '../events';
+import { minor, type Minor } from '../money';
+import { dedupeDisplayNames, renderPlayerName } from '../players';
+import {
+  buildGameSnapshot,
+  computeBalances,
+  computeTransfers,
+  settlementNodes,
+  type GameSnapshotInput,
+  type SettlementPlayerInput,
+  type SettlementSharedCostInput,
+  type SnapshotPlayerInput,
+  type Transfer,
+} from '../settlement';
 import { nextTimestamp } from './clock';
 import { db, type CachedGameRecord } from './db';
 import { getLocalActorId } from './localIdentity';
@@ -337,4 +349,264 @@ export async function undoEvent(original: GameEvent): Promise<void> {
   const actorId = await getLocalActorId();
   const { inverseEvent, undoneByEventId } = createUndoEvent(original, actorId, nextTimestamp());
   await appendUndoEvent(inverseEvent, original.clientEventId, undoneByEventId);
+}
+
+// ---------------------------------------------------------------------------
+// Ending the game (04-ux-spec.md#ending-the-game, 05-settlement.md#edit-mode-1617)
+// ---------------------------------------------------------------------------
+
+async function loadSettlementInputs(gameId: string): Promise<{
+  buyAmountMinor: Minor;
+  chipsPerBuy: number;
+  state: GameState;
+  settlementPlayers: SettlementPlayerInput[];
+  sharedCosts: SettlementSharedCostInput[];
+}> {
+  const record = await db.games.get(gameId);
+  const state = fold(await loadGameEvents(gameId));
+  const buyAmountMinor = minor(record?.buyAmountMinor ?? 0);
+  const chipsPerBuy = record?.chipsPerBuy ?? 1;
+
+  const activePlayers = [...state.players.values()].filter((p) => !p.isRemoved);
+  const settlementPlayers: SettlementPlayerInput[] = activePlayers.map((p) => ({
+    id: p.id,
+    seatOrder: p.seatOrder,
+    buysCount: p.buysCount,
+    cashPaidMinor: p.cashPaidMinor,
+    chipsFinal: p.chipsFinal ?? 0,
+  }));
+  const sharedCosts: SettlementSharedCostInput[] = [...state.sharedCosts.values()].map((c) => ({
+    id: c.id,
+    amountMinor: c.amountMinor,
+    paidByPlayerId: c.paidByPlayerId,
+    shares: c.shares,
+  }));
+
+  return { buyAmountMinor, chipsPerBuy, state, settlementPlayers, sharedCosts };
+}
+
+async function computeFreshTransfers(gameId: string): Promise<readonly Transfer[]> {
+  const { buyAmountMinor, chipsPerBuy, state, settlementPlayers, sharedCosts } =
+    await loadSettlementInputs(gameId);
+  const balances = computeBalances(
+    settlementPlayers,
+    sharedCosts,
+    buyAmountMinor,
+    chipsPerBuy,
+    state.unaccountedMinor,
+  );
+  return computeTransfers(settlementNodes(balances));
+}
+
+async function appendTransferEdited(
+  gameId: string,
+  actorId: string,
+  transferId: string,
+  fromPlayerId: string,
+  toPlayerId: string,
+  amountMinor: Minor,
+): Promise<void> {
+  await appendEvent({
+    clientEventId: generateClientEventId(),
+    gameId,
+    playerId: null,
+    actorId,
+    clientCreatedAt: nextTimestamp(),
+    undoneBy: null,
+    type: 'transfer_edited',
+    payload: { transferId, fromPlayerId, toPlayerId, amountMinor },
+  });
+}
+
+async function seedTransfers(gameId: string): Promise<void> {
+  const transfers = await computeFreshTransfers(gameId);
+  const actorId = await getLocalActorId();
+  for (const t of transfers) {
+    await appendTransferEdited(gameId, actorId, crypto.randomUUID(), t.fromId, t.toId, t.amountMinor);
+  }
+}
+
+/**
+ * Enters the settlement/edit-mode screen: `game_settling`, then seeds the
+ * initial transfer list from the computed optimum as real, editable
+ * `transfer_edited` events — from this point on `state.transfers` is the
+ * single source of truth for what's displayed, no separate "computed
+ * default" merging logic needed anywhere (docs/build/NOTES.md).
+ *
+ * Callers must ensure every active player is settled first — the
+ * missing-players check (04-ux-spec.md#ending-the-game) lives in the UI,
+ * since `computeBalances` needs every player's final chip count.
+ */
+export async function beginSettlement(gameId: string): Promise<void> {
+  const actorId = await getLocalActorId();
+  await appendEvent({
+    clientEventId: generateClientEventId(),
+    gameId,
+    playerId: null,
+    actorId,
+    clientCreatedAt: nextTimestamp(),
+    undoneBy: null,
+    type: 'game_settling',
+    payload: {},
+  });
+  await seedTransfers(gameId);
+}
+
+/** A transfer row's chip-picker (party) or keypad (amount) edit. */
+export async function editTransfer(
+  gameId: string,
+  transferId: string,
+  fromPlayerId: string,
+  toPlayerId: string,
+  amountMinor: Minor,
+): Promise<void> {
+  const actorId = await getLocalActorId();
+  await appendTransferEdited(gameId, actorId, transferId, fromPlayerId, toPlayerId, amountMinor);
+}
+
+/** `+ הוסף העברה`. */
+export async function addManualTransfer(
+  gameId: string,
+  fromPlayerId: string,
+  toPlayerId: string,
+  amountMinor: Minor,
+): Promise<void> {
+  await editTransfer(gameId, crypto.randomUUID(), fromPlayerId, toPlayerId, amountMinor);
+}
+
+/**
+ * Swipe/trash on a transfer row. Zeroes it out rather than removing it —
+ * nothing is ever deleted from the log — and the UI filters zero-amount
+ * transfers out of what it displays.
+ */
+export async function deleteTransfer(
+  gameId: string,
+  transferId: string,
+  fromPlayerId: string,
+  toPlayerId: string,
+): Promise<void> {
+  await editTransfer(gameId, transferId, fromPlayerId, toPlayerId, minor(0));
+}
+
+/**
+ * `חשב מחדש` (05-settlement.md#edit-mode-1617): discards every current
+ * transfer and reseeds from a fresh computation. The UI is responsible for
+ * confirming first — once settlement has begun there is always at least the
+ * auto-seeded list to discard.
+ */
+export async function recomputeTransfers(
+  gameId: string,
+  currentTransfers: readonly { id: string; fromPlayerId: string; toPlayerId: string }[],
+): Promise<void> {
+  const actorId = await getLocalActorId();
+  for (const t of currentTransfers) {
+    await appendTransferEdited(gameId, actorId, t.id, t.fromPlayerId, t.toPlayerId, minor(0));
+  }
+  await seedTransfers(gameId);
+}
+
+export interface FinalizeGameMeta {
+  readonly name: string;
+  readonly playedOn: string;
+  readonly currency: string;
+  readonly isPrivate: boolean;
+}
+
+/**
+ * `סיים` on the settlement screen: builds and stores the permanent snapshot
+ * (03-data-model.md#permanent-tables) from the host's final, possibly
+ * hand-edited transfer list, then appends `game_ended`. The snapshot is
+ * written *before* the event so a reader who sees `finished` can never find
+ * a game with no snapshot (docs/build/PLAN.md#step-8).
+ */
+export async function finalizeGame(gameId: string, meta: FinalizeGameMeta): Promise<void> {
+  const actorId = await getLocalActorId();
+  const { buyAmountMinor, chipsPerBuy, state } = await loadSettlementInputs(gameId);
+  const finishedAt = new Date().toISOString();
+
+  const settledOrder = [...state.players.values()]
+    .filter((p): p is typeof p & { settledAt: string } => p.settledAt !== null)
+    .sort((a, b) => (a.settledAt < b.settledAt ? -1 : 1));
+  const settledPositionById = new Map(settledOrder.map((p, i) => [p.id, i + 1]));
+
+  const activePlayers = [...state.players.values()].filter((p) => !p.isRemoved);
+  const displayNames = dedupeDisplayNames(
+    activePlayers.map((p) => ({ id: p.id, name: renderPlayerName(p), order: p.seatOrder })),
+  );
+
+  const snapshotInput: GameSnapshotInput = {
+    gameId,
+    groupId: null,
+    name: meta.name,
+    playedOn: meta.playedOn,
+    currency: meta.currency,
+    buyAmountMinor,
+    chipsPerBuy,
+    isPrivate: meta.isPrivate,
+    locationName: null,
+    finishedAt,
+    durationMinutes: state.startedAt
+      ? Math.max(0, Math.round((Date.parse(finishedAt) - Date.parse(state.startedAt)) / 60_000))
+      : 0,
+    unaccountedMinor: state.unaccountedMinor,
+    sharedCosts: [...state.sharedCosts.values()].map((c) => ({
+      id: c.id,
+      amountMinor: c.amountMinor,
+      paidByPlayerId: c.paidByPlayerId,
+      shares: c.shares,
+    })),
+    players: activePlayers.map(
+      (p): SnapshotPlayerInput => ({
+        id: p.id,
+        seatOrder: p.seatOrder,
+        userId: p.userId,
+        guestName: p.guestName,
+        displayName: displayNames.get(p.id) ?? '',
+        buysCount: p.buysCount,
+        cashPaidMinor: p.cashPaidMinor,
+        chipsFinal: p.chipsFinal ?? 0,
+        joinedAt: p.joinedAt,
+        leftAt: p.settledAt,
+        settledPosition: settledPositionById.get(p.id) ?? null,
+      }),
+    ),
+  };
+
+  const finalTransfers: Transfer[] = [...state.transfers.values()]
+    .filter((t) => t.amountMinor > 0)
+    .map((t) => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amountMinor: t.amountMinor }));
+
+  const snapshot = buildGameSnapshot(snapshotInput, undefined, finalTransfers);
+  await db.snapshots.put({ gameId, snapshot });
+
+  await appendEvent({
+    clientEventId: generateClientEventId(),
+    gameId,
+    playerId: null,
+    actorId,
+    clientCreatedAt: nextTimestamp(),
+    undoneBy: null,
+    type: 'game_ended',
+    payload: {},
+  });
+}
+
+/**
+ * `פתח מחדש` within 24h (03-data-model.md#permanent-tables): reopens the
+ * game and deletes its snapshot, since reopening makes it stale — the next
+ * `finalizeGame` rewrites it, so there is never a stale duplicate.
+ */
+export async function reopenGame(gameId: string): Promise<void> {
+  const actorId = await getLocalActorId();
+  await appendEvent({
+    clientEventId: generateClientEventId(),
+    gameId,
+    playerId: null,
+    actorId,
+    clientCreatedAt: nextTimestamp(),
+    undoneBy: null,
+    type: 'game_reopened',
+    payload: {},
+  });
+  await db.snapshots.delete(gameId);
 }

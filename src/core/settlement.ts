@@ -352,6 +352,73 @@ function partitionIntoZeroSumGroups(nodes: readonly WorkingNode[]): WorkingNode[
 }
 
 // ---------------------------------------------------------------------------
+// Edit-mode reconciliation (05-settlement.md#edit-mode-1617)
+// ---------------------------------------------------------------------------
+
+export interface ReconciliationRow {
+  readonly nodeId: string;
+  /** אמור — what this node's balance says still has to move. */
+  readonly shouldMoveMinor: Minor;
+  /** בפועל — Σ of their transfers, signed (received minus sent). */
+  readonly actuallyAssignedMinor: Minor;
+  /** פער — actual minus should. Zero means this node's row is fully accounted for. */
+  readonly differenceMinor: Minor;
+  readonly isReconciled: boolean;
+}
+
+/** The per-node אמור/בפועל/פער strip under the transfer list. */
+export function computeReconciliation(
+  nodes: readonly SettlementNode[],
+  transfers: readonly Transfer[],
+): ReconciliationRow[] {
+  const assigned = new Map<string, number>();
+  for (const node of nodes) assigned.set(node.id, 0);
+  for (const t of transfers) {
+    assigned.set(t.toId, (assigned.get(t.toId) ?? 0) + t.amountMinor);
+    assigned.set(t.fromId, (assigned.get(t.fromId) ?? 0) - t.amountMinor);
+  }
+
+  return nodes.map((node) => {
+    const actuallyAssignedMinor = minor(assigned.get(node.id) ?? 0);
+    const differenceMinor = subtract(actuallyAssignedMinor, node.amountMinor);
+    return {
+      nodeId: node.id,
+      shouldMoveMinor: node.amountMinor,
+      actuallyAssignedMinor,
+      differenceMinor,
+      isReconciled: isZero(differenceMinor),
+    };
+  });
+}
+
+export interface SettlementProgress {
+  /** שויך — Σ of every transfer's amount. */
+  readonly assignedMinor: Minor;
+  /** מתוך — Σ of every positive balance, i.e. the total that has to move. */
+  readonly totalToMoveMinor: Minor;
+  /** True once every node's difference is zero — `הכל שויך ✓`. */
+  readonly isComplete: boolean;
+}
+
+/** The sticky balance banner's `שויך ₪430 מתוך ₪480 · חסר ₪50` / `הכל שויך ✓`. */
+export function computeSettlementProgress(
+  nodes: readonly SettlementNode[],
+  transfers: readonly Transfer[],
+): SettlementProgress {
+  const assignedMinor = sum(transfers.map((t) => t.amountMinor));
+  const totalToMoveMinor = sum(
+    nodes.filter((n) => n.amountMinor > 0).map((n) => n.amountMinor),
+  );
+  const reconciliation = computeReconciliation(nodes, transfers);
+
+  return {
+    assignedMinor,
+    totalToMoveMinor,
+    isComplete: reconciliation.every((row) => row.isReconciled),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The snapshot builder (03-data-model.md#permanent-tables)
 // ---------------------------------------------------------------------------
 //
@@ -443,6 +510,16 @@ export interface GameSnapshot {
 export function buildGameSnapshot(
   input: GameSnapshotInput,
   generateId: () => string = () => crypto.randomUUID(),
+  /**
+   * The host's final, possibly hand-edited transfer list from the
+   * settlement screen (05-settlement.md#edit-mode-1617). When given, this
+   * is written verbatim — `computeTransfers` is not called, and its
+   * sum-to-zero precondition is not enforced, because a host is allowed to
+   * finish with a red banner after an explicit acknowledgement
+   * (05-settlement.md#the-safeguard-20). Omit it to get the plain computed
+   * optimum, e.g. for a preview before editing has started.
+   */
+  transfersOverride?: readonly Transfer[],
 ): GameSnapshot {
   const settlementPlayers: SettlementPlayerInput[] = input.players.map((p) => ({
     id: p.id,
@@ -459,7 +536,7 @@ export function buildGameSnapshot(
     input.chipsPerBuy,
     input.unaccountedMinor,
   );
-  const transfers = computeTransfers(settlementNodes(balances));
+  const transfers = transfersOverride ?? computeTransfers(settlementNodes(balances));
   const balanceByPlayerId = new Map(balances.players.map((b) => [b.playerId, b]));
 
   const totalBuyInsMinor = sum(balances.players.map((b) => b.owedMinor));

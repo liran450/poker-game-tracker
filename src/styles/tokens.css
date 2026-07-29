@@ -74,6 +74,18 @@
   --animate-sheet-in: sheet-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
   --animate-fade-in: fade-in 200ms ease;
   --animate-rise: rise 240ms ease-out;
+
+  /* ---- Surface treatment. Missed in the first token pass — the prototype's
+     depth comes as much from these as from the flat surface colours above.
+     Added 2026-07-29; see docs/build/NOTES.md. Not retrofitted onto already-
+     built screens — new and touched screens should reach for these instead
+     of a flat surface-* background where the mock uses one. ---- */
+  --gradient-card-accent: linear-gradient(150deg, #241d12, #1b1610);
+  --gradient-card-positive: linear-gradient(150deg, #1c2a1e, #1a1610);
+  --gradient-card-negative: linear-gradient(150deg, #241b1a, #1a1610);
+  --gradient-card-neutral: linear-gradient(150deg, #3a2f1f, #241d12);
+  --shadow-glow-positive: 0 0 8px var(--color-positive);
+  --shadow-elevation: 0 8px 24px rgb(0 0 0 / 50%);
 }
 
 /*

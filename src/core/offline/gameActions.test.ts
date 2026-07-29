@@ -1,17 +1,25 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fold } from '../events';
 import { minor } from '../money';
+import { POT_ID } from '../settlement';
 import { db } from './db';
 import {
   addBuyIn,
+  addManualTransfer,
   addPlayersToGame,
   addSharedCost,
+  beginSettlement,
   createGame,
+  deleteTransfer,
   editSettledChips,
+  editTransfer,
+  finalizeGame,
+  recomputeTransfers,
   removeBuyIn,
   removePlayer,
   removeSharedCost,
   renamePlayer,
+  reopenGame,
   reopenPlayer,
   setCashPaid,
   settlePlayer,
@@ -38,6 +46,7 @@ beforeEach(async () => {
     db.outbox.clear(),
     db.recentPlayers.clear(),
     db.meta.clear(),
+    db.snapshots.clear(),
   ]);
 });
 
@@ -289,5 +298,186 @@ describe('setUnaccounted', () => {
     const { gameId } = await createGame(baseInput);
     await setUnaccounted(gameId, minor(2000));
     expect(fold(await loadGameEvents(gameId)).unaccountedMinor).toBe(2000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ending the game
+// ---------------------------------------------------------------------------
+
+/** Seats and settles the four-player worked example from 07-hebrew-glossary.md
+ *  (דנה +50, אורי +20, רני −30, מור −40), so the safeguard is balanced and
+ *  `beginSettlement` doesn't throw on an unbalanced pot. */
+async function createBalancedFinishedGame(): Promise<{
+  gameId: string;
+  ids: { mor: string; uri: string; rani: string; dana: string };
+}> {
+  const { gameId } = await createGame(baseInput);
+  const state = fold(await loadGameEvents(gameId));
+  const byName = (name: string) =>
+    [...state.players.values()].find((p) => p.guestName === name)!.id;
+  const ids = { mor: byName('מור'), uri: byName('אורי'), rani: byName('רני'), dana: byName('דנה') };
+
+  for (const id of Object.values(ids)) await addBuyIn(gameId, id);
+  await settlePlayer(gameId, ids.mor, 20);
+  await settlePlayer(gameId, ids.uri, 140);
+  await settlePlayer(gameId, ids.rani, 40);
+  await settlePlayer(gameId, ids.dana, 200);
+
+  return { gameId, ids };
+}
+
+describe('beginSettlement', () => {
+  it('transitions to settling and seeds the computed transfer list as real events', async () => {
+    const { gameId, ids } = await createBalancedFinishedGame();
+
+    await beginSettlement(gameId);
+
+    const state = fold(await loadGameEvents(gameId));
+    expect(state.status).toBe('settling');
+    const transfers = [...state.transfers.values()].filter((t) => t.amountMinor > 0);
+    // מור→דנה ₪40, רני→אורי ₪20, רני→דנה ₪10 — the exact fixture from settlement.test.ts.
+    expect(transfers).toHaveLength(3);
+    expect(transfers.reduce((s, t) => s + t.amountMinor, 0)).toBe(7000);
+    expect(transfers.every((t) => t.fromPlayerId === ids.mor || t.fromPlayerId === ids.rani)).toBe(true);
+  });
+});
+
+describe('editing transfers during settlement', () => {
+  it('editTransfer overwrites a seeded transfer in place (same transferId, last-writer-wins)', async () => {
+    const { gameId } = await createBalancedFinishedGame();
+    await beginSettlement(gameId);
+    const before = [...fold(await loadGameEvents(gameId)).transfers.values()].find(
+      (t) => t.amountMinor > 0,
+    )!;
+
+    await editTransfer(gameId, before.id, before.fromPlayerId, before.toPlayerId, minor(1));
+
+    const after = fold(await loadGameEvents(gameId)).transfers.get(before.id);
+    expect(after?.amountMinor).toBe(1);
+    expect(after?.isManual).toBe(true);
+  });
+
+  it('addManualTransfer adds a new row without touching existing ones', async () => {
+    const { gameId, ids } = await createBalancedFinishedGame();
+    await beginSettlement(gameId);
+    const before = [...fold(await loadGameEvents(gameId)).transfers.values()];
+
+    await addManualTransfer(gameId, ids.mor, ids.dana, minor(500));
+
+    const after = [...fold(await loadGameEvents(gameId)).transfers.values()].filter(
+      (t) => t.amountMinor > 0,
+    );
+    expect(after).toHaveLength(before.filter((t) => t.amountMinor > 0).length + 1);
+  });
+
+  it('deleteTransfer zeroes the row instead of removing it from the log', async () => {
+    const { gameId } = await createBalancedFinishedGame();
+    await beginSettlement(gameId);
+    const target = [...fold(await loadGameEvents(gameId)).transfers.values()].find(
+      (t) => t.amountMinor > 0,
+    )!;
+
+    await deleteTransfer(gameId, target.id, target.fromPlayerId, target.toPlayerId);
+
+    const events = await loadGameEvents(gameId);
+    expect(events.some((e) => e.type === 'transfer_edited' && e.payload.transferId === target.id)).toBe(
+      true,
+    );
+    expect(fold(events).transfers.get(target.id)?.amountMinor).toBe(0);
+  });
+
+  it('recomputeTransfers zeroes every current row and reseeds fresh ones', async () => {
+    const { gameId } = await createBalancedFinishedGame();
+    await beginSettlement(gameId);
+    const current = [...fold(await loadGameEvents(gameId)).transfers.values()].map((t) => ({
+      id: t.id,
+      fromPlayerId: t.fromPlayerId,
+      toPlayerId: t.toPlayerId,
+    }));
+
+    await recomputeTransfers(gameId, current);
+
+    const state = fold(await loadGameEvents(gameId));
+    for (const c of current) {
+      expect(state.transfers.get(c.id)?.amountMinor).toBe(0);
+    }
+    const fresh = [...state.transfers.values()].filter((t) => t.amountMinor > 0);
+    expect(fresh).toHaveLength(3);
+  });
+
+  it('can route a transfer through the pot sentinel', async () => {
+    const { gameId, ids } = await createBalancedFinishedGame();
+    await beginSettlement(gameId);
+
+    await addManualTransfer(gameId, POT_ID, ids.dana, minor(100));
+
+    const state = fold(await loadGameEvents(gameId));
+    expect([...state.transfers.values()].some((t) => t.fromPlayerId === POT_ID)).toBe(true);
+  });
+});
+
+describe('finalizeGame', () => {
+  it('writes the snapshot before appending game_ended, using the settlement-screen transfer list verbatim', async () => {
+    const { gameId } = await createBalancedFinishedGame();
+    await beginSettlement(gameId);
+    const seeded = [...fold(await loadGameEvents(gameId)).transfers.values()].filter(
+      (t) => t.amountMinor > 0,
+    );
+
+    await finalizeGame(gameId, {
+      name: 'פוקר חמישי',
+      playedOn: '2026-07-29',
+      currency: 'ILS',
+      isPrivate: false,
+    });
+
+    const state = fold(await loadGameEvents(gameId));
+    expect(state.status).toBe('finished');
+
+    const record = await db.snapshots.get(gameId);
+    expect(record).toBeDefined();
+    expect(record!.snapshot.summary.playerCount).toBe(4);
+    expect(record!.snapshot.transfers).toHaveLength(seeded.length);
+    expect(record!.snapshot.playerResults).toHaveLength(4);
+  });
+
+  it('a manual edit made in the settlement screen survives verbatim into the snapshot', async () => {
+    const { gameId, ids } = await createBalancedFinishedGame();
+    await beginSettlement(gameId);
+    // Route ₪999 through the pot instead of whatever the optimum computed —
+    // proves finalizeGame writes the host's edit, not a fresh recomputation.
+    await addManualTransfer(gameId, POT_ID, ids.dana, minor(999));
+
+    await finalizeGame(gameId, {
+      name: 'פוקר חמישי',
+      playedOn: '2026-07-29',
+      currency: 'ILS',
+      isPrivate: false,
+    });
+
+    const record = await db.snapshots.get(gameId);
+    expect(record!.snapshot.transfers.some((t) => t.fromId === POT_ID && t.amountMinor === 999)).toBe(
+      true,
+    );
+  });
+});
+
+describe('reopenGame', () => {
+  it('reopens a finished game and deletes its now-stale snapshot', async () => {
+    const { gameId } = await createBalancedFinishedGame();
+    await beginSettlement(gameId);
+    await finalizeGame(gameId, {
+      name: 'פוקר חמישי',
+      playedOn: '2026-07-29',
+      currency: 'ILS',
+      isPrivate: false,
+    });
+    expect(await db.snapshots.get(gameId)).toBeDefined();
+
+    await reopenGame(gameId);
+
+    expect(fold(await loadGameEvents(gameId)).status).toBe('active');
+    expect(await db.snapshots.get(gameId)).toBeUndefined();
   });
 });

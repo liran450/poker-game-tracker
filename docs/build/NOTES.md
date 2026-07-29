@@ -45,6 +45,82 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### `tsc --noEmit -p .` is not `npm run typecheck` — it silently misses real errors
+**Step 9 · 2026-07-29 · trap · environment**
+
+`package.json`'s `typecheck` script is `tsc -b` (project-references build mode — the root
+`tsconfig.json` has `"files": []` and only `references`, delegating to `tsconfig.app.json`/
+`tsconfig.node.json`). Running `npx tsc --noEmit -p .` instead — which looks equivalent and is the
+natural ad hoc command to reach for — does **not** catch errors that `tsc -b` does. Concretely: it
+missed `SettlementRoute.tsx` passing `TransferState[]` (fields `fromPlayerId`/`toPlayerId`) where
+`computeReconciliation`/`computeSettlementProgress` require `Transfer[]` (fields `fromId`/`toId`) —
+a real bug (every reconciliation row silently read "actually assigned" as 0, so the settlement
+banner could never reach `הכל שויך ✓`) that sat undetected through several rounds of `tsc --noEmit
+-p .` reporting clean, and was only caught by the Playwright e2e test actually exercising the
+screen. Isolated confirmation: the same code, checked with `tsc -b --force` against a stripped-down
+reproduction, reports the missing-properties error immediately.
+
+**Always run the actual `npm run typecheck` (or `npm run verify`)**, never an ad hoc `tsc` 
+invocation, and don't trust a clean ad hoc run as proof of type safety in this repo.
+
+### A `BottomSheet`'s entrance animation makes a Playwright drag miss its target
+**Step 9 · 2026-07-29 · trap**
+
+`SlideToConfirm` inside `EndGameConfirmSheet` (a `BottomSheet`) uses real `onPointerDown`/
+`onPointerMove` handlers with `setPointerCapture`. Driving it with Playwright — `slider.
+boundingBox()` immediately after opening the sheet, then `page.mouse.down()`/`move()`/`up()` at
+those coordinates — silently did nothing: no error, `dragging.current` never even flips (confirmed
+by a temporary `console.log` in the handler), progress stays 0 forever. Root cause: `BottomSheet`
+slides in over 260ms (`--animate-sheet-in`), and `boundingBox()` was called mid-animation — by the
+time the real mouse-down event lands, the thumb has already moved to its final resting position, so
+the click/drag starts on empty space (or whatever's now behind it) instead. Confirmed by adding
+`page.waitForTimeout(400)` before measuring: the exact same drag code then works every time.
+
+**Rule for any future e2e test that measures element geometry right after opening a sheet, a
+snackbar, or anything else with an entrance transition:** wait for the animation to settle first —
+a fixed wait comfortably longer than the token's duration is enough; Playwright's own
+`locator.click()` handles this internally via its actionability checks, but raw `page.mouse`
+sequences do not.
+
+### The settlement graph needed a second non-player sentinel, so `transfer_edited` dropped `null`-for-pot
+**Step 9 · 2026-07-29 · decision**
+
+`transfer_edited`'s `fromPlayerId`/`toPlayerId` (step 4) were `string | null`, with `null` meaning
+the pot — reasonable when the pot was the only non-player party anyone had modelled. Step 8 added a
+second one, the house/unaccounted node, with no existing convention for representing it. Rather than
+inventing a second special value (`null` for pot, something else for house), the payload's fields
+became plain `string`, and `POT_ID`/`HOUSE_ID` (`core/settlement.ts`'s existing sentinel constants,
+already structurally distinct from a real player id) are used for both. Nothing outside
+`core/events.ts` depended on the old `null` convention yet (confirmed by grep before changing it),
+so this was a clean, low-risk rename rather than a real migration.
+
+### Step 3's token extraction missed gradients, glows and elevation shadows
+**Step 8 (design audit) · 2026-07-29 · trap · decision**
+
+The repository owner flagged that the built screens don't look as polished as the prototype.
+Checked it directly rather than guessing: `tokens.css`'s flat colour/type/radii/spacing values
+*are* genuinely lifted from the prototype's real inline styles (`#0E0C09`, `#E9A23C`, `#F4EFE7` all
+match exactly) — but a grep of the whole `src/` tree turned up exactly one `gradient` (an SVG
+sparkline fill) and zero `box-shadow` outside it, while the prototype uses `linear-gradient`s on
+four different card treatments, a colour-matched glow on every "live" status dot, and an elevation
+shadow on its toast. Step 3 extracted the palette and missed the surface treatment that gives that
+palette its depth — a real gap, not a subjective "make it look nicer."
+
+**Decision (owner):** don't retrofit the already-built screens (Home, NewGame, GamePage, their
+sheets) to pick these up now — that's deferred, informally, rather than scheduled for step 17
+specifically. The tokens themselves were added immediately (`--gradient-card-*`,
+`--shadow-glow-positive`, `--shadow-elevation` in `tokens.css`, documented in
+[`11 — Surface treatment`](../11-visual-design.md#surface-treatment)) so that **every screen built
+or touched from here on reaches for them** instead of a flat `surface-*` fill where the prototype
+uses one of these treatments. Check `11`'s new section before styling a card, an avatar, a status
+dot, or an overlay.
+
+**Also decided in the same conversation:** the ~20 states and the light theme
+[`11` already recorded as missing](../11-visual-design.md#what-the-design-does-not-cover) are not
+to be raised with the owner screen-by-screen as each one comes up. Extend the prototype's
+established visual language yourself and let the owner review the result — recorded as a working
+convention in `CLAUDE.md`.
+
 ### Draining the pot globally first can beat the DP optimum — a real counterexample, not a hunch
 **Step 8 · 2026-07-29 · trap**
 
