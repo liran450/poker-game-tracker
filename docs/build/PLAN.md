@@ -463,8 +463,13 @@ before anything can create data that would need migrating.
 
 **Build.**
 - `game_summaries`, `player_results`, `transfer_summaries`
-  ([`03`](../03-data-model.md#permanent-tables)). Writable by **nobody** — only `finalize_game()`,
-  running as the table owner, may insert.
+  ([`03`](../03-data-model.md#permanent-tables)) already exist with RLS enabled and their read
+  policies in place — step 10 created all 17 tables from `03-data-model.md` in one pass rather
+  than splitting live/permanent across two steps, since `docs/03-data-model.md`'s own RLS table
+  covers all 17 together and CLAUDE.md's "RLS on every table, no exceptions" reads better as "no
+  exceptions, ever" than "no exceptions, eventually" (see `docs/build/NOTES.md`). What step 10
+  did *not* do — and what's actually left here — is give any role an INSERT policy on them
+  (there is none, by design) and write `finalize_game()` itself.
 - `finalize_game()`, producing exactly what step 8's pure snapshot builder produces.
 - The statistics source views over the two permanent tables. Plain views first; materialise only if
   a measurement says to.

@@ -18,6 +18,7 @@
     "playwright.config.ts",
     "eslint.config.js",
     "eslint-local/**/*",
-    "e2e/**/*.ts"
+    "e2e/**/*.ts",
+    "supabase/tests/**/*.ts"
   ]
 }
