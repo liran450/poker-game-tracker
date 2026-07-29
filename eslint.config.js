@@ -85,11 +85,13 @@ export default tseslint.config(
     },
   },
 
-  // core/ must stay pure: no React, no Supabase, no Dexie, no DOM. These are the
-  // parts that must be provably correct (02-architecture.md#repository-layout).
+  // core/settlement.ts and core/events.ts must stay pure: no React, no
+  // Supabase, no Dexie, no DOM — they are the parts that must be provably
+  // correct (CLAUDE.md #Purity). core/offline/ is deliberately exempt: it IS
+  // the Dexie outbox and sync engine (02-architecture.md#repository-layout).
   {
-    files: ['src/core/**/*.ts'],
-    ignores: ['src/core/**/*.test.ts'],
+    files: ['src/core/*.ts'],
+    ignores: ['src/core/*.test.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -98,7 +100,7 @@ export default tseslint.config(
             {
               group: ['react', 'react-*', '@supabase/*', 'dexie', '@data/*', '@features/*', '@components/*'],
               message:
-                'core/ is pure by contract — no React, Supabase, Dexie or UI imports. Anything that needs them belongs in a hook or the repository layer.',
+                'core/settlement.ts and core/events.ts are pure by contract — no React, Supabase, Dexie or UI imports. Anything that needs them belongs in core/offline/, a hook, or the repository layer.',
             },
           ],
         },

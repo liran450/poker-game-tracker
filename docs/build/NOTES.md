@@ -45,6 +45,39 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### The core/ purity lint rule was scoped too wide
+**Step 5 · 2026-07-29 · trap**
+
+Step 1's `no-restricted-imports` rule banning React/Supabase/Dexie/UI imports was written against
+`src/core/**/*.ts` — everything under `core/`. But `CLAUDE.md`'s actual Purity rule names exactly
+two files, `core/settlement.ts` and `core/events.ts`, and `02-architecture.md`'s repository layout
+explicitly places the Dexie outbox at `core/offline/`. The wide glob would have made it impossible
+to build step 5 inside `core/offline/` at all — it errored on the first `import Dexie` there.
+
+Fixed by narrowing the glob to `src/core/*.ts` (direct children of `core/` only), which still
+covers `money.ts`, `settlement.ts` and `events.ts` but excludes any subdirectory. **If a future
+step adds another file directly under `core/` that legitimately needs Dexie/React (unlikely, but
+possible for a shared type), put it in a subfolder — the direct-children glob is what keeps the two
+provably-pure files enforced without also trapping `core/offline/`.**
+
+### fake-indexeddb and dexie-react-hooks added
+**Step 5 · 2026-07-29 · environment**
+
+`fake-indexeddb/auto` is imported at the top of `src/test/setup.ts` so Dexie has a real IndexedDB
+under Vitest/jsdom (jsdom itself doesn't implement one). `dexie-react-hooks`'s `useLiveQuery` drives
+`useSyncState` — no Zustand yet; game/UI state that genuinely needs it arrives with step 6's
+screens, per `02-architecture.md#frontend-stack`. Both landed with zero production-audit impact
+(`npm audit --omit=dev --audit-level=high` stayed clean).
+
+### `Event.returnValue` is a boolean mirror of `defaultPrevented`, not a settable string
+**Step 5 · 2026-07-29 · trap**
+
+The historical `event.returnValue = ''` idiom used by `useBeforeUnloadGuard` still works — assigning
+any falsy value sets the cancelled flag — but per the modern spec (and jsdom, correctly) the
+*getter* always returns a boolean reflecting `defaultPrevented`, never the string you assigned. A
+test asserting `event.returnValue === ''` will fail against a correct implementation; assert
+`defaultPrevented`/`returnValue === false` instead.
+
 ### Light-theme accent colour is below AA for body text
 **Step 3 · 2026-07-28 · trap**
 
