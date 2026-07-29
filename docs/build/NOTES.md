@@ -45,6 +45,33 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### Step 3's token extraction missed gradients, glows and elevation shadows
+**Step 8 (design audit) · 2026-07-29 · trap · decision**
+
+The repository owner flagged that the built screens don't look as polished as the prototype.
+Checked it directly rather than guessing: `tokens.css`'s flat colour/type/radii/spacing values
+*are* genuinely lifted from the prototype's real inline styles (`#0E0C09`, `#E9A23C`, `#F4EFE7` all
+match exactly) — but a grep of the whole `src/` tree turned up exactly one `gradient` (an SVG
+sparkline fill) and zero `box-shadow` outside it, while the prototype uses `linear-gradient`s on
+four different card treatments, a colour-matched glow on every "live" status dot, and an elevation
+shadow on its toast. Step 3 extracted the palette and missed the surface treatment that gives that
+palette its depth — a real gap, not a subjective "make it look nicer."
+
+**Decision (owner):** don't retrofit the already-built screens (Home, NewGame, GamePage, their
+sheets) to pick these up now — that's deferred, informally, rather than scheduled for step 17
+specifically. The tokens themselves were added immediately (`--gradient-card-*`,
+`--shadow-glow-positive`, `--shadow-elevation` in `tokens.css`, documented in
+[`11 — Surface treatment`](../11-visual-design.md#surface-treatment)) so that **every screen built
+or touched from here on reaches for them** instead of a flat `surface-*` fill where the prototype
+uses one of these treatments. Check `11`'s new section before styling a card, an avatar, a status
+dot, or an overlay.
+
+**Also decided in the same conversation:** the ~20 states and the light theme
+[`11` already recorded as missing](../11-visual-design.md#what-the-design-does-not-cover) are not
+to be raised with the owner screen-by-screen as each one comes up. Extend the prototype's
+established visual language yourself and let the owner review the result — recorded as a working
+convention in `CLAUDE.md`.
+
 ### Draining the pot globally first can beat the DP optimum — a real counterexample, not a hunch
 **Step 8 · 2026-07-29 · trap**
 

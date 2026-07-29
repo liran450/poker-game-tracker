@@ -190,6 +190,14 @@ the session, so the whole budget goes here. Every rule below is load-bearing:
   an audit at the end.
 - The settlement module and the purge function are the two places where a bug is unrecoverable —
   money in one case, data in the other. Over-test both.
+- **When a screen or state isn't in the prototype** (and `docs/11`'s "what the design does not
+  cover" list names about 20 of them, plus the whole light theme), don't stop and ask before
+  building it. Extend the prototype's established visual language yourself — same tokens, same
+  card/shadow/glow treatments, same density — and let the result be reviewed afterward rather than
+  approved in advance. Silence in the mock is still never permission to skip the state.
+- **Before styling a card, an avatar, a status dot, or anything that floats above the page**, check
+  [`docs/11`'s "Surface treatment"](docs/11-visual-design.md#surface-treatment) section first — a
+  flat `surface-*` fill is usually not what the prototype actually uses there.
 
 ## Commands
 

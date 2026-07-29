@@ -118,6 +118,40 @@ Padding clusters at `12–14px`.
 
 ---
 
+## Surface treatment
+
+Missed in the first extraction pass (step 3) and re-extracted 2026-07-29 — the flat surface colours
+above are not the whole story. The prototype's depth comes from three recurring, systematic
+treatments, now real tokens in `tokens.css` rather than one-off values:
+
+**Tinted card gradients.** An elevated or emphasised card gets a subtle `150deg` two-stop gradient
+tinted toward its semantic colour, not a flat `surface-raised` fill:
+
+| Token | Value | Used for |
+|---|---|---|
+| `--gradient-card-accent` | `linear-gradient(150deg,#241d12,#1b1610)` | The active-game card on Home |
+| `--gradient-card-positive` | `linear-gradient(150deg,#1c2a1e,#1a1610)` | A leading/winning row (e.g. leaderboard #1) |
+| `--gradient-card-negative` | `linear-gradient(150deg,#241b1a,#1a1610)` | A negative-themed card |
+| `--gradient-card-neutral` | `linear-gradient(150deg,#3a2f1f,#241d12)` | Avatar-circle placeholders |
+
+**Status glow.** A live/positive status dot carries a matching-colour glow, not just a filled
+circle: `--shadow-glow-positive` (`0 0 8px` in `--color-positive`). Used on the "live game" marker
+and the read-only viewer's "live" indicator.
+
+**Overlay elevation.** Toasts (and, by the same logic, anything else floating above the page) carry
+`--shadow-elevation` (`0 8px 24px rgba(0,0,0,.5)`), not just a border.
+
+Tailwind v4 turns `--shadow-*` entries into real `shadow-*` utilities automatically
+(`shadow-elevation`, `shadow-glow-positive`); the `--gradient-*` entries are custom properties only
+— use them via `bg-[image:var(--gradient-card-accent)]` or, in an SCSS module, `background:
+var(--gradient-card-accent)`.
+
+**Not retrofitted.** Home, NewGame, GamePage and their sheets (built in steps 6–7) were not redone
+to pick these up — see `docs/build/NOTES.md`. New and touched screens from here on should reach for
+them wherever the prototype uses one instead of a flat surface colour.
+
+---
+
 ## Screens covered
 
 Nine, reachable from the prototype's own nav: **home · new · game · settle · summary · stats ·
