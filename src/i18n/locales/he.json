@@ -8,7 +8,48 @@
   "home": {
     "title": "משחקים",
     "empty": "עוד לא שיחקת. נתחיל?",
-    "startFirstGame": "התחל משחק ראשון"
+    "startFirstGame": "התחל משחק ראשון",
+    "newGame": "+ משחק חדש",
+    "playerCount": "{{count}} שחקנים"
+  },
+  "newGame": {
+    "title": "משחק חדש",
+    "defaultName": "פוקר — {{date}}",
+    "nameLabel": "שם המשחק",
+    "otherAmount": "אחר",
+    "players": "שחקנים",
+    "noPlayersYet": "לא נבחרו שחקנים עדיין",
+    "privateGame": "משחק פרטי",
+    "privateGameExplainer": "כל מי שבמשחק רואה הכל, בדיוק כמו במשחק רגיל. ההגדרה משפיעה רק על הסטטיסטיקה והחשיפה של המשחק בחבורה.",
+    "privateGameConsequence": "לא יופיע בסטטיסטיקה של החבורה · ייספר בסטטיסטיקה האישית",
+    "start": "התחל משחק"
+  },
+  "game": {
+    "privateBadge": "פרטי",
+    "backToHome": "חזרה לבית",
+    "headerSummary": "ז'יטון {{chipValue}} · קנייה {{buyAmount}} · {{count}} שחקנים",
+    "addPlayer": "+ שחקן"
+  },
+  "addPlayers": {
+    "title": "הוספת שחקנים",
+    "selectedCount": "נבחרו ({{count}})",
+    "recentSection": "שיחקו איתך לאחרונה",
+    "noRecentNames": "עוד לא שיחקתם ביחד. הוסיפו שם למטה.",
+    "newNamePlaceholder": "שם חדש…",
+    "addToList": "+ לרשימה",
+    "commit_one": "הוסף שחקן",
+    "commit_two": "הוסף {{count}} שחקנים",
+    "commit_other": "הוסף {{count}} שחקנים"
+  },
+  "players": {
+    "lateJoiner": "הצטרפות מאוחרת",
+    "rowActions": "פעולות עבור {{name}}",
+    "rename": "שינוי שם",
+    "remove": "הסרה מהמשחק",
+    "renameLabel": "שם",
+    "removeConfirmTitle": "הסרת שחקן",
+    "removeConfirmDesc": "השחקן יוסר מהמשחק. הפעולה תישאר רשומה ביומן הפעילות.",
+    "removeConfirmLabel": "הסר שחקן"
   },
   "money": {
     "chipValue": "ז'יטון = {{value}}",

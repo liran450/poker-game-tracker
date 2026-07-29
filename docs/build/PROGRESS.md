@@ -32,7 +32,7 @@ change — otherwise the history stops meaning anything.
 | 3 | Design system primitives | done | 2026-07-28 | _(this commit)_ |
 | 4 | Event model and fold | done | 2026-07-28 | _(this commit)_ |
 | 5 | Local persistence and the outbox | done | 2026-07-29 | _(this commit)_ |
-| 6 | Game setup, player list, add-players sheet | not started | | |
+| 6 | Game setup, player list, add-players sheet | done | 2026-07-29 | _(this commit)_ |
 | 7 | The buy-in counter and the game page | not started | | |
 | 8 | Settlement core | not started | | |
 | 9 | End game, edit mode, share text | not started | | |
@@ -45,7 +45,7 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** step 6 — game setup, player list, add-players sheet.
+**Next up:** step 7 — the buy-in counter and the game page 🎯.
 
 ### Checkpoints that are not steps
 
@@ -349,3 +349,88 @@ reuses one event object's id across two different `gameId`s (rather than generat
 silently overwrite the first game's row instead of creating a second one. Hit this writing the
 out-of-order-convergence test; the fix is always to mint distinct ids per game, never to relax the
 schema.
+
+---
+
+### Step 6 — Game setup, player list, add-players sheet
+**Status:** done  **Sessions:** 1  **Commits:** 1
+
+**Built.**
+
+- `core/players.ts` — pure: `renderPlayerName` (guest name / `nickname (account)` / account —
+  the account path takes a resolver function, unused until step 12) and `dedupeDisplayNames`,
+  which assigns the `(1)`/`(2)` suffixes by insertion order and is always recomputed from the
+  live active-player list, so a rename or a removal changes who (if anyone) is suffixed
+  automatically — no stored suffix state to go stale.
+- `core/offline/` additions: `localIdentity.ts` (a random per-device actor id, persisted in the
+  new `meta` table — stands in for a real profile id until accounts exist in step 12);
+  `recentPlayers.ts` + the `recentPlayers` table (local play-history, frequency-sorted, feeding
+  the add-players sheet's quick-add list until step 14 supplies real groups); `gameActions.ts`
+  (`createGame`, `addPlayersToGame`, `removePlayer`, `renamePlayer` — every one goes through
+  `appendEvent`, nothing writes player state directly); `useGame`/`useGamesList` (reactive
+  `dexie-react-hooks` queries folding events live for the game page and the home list).
+  `CachedGameRecord` gained its real fields (name, buy amount, chips per buy, currency, private
+  flag); `appendEvent`'s recency bump now merges over the existing row instead of overwriting it,
+  so a game's static fields survive every later event.
+- `components/shared/TextField` — the first plain text input primitive (setup form fields,
+  the add-players free-text field, the rename field all needed one).
+- `features/game/`: `PlayerRow` (composed name, signed amount owed, settled/late-joiner/
+  pending-sync visual states — only late-joiner is reachable through real interaction this step),
+  `AddPlayersSheet` (selection tray, capped-height roster, new-name field with dedup-into-
+  existing-chip, pluralized footer disabled at 0 — one component, used from both the setup screen
+  and the in-game `+ שחקן`), `PlayerActionsSheet` (rename inline, remove with confirmation gated
+  on `hasBuyIns`, resets by remounting rather than by effect since the caller only ever mounts it
+  conditionally behind a modal backdrop).
+- Real routes: `HomePage` (active games pinned top, empty state with a working `+ משחק חדש`),
+  `NewGamePage` (name defaulted to `פוקר — DD.MM.YY`, buy amount + chips per buy with a live
+  `ז'יטון = ₪0.5` caption, amount presets, the players row opening the sheet, the private-game
+  checkbox with its ⓘ and inline consequence line, one full-width start button), `GamePage`
+  (header with chip value/buy amount/player count, the seated player rows, `+ שחקן`, per-row ⋯).
+  Wired into `App.tsx`'s hash router at `/new` and `/game/:gameId`.
+
+**59 new tests** across 11 files (players, recentPlayers, gameActions, TextField, PlayerRow,
+AddPlayersSheet, PlayerActionsSheet, HomePage, NewGamePage, GamePage, a Hebrew-pluralization
+guard). Total test count: 260. The whole flow was also driven in a real headless-Chromium browser
+against the Vite dev server — create game → add players (including a genuine duplicate name via a
+late joiner) → rename → remove → home list — with zero console errors; screenshots confirmed the
+`(1)` suffix, the late-joiner marker, and the suffix correctly resolving away after the rename and
+after the removal.
+
+**Deviated.**
+- The step-1 purity lint rule was narrowed from all of `src/core/**` to `src/core/*.ts` (direct
+  children only) so `core/offline/` can import Dexie/React while `money.ts`/`events.ts` stay
+  banned from it — see the matching `NOTES.md` entry.
+- The add-players sheet has **one** roster section ("שיחקו איתך לאחרונה"), not the spec's two
+  (`◈ חברי החבורה` / `חברים נוספים`) — there is no group membership to distinguish yet. `PLAN.md`
+  anticipates this ("fed by local history until step 14"); the `◈` marker specifically means group
+  membership, so it's simply absent rather than misapplied. Revisit when step 14 lands.
+- `שכפל משחק אחרון` (duplicate-last-game) is in `04-ux-spec.md`'s setup screen but is explicitly a
+  step-17 polish item in `PLAN.md`. Followed `PLAN.md`: not built here.
+- Home has no persistent 3-tab bar (`משחקים` / `סטטיסטיקה` / `פרופיל`) — the other two tabs don't
+  exist until steps 12 and 15, and a tab linking nowhere is worse than no tab bar.
+- The row action sheet only has rename and remove — settle, cash paid, edit chips and player
+  history arrive with steps 7–9, per `PLAN.md`'s explicit "out of scope: buy-ins, money movement."
+- "Recent finished games" (results cards below the active list) isn't built — no game can reach
+  `finished` status until step 9's ending flow exists, so the section would be permanently-dead
+  code. Straightforward to add once step 9 lands.
+- The game header's back control uses `✕` rather than a back-chevron: a hardcoded arrow glyph
+  doesn't mirror with direction, and no RTL-aware chevron convention exists in the codebase yet
+  (checked — nothing precedent uses `rtl:`/`ltr:` Tailwind variants or a mirrored icon). `✕` sidesteps
+  the problem entirely, matching how `BottomSheet` already dismisses. Worth a real solution once a
+  chevron is unavoidable (e.g. drill-in navigation).
+- The local actor id (`localIdentity.ts`) is stamped as both `actorId` and (via a `host_changed`
+  event at creation) `hostId` on every game — a deliberate stand-in for step 12's real accounts,
+  not a spec decision. Recorded in `NOTES.md`.
+
+**Left undone.** Everything listed under "out of scope" in `PLAN.md`'s step 6 (buy-ins, any money
+movement, groups) — untouched, as intended.
+
+**Watch out.** Hebrew pluralization is not one-vs-many: `Intl.PluralRules('he')` produces **three**
+live categories for integers — `one` (1), `two` (2), `other` (0, 3+). A key defining only `_one`/
+`_other` silently prints the raw key for count=2. Hit this for real in the add-players footer
+button (count=2 rendered `addPlayers.commit` on screen) before the browser check caught it. Fixed
+and guarded by `src/i18n/pluralization.test.ts`, which fails if any future `_one`/`_other` pair is
+added without a `_two`. `home.playerCount`/`addPlayers.selectedCount` deliberately do **not** split
+into plural forms (single generic key, following the existing `gallery.playerCountLabel`
+precedent) — i18next only attempts plural-key resolution when at least one suffixed variant
+exists for that base, so an unsuffixed key is always safe regardless of count.

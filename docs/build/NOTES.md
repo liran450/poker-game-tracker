@@ -45,6 +45,49 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### Hebrew pluralization needs `_two`, not just `_one`/`_other`
+**Step 6 · 2026-07-29 · trap**
+
+`Intl.PluralRules('he').select(n)` returns **three** categories that actually occur for integers:
+`one` for 1, `two` for 2, `other` for everything else (0, 3, 4, … 100). i18next resolves a
+pluralized `t(key, { count })` call by looking up `key_<category>`; if a key defines `_one` and
+`_other` but not `_two`, then `count === 2` resolves to nothing and i18next prints the **raw key**
+onto the screen. This is silent in code and in unit tests that don't render with a real i18next
+instance — it only showed up when the step-6 flow was driven in an actual browser (`addPlayers
+.commit` literally rendered instead of `הוסף 2 שחקנים`).
+
+Fix: whenever a key is split into `_one`/`_other` for Hebrew, it needs `_two` as well (usually with
+the same text as `_other` — "הוסף 2 שחקנים" is grammatically fine, Hebrew's "two" category is a
+distinct plural *form*, not different wording, for most everyday sentences). `src/i18n/
+pluralization.test.ts` now fails the build if a future `_one`/`_other` pair ships without a `_two`.
+**A key that is never split at all (no `_one`/`_other`/`_two` suffix) is always safe regardless of
+count** — i18next only attempts plural resolution when at least one suffixed variant exists for
+that base — so the simplest fix for a string that doesn't need real singular/plural wording is to
+not split it, per the existing `gallery.playerCountLabel` precedent.
+
+### Local actor id stands in for a real account until step 12
+**Step 6 · 2026-07-29 · decision**
+
+Every event needs a non-null `actorId`, and every game needs a `hostId`, but there are no accounts
+until step 12. `core/offline/localIdentity.ts` mints a random UUID once per device, persists it in
+a new `meta` Dexie table (IndexedDB, not `localStorage` — consistent with the session-storage
+preference in `CLAUDE.md`, though this id carries no privilege of its own so the choice is
+consistency, not defence), and `createGame` stamps it as both the actor on every event and, via a
+`host_changed` event fired at creation, the game's host. This is a build-time engineering decision,
+not a product one — nothing user-facing depends on this id's shape, and step 12 replaces it with a
+real profile id behind the same seam (`gameActions.ts`) without touching anything above it.
+
+### Fake timers hang fake-indexeddb
+**Step 6 · 2026-07-29 · trap**
+
+`vi.useFakeTimers()` combined with a Dexie call against `fake-indexeddb` hangs — the fake
+IndexedDB's internal scheduling apparently depends on real timers/microtasks that fake timers
+intercept, and once one test times out without reaching `vi.useRealTimers()`, every subsequent
+test's `beforeEach` (which itself touches Dexie) hangs too, cascading a single failure into the
+whole file. Hit this trying to control `lastPlayedAt` ordering in `recentPlayers.test.ts`. Fix:
+never use fake timers in a test that touches `db.*` — seed explicit timestamps directly via
+`bulkPut`/`put` instead of manipulating the system clock.
+
 ### The core/ purity lint rule was scoped too wide
 **Step 5 · 2026-07-29 · trap**
 

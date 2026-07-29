@@ -23,7 +23,11 @@ export async function appendEvent(event: GameEvent): Promise<void> {
         enqueuedAt: new Date().toISOString(),
       });
     }
-    await db.games.put({ id: event.gameId, updatedAt: new Date().toISOString() });
+    // Merge, not overwrite: `createGame` (step 6) writes the game's real
+    // fields once, before any events exist for it, and every later bump must
+    // preserve them rather than clobbering the row back down to an id.
+    const existingGame = await db.games.get(event.gameId);
+    await db.games.put({ ...existingGame, id: event.gameId, updatedAt: new Date().toISOString() });
   });
 }
 
