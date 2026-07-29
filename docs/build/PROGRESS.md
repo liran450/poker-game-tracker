@@ -31,7 +31,7 @@ change — otherwise the history stops meaning anything.
 | 2 | Money core | done | 2026-07-28 | _(this commit)_ |
 | 3 | Design system primitives | done | 2026-07-28 | _(this commit)_ |
 | 4 | Event model and fold | done | 2026-07-28 | _(this commit)_ |
-| 5 | Local persistence and the outbox | not started | | |
+| 5 | Local persistence and the outbox | done | 2026-07-29 | _(this commit)_ |
 | 6 | Game setup, player list, add-players sheet | not started | | |
 | 7 | The buy-in counter and the game page | not started | | |
 | 8 | Settlement core | not started | | |
@@ -45,7 +45,7 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** step 5 — local persistence and the outbox.
+**Next up:** step 6 — game setup, player list, add-players sheet.
 
 ### Checkpoints that are not steps
 
@@ -288,3 +288,64 @@ zod v4's internal type constraints. This is a known zod v4 ergonomic gap and wor
 runtime. The `InternalState` → `GameState` cast at the fold boundary was flagged as unnecessary by
 eslint and removed — the types are structurally compatible because `InternalState` uses mutable
 `Map`/`Set` which are assignable to `ReadonlyMap`/`ReadonlySet`.
+
+---
+
+### Step 5 — Local persistence and the outbox
+**Status:** done  **Sessions:** 1  **Commits:** 1
+
+**Built.** `src/core/offline/`:
+
+- `db.ts` — the Dexie schema. Three tables: `games` (a thin id → `updatedAt` index for ordering a
+  games list, deliberately not caching game metadata that step 6's setup screen hasn't defined
+  yet), `events` (the full log, keyed by `clientEventId`), `outbox` (queued-but-unacknowledged
+  events, also keyed by `clientEventId`, carrying `status: 'pending' | 'failed'`, `attempts`,
+  `lastError`).
+- `outbox.ts` — the write path. `appendEvent()` writes the event, enqueues it in the outbox, and
+  bumps the game's `updatedAt`, all in one Dexie transaction; re-appending an already-known
+  `clientEventId` only touches the events table (an idempotent `put`), never re-enqueues or resets
+  outbox state. `loadGameEvents()` reads back for the fold — local-only, no network wait.
+  `flushOutbox()` pushes every queued event for a game through a `SyncTransport` in one batch: a
+  thrown push marks every entry `failed` with `attempts` incremented, leaving it in the outbox
+  under the same key for the next retry — never duplicated.
+- `syncTransport.ts` / `stubTransport.ts` — the swappable seam step 12 replaces with real Supabase
+  calls. `StubSyncTransport` simulates latency, a configurable failure rate (injectable RNG for
+  deterministic tests), and models the one server behaviour the outbox depends on: re-pushing an
+  already-seen `clientEventId` is accepted again, not rejected.
+- `syncEngine.ts` — `syncOutbox()` wraps `flushOutbox()` and tracks "currently pushing" as
+  transient per-game state via a minimal external store (`useSyncExternalStore`-compatible
+  subscribe/notify), since that fact doesn't belong in a Dexie table.
+- `useSyncState.ts` — the hook wiring step 3's `<SyncIndicator>` to real data: `dexie-react-hooks`'
+  `useLiveQuery` over the outbox summary, combined with the syncing flag, produces exactly the
+  four states the component already renders (synced / syncing / pending / failed) plus a true
+  pending count.
+- `src/hooks/useBeforeUnloadGuard.ts` and `src/hooks/useWakeLock.ts` — the tab-close warning while
+  the outbox is non-empty, and the Screen Wake Lock API while a game is open (re-acquired on
+  `visibilitychange`, silently a no-op where unsupported). Built and unit-tested as standalone
+  hooks; nothing calls them with a real `gameId` yet because the game page doesn't exist until
+  step 7.
+
+**33 new tests** across `outbox.test.ts` (dedup, out-of-order convergence, retry-without-duplication,
+a simulated tab-kill-and-reopen via a second `AppDatabase` handle onto the same IndexedDB),
+`useSyncState.test.tsx` (the indicator's pending count and state verified against a seeded outbox,
+not by inspection), `useBeforeUnloadGuard.test.ts`, and `useWakeLock.test.ts`. `fake-indexeddb/auto`
+is now imported in `src/test/setup.ts` so Dexie has a real IndexedDB to run against under Vitest.
+Total test count: 204.
+
+**Deviated.** The step-1 purity lint rule banned React/Supabase/Dexie from all of `src/core/**`,
+but `02-architecture.md`'s repository layout explicitly puts the Dexie outbox at `core/offline/`,
+and `CLAUDE.md`'s actual Purity rule only names `core/settlement.ts` and `core/events.ts`. Narrowed
+the rule's glob from `src/core/**/*.ts` to `src/core/*.ts` (direct children only), which excludes
+`core/offline/**` while still covering `money.ts`, `settlement.ts` and `events.ts`. The existing
+lint-rules test still passes unchanged since it only asserts the banned-import list, not the glob.
+
+**Left undone.** No screen consumes any of this yet — that's step 6/7's job. `games` caches only an
+id and `updatedAt`; its real shape (name, buy amount, chips per buy, currency) is deliberately left
+to step 6, which is where those fields are actually specified.
+
+**Watch out.** `db.events`'s primary key is `clientEventId` alone, not `[gameId, clientEventId]` —
+correct, since client event ids are globally unique UUIDs regardless of game, but a test that
+reuses one event object's id across two different `gameId`s (rather than generating fresh ids) will
+silently overwrite the first game's row instead of creating a second one. Hit this writing the
+out-of-order-convergence test; the fix is always to mint distinct ids per game, never to relax the
+schema.
