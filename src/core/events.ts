@@ -346,7 +346,7 @@ export function emptyState(): GameState {
   };
 }
 
-function eventCompare(a: GameEvent, b: GameEvent): number {
+export function eventCompare(a: GameEvent, b: GameEvent): number {
   if (a.clientCreatedAt < b.clientCreatedAt) return -1;
   if (a.clientCreatedAt > b.clientCreatedAt) return 1;
   if (a.clientEventId < b.clientEventId) return -1;
@@ -641,7 +641,7 @@ function applyEvent(state: InternalState, event: GameEvent): void {
 // Undo — appends an inverse event, links via undoneBy
 // ---------------------------------------------------------------------------
 
-const INVERSE_TYPES: Partial<Record<EventType, EventType>> = {
+export const INVERSE_TYPES: Partial<Record<EventType, EventType>> = {
   player_added: 'player_removed',
   player_removed: 'player_added',
   buy_in_added: 'buy_in_removed',
@@ -654,13 +654,64 @@ const INVERSE_TYPES: Partial<Record<EventType, EventType>> = {
   game_ended: 'game_reopened',
 };
 
+/**
+ * The subset of `INVERSE_TYPES` that `createUndoEvent`'s generic
+ * payload-copying can actually invert correctly, used to gate the "long-press
+ * to undo" affordance in the audit log drawer (04-ux-spec.md#audit-log-drawer-22
+ * says "where reversible").
+ *
+ * Two kinds of entry are deliberately excluded even though they appear in
+ * `INVERSE_TYPES` or would otherwise seem undoable:
+ *
+ * - **Last-writer-wins "set" events** (`cash_paid_set`, `chips_set`,
+ *   `nickname_set`, `player_renamed`, `unaccounted_set`, `shared_cost_updated`,
+ *   `transfer_edited`) aren't in `INVERSE_TYPES` at all, so `createUndoEvent`
+ *   falls back to re-emitting the *same* type with the *same* payload — a
+ *   no-op, not an undo.
+ * - **`shared_cost_removed`** IS in `INVERSE_TYPES` (→ `shared_cost_added`),
+ *   but `createUndoEvent` copies the original event's payload verbatim onto
+ *   the inverse. A `shared_cost_removed` event's real payload is only
+ *   `{ costId }` — nowhere near enough to reconstruct a `shared_cost_added`
+ *   payload (label, amount, payer, split, shares), so undoing a removal
+ *   would append a malformed `shared_cost_added` event and crash the fold
+ *   (`Object.entries` on an undefined `shares`). Removing a shared cost is
+ *   deliberately not undoable through this generic mechanism until
+ *   `createUndoEvent` can carry an explicit inverse payload.
+ */
+export const GENERICALLY_REVERSIBLE_TYPES: ReadonlySet<EventType> = new Set([
+  'player_added',
+  'player_removed',
+  'buy_in_added',
+  'buy_in_removed',
+  'player_settled',
+  'player_reopened',
+  'shared_cost_added',
+  'game_started',
+  'game_ended',
+]);
+
+export function isGenericallyReversible(type: EventType): boolean {
+  return GENERICALLY_REVERSIBLE_TYPES.has(type);
+}
+
 export interface UndoResult {
   readonly inverseEvent: GameEvent;
   readonly undoneEventId: string;
   readonly undoneByEventId: string;
 }
 
-export function createUndoEvent(original: GameEvent, actorId: string): UndoResult {
+/**
+ * `clientCreatedAt` defaults to the wall clock but accepts an override —
+ * callers that might append several events within the same millisecond (the
+ * offline layer's `nextTimestamp()`, `core/offline/clock.ts`) should pass a
+ * strictly-increasing one, since `fold()`'s tie-break on `clientEventId` is
+ * an arbitrary UUID compare, not causal order.
+ */
+export function createUndoEvent(
+  original: GameEvent,
+  actorId: string,
+  clientCreatedAt: string = new Date().toISOString(),
+): UndoResult {
   const inverseId = generateClientEventId();
   const inverseType = INVERSE_TYPES[original.type] ?? original.type;
 
@@ -671,7 +722,7 @@ export function createUndoEvent(original: GameEvent, actorId: string): UndoResul
     actorId,
     type: inverseType,
     payload: original.payload,
-    clientCreatedAt: new Date().toISOString(),
+    clientCreatedAt,
     undoneBy: null,
   } as GameEvent;
 

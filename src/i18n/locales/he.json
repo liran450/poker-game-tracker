@@ -28,7 +28,8 @@
     "privateBadge": "פרטי",
     "backToHome": "חזרה לבית",
     "headerSummary": "ז'יטון {{chipValue}} · קנייה {{buyAmount}} · {{count}} שחקנים",
-    "addPlayer": "+ שחקן"
+    "addPlayer": "+ שחקן",
+    "menu": "אפשרויות משחק"
   },
   "addPlayers": {
     "title": "הוספת שחקנים",
@@ -42,14 +43,97 @@
     "commit_other": "הוסף {{count}} שחקנים"
   },
   "players": {
-    "lateJoiner": "הצטרפות מאוחרת",
+    "lateJoiner": "הצטרף {{time}}",
     "rowActions": "פעולות עבור {{name}}",
     "rename": "שינוי שם",
     "remove": "הסרה מהמשחק",
     "renameLabel": "שם",
     "removeConfirmTitle": "הסרת שחקן",
     "removeConfirmDesc": "השחקן יוסר מהמשחק. הפעולה תישאר רשומה ביומן הפעילות.",
-    "removeConfirmLabel": "הסר שחקן"
+    "removeConfirmLabel": "הסר שחקן",
+    "settle": "סגירת שחקן",
+    "reopen": "פתיחה מחדש",
+    "editChips": "עריכת ז'יטונים",
+    "cashPaid": "מזומן ששולם",
+    "zeroDecrementTitle": "אין יותר קניות",
+    "zeroDecrementPrompt": "ל{{name}} אין יותר קניות במשחק. להסיר אותו/ה מהמשחק?"
+  },
+  "buyIn": {
+    "increment": "הוספת קנייה עבור {{name}}",
+    "decrement": "הסרת קנייה עבור {{name}}",
+    "buyInNumber": "קנייה {{count}}",
+    "delta_one": "{{sign}}1 קנייה",
+    "delta_two": "{{sign}}2 קניות",
+    "delta_other": "{{sign}}{{count}} קניות",
+    "chipsDelta": "{{figure}} ז'יטונים",
+    "snackbarLine": "{{name}} · {{countPhrase}} · {{chipsPhrase}} · {{money}}",
+    "batchTotal": "סה\"כ · {{chips}} ז'יטונים · {{money}}"
+  },
+  "cashPaid": {
+    "title": "מזומן ששולם — {{name}}",
+    "addShort": "+"
+  },
+  "settle": {
+    "title": "כמה ז'יטונים נשארו ל{{name}}?",
+    "conversion": "= {{money}} · תוצאה {{net}}",
+    "exceedsRemaining": "הכמות גבוהה ממספר הז'יטונים שנותרו במשחק",
+    "confirm": "סגור שחקן"
+  },
+  "pot": {
+    "resolutionTitle": "יש פער בקופה",
+    "fixCounts": "תקנו את ספירת הז'יטונים",
+    "noSettledPlayers": "עוד אין שחקנים סגורים לבדיקה",
+    "chipsCount": "{{count}} ז'יטונים",
+    "assignToHouse": "שייכו את ההפרש ל\"לא מזוהה / הבית\""
+  },
+  "sharedCosts": {
+    "title": "הוצאות משותפות",
+    "summaryLine": "הוצאות משותפות {{amount}}",
+    "empty": "אין הוצאות משותפות עדיין",
+    "add": "+ הוצאה משותפת",
+    "addTitle": "הוצאה משותפת חדשה",
+    "editTitle": "עריכת הוצאה משותפת",
+    "labelField": "שם ההוצאה",
+    "amountField": "סכום",
+    "paidBy": "שולם ע\"י {{name}}",
+    "paidByField": "מי שילם",
+    "equalSplit": "חלוקה שווה",
+    "customSplit": "חלוקה מותאמת",
+    "perPerson": "{{amount}} לאחד",
+    "shareField": "הסכום של {{name}}",
+    "remainder": "נותר לשיוך: {{amount}}",
+    "removeConfirmTitle": "מחיקת הוצאה משותפת",
+    "removeConfirmDesc": "ההוצאה תוסר מהמשחק. הפעולה תישאר רשומה ביומן הפעילות."
+  },
+  "auditLog": {
+    "title": "יומן פעילות",
+    "actionBarLabel": "יומן",
+    "empty": "אין פעולות להצגה",
+    "line": "{{time}} · {{name}} — {{action}}",
+    "lineNoPlayer": "{{time}} · {{action}}",
+    "undoAction": "בטל: {{action}}",
+    "buyInAction": "קנייה {{count}}",
+    "cashPaidAction": "תשלום במזומן {{amount}}",
+    "settledAction": "סגירה עם {{chips}} ז'יטונים",
+    "reopenedAction": "פתיחה מחדש",
+    "chipsEditedAction": "עדכון ז'יטונים ל-{{chips}}",
+    "playerAddedAction": "הצטרפות למשחק",
+    "playerRemovedAction": "הסרה מהמשחק",
+    "playerRenamedAction": "שינוי שם ל-{{name}}",
+    "sharedCostAddedAction": "הוצאה משותפת: {{label}} {{amount}}",
+    "sharedCostRemovedAction": "מחיקת הוצאה משותפת",
+    "sharedCostUpdatedAction": "עדכון הוצאה משותפת: {{label}}",
+    "unaccountedSetAction": "שיוך פער ל\"לא מזוהה / הבית\": {{amount}}",
+    "gameStartedAction": "תחילת משחק",
+    "hostChangedAction": "מינוי מנהל משחק",
+    "genericAction": "פעולה: {{type}}",
+    "filter": {
+      "all": "הכל",
+      "buy_ins": "קניות",
+      "settlements": "סגירות",
+      "management": "ניהול",
+      "undone": "בוטלים"
+    }
   },
   "money": {
     "chipValue": "ז'יטון = {{value}}",
@@ -65,6 +149,7 @@
     "cancel": "ביטול",
     "undo": "בטל",
     "undoAll": "בטל הכל",
+    "undone": "בוטל",
     "delete": "מחיקה",
     "edit": "עריכה",
     "save": "שמירה",

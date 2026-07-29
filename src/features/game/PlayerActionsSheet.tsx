@@ -9,29 +9,44 @@ export interface PlayerActionsSheetProps {
   open: boolean;
   onClose: () => void;
   playerName: string;
-  /** Removing a player with buy-ins needs confirmation; always false before step 7. */
+  /** Removing a player with buy-ins needs confirmation. */
   hasBuyIns: boolean;
+  isSettled: boolean;
   onRename: (name: string) => void;
   onRemove: () => void;
+  /** Opens the settle sheet (row is active). */
+  onSettle: () => void;
+  /** Direct action, no sheet — reopening needs no further input. */
+  onReopen: () => void;
+  /** Opens the settle sheet pre-filled with the current count, in edit mode (row is settled). */
+  onEditChips: () => void;
+  /** Opens the cash-paid sheet — reachable here and directly from the row. */
+  onOpenCashPaid: () => void;
 }
 
 /**
- * The row action sheet (04-ux-spec.md#row-action-sheet), trimmed to what this
- * step can actually do — settle, cash paid, edit chips and player history
- * arrive with steps 7-9. Rename and remove are real today.
+ * The row action sheet (04-ux-spec.md#row-action-sheet): non-destructive
+ * actions first, the destructive group last and visually separated.
+ * "Player history in this game" from the spec's table is deliberately not
+ * built here — it belongs with statistics (step 15) and would otherwise be a
+ * button that can't do anything yet.
  *
  * Local state resets by remounting, not by effect: the caller is expected to
  * mount this conditionally (`{actionsPlayer && <PlayerActionsSheet .../>}`),
- * so each open is a fresh instance. `BottomSheet`'s modal backdrop is what
- * makes that safe — nothing else can be tapped while one is open.
+ * so each open is a fresh instance.
  */
 export function PlayerActionsSheet({
   open,
   onClose,
   playerName,
   hasBuyIns,
+  isSettled,
   onRename,
   onRemove,
+  onSettle,
+  onReopen,
+  onEditChips,
+  onOpenCashPaid,
 }: PlayerActionsSheetProps) {
   const { t } = useTranslation();
   const [renaming, setRenaming] = useState(false);
@@ -50,6 +65,11 @@ export function PlayerActionsSheet({
       return;
     }
     onRemove();
+    onClose();
+  }
+
+  function runThenClose(action: () => void): void {
+    action();
     onClose();
   }
 
@@ -73,6 +93,23 @@ export function PlayerActionsSheet({
           </div>
         ) : (
           <div className="flex flex-col gap-2.5">
+            {isSettled ? (
+              <>
+                <Button variant="secondary" fullWidth onClick={() => runThenClose(onReopen)}>
+                  {t('players.reopen')}
+                </Button>
+                <Button variant="secondary" fullWidth onClick={() => runThenClose(onEditChips)}>
+                  {t('players.editChips')}
+                </Button>
+              </>
+            ) : (
+              <Button variant="secondary" fullWidth onClick={() => runThenClose(onSettle)}>
+                {t('players.settle')}
+              </Button>
+            )}
+            <Button variant="secondary" fullWidth onClick={() => runThenClose(onOpenCashPaid)}>
+              {t('players.cashPaid')}
+            </Button>
             <Button variant="secondary" fullWidth onClick={() => setRenaming(true)}>
               {t('players.rename')}
             </Button>

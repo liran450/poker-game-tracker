@@ -33,7 +33,7 @@ change — otherwise the history stops meaning anything.
 | 4 | Event model and fold | done | 2026-07-28 | _(this commit)_ |
 | 5 | Local persistence and the outbox | done | 2026-07-29 | _(this commit)_ |
 | 6 | Game setup, player list, add-players sheet | done | 2026-07-29 | _(this commit)_ |
-| 7 | The buy-in counter and the game page | not started | | |
+| 7 | The buy-in counter and the game page | in progress — code complete, blocked on a real game only the owner can play | | |
 | 8 | Settlement core | not started | | |
 | 9 | End game, edit mode, share text | not started | | |
 | 10 | Database foundation and RLS | not started | | |
@@ -45,7 +45,7 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** step 7 — the buy-in counter and the game page 🎯.
+**Next up:** finish step 7 — play a real game on this build, then flip it to `done` and start step 8 🎯.
 
 ### Checkpoints that are not steps
 
@@ -54,7 +54,7 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | Checkpoint | Gates | Status |
 |---|---|---|
 | **Design assets committed to `docs/design/`, `docs/11` written from them** | Step 3 | ✅ done 2026-07-28 |
-| **Play a real game on the step-7 build** | Step 8 | not reached |
+| **Play a real game on the step-7 build** | Step 8 | not reached — needs the repository owner, see step 7's entry |
 | **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached |
 
 ---
@@ -434,3 +434,155 @@ added without a `_two`. `home.playerCount`/`addPlayers.selectedCount` deliberate
 into plural forms (single generic key, following the existing `gallery.playerCountLabel`
 precedent) — i18next only attempts plural-key resolution when at least one suffixed variant
 exists for that base, so an unsuffixed key is always safe regardless of count.
+
+---
+
+### Step 7 — The buy-in counter and the game page
+**Status:** in progress — code complete, blocked on a real game only the owner can play
+**Sessions:** 1  **Commits:** 1
+
+**Built.** The whole main screen, on top of steps 4–6's foundation:
+
+- `core/pot.ts` — the safeguard's arithmetic (`computePotStatus`), pure. A still-active (unsettled)
+  player is treated as neutral — their chips are assumed to exactly match what they bought, since
+  the app never observes a live chip count mid-game — so only settled players can push the banner
+  red. `unaccountedMinor` subtracts out of the discrepancy, so "assign to the house" closes the gap.
+  10 hand-computed fixture tests, including two that assert cash-paid and shared costs never enter
+  the calculation at all.
+- `core/auditLog.ts` — `buildAuditLog()`, pure: turns the raw event log (every event, not fold's
+  active subset) into typed entries with a category (`buy_ins`/`settlements`/`management`), a
+  running per-player buy-in count for `buy_in_added`/`buy_in_removed` lines, and undo-pair
+  collapsing that matches `fold()`'s own exclusion rule exactly.
+- `core/events.ts` additions: `GENERICALLY_REVERSIBLE_TYPES` / `isGenericallyReversible` — the
+  audit log's "long-press to undo" is gated on this, not on `INVERSE_TYPES` directly (see Deviated).
+  `createUndoEvent` now accepts an optional explicit `clientCreatedAt`.
+- `core/offline/clock.ts` — `nextTimestamp()`, a strictly-increasing per-device clock (see Deviated
+  — this fixes a real ordering bug found while building this step).
+- `core/offline/gameActions.ts` — every mutation this screen needs: `addBuyIn`/`removeBuyIn`
+  (return the appended event, for the batch state below), `setCashPaid`, `settlePlayer`/
+  `reopenPlayer`/`editSettledChips`, `addSharedCost`/`updateSharedCost`/`removeSharedCost`,
+  `setUnaccounted`, and the generic `undoEvent`.
+- `core/offline/outbox.ts` — `appendUndoEvent`: appends the inverse and stamps the original's
+  `undoneBy` in one transaction, re-queueing both so the pairing survives a sync push even if the
+  original already left the outbox.
+- `core/offline/useGame.ts` — now also returns the raw `events` array (needed by the audit drawer
+  and by undo, which needs the exact original `GameEvent` to invert).
+- `features/game/buyInBatch.ts` — the coalescing-undo window as a small Zustand store
+  (`createBuyInBatchStore` factory + a default instance): every tap resets a 3s inactivity timer;
+  the window holds one entry per touched player (net delta + every underlying event); Zustand
+  because this is exactly the per-tap, frequently-updating state `CLAUDE.md` says doesn't belong in
+  Context — and the first real use of Zustand in the app (`02-architecture.md#frontend-stack`).
+- `features/game/buyInText.ts` / `auditLogText.ts` — compose the exact spec-worded sentences
+  ("מור · קנייה 3 · +100 ז'יטונים · +₪50", "+3 קניות" once taps coalesce, audit lines like
+  "00:14 · מור — קנייה 3") from i18next templates with every signed figure LRI/PDI-isolated.
+- New components: `BuyInCounter` (both buttons 48px — see Deviated), `CashPaidSheet`, `SettleSheet`
+  (one component, two modes: settle vs. edit-chips), `BuyInBatchBar`, `PotBanner` +
+  `PotResolutionSheet`, `SharedCostsSheet` (list + add/edit form, equal and custom split),
+  `AuditLogDrawer` (filter chips, undo-behind-a-confirm-tap).
+- `PlayerRow` rewritten to the full two-line anatomy (name/owed/⋯, then cash-paid/counter), settled
+  state (40% opacity, locked signed net result, disabled counter), and a real late-joiner caption
+  with the join time.
+- `PlayerActionsSheet` extended: settle/reopen/edit-chips (row-state-dependent), cash paid, rename,
+  remove — ordered non-destructive-first per the spec's table.
+- `GamePage` rewritten: sticky header with the private badge, an `H:MM` elapsed clock
+  (`hooks/useElapsedTime.ts`), the real `SyncIndicator` (steps 1/5's indicator and outbox, wired to
+  a real screen for the first time), the pot banner, the shared-costs summary line, every sheet
+  above, the coalescing snackbar/batch bar, and `useWakeLock`/`useBeforeUnloadGuard` finally called
+  with a real `gameId` (step 5 built them with nothing to call them yet).
+
+**59 new tests** across 15 files (`pot`, `auditLog`, `clock`, `gameActions` additions, `buyInBatch`,
+`buyInText`, `auditLogText`, `BuyInCounter`, `SettleSheet`, `PlayerRow`, `PlayerActionsSheet`,
+`BuyInBatchBar`, `PotBanner`, `PotResolutionSheet`, `SharedCostsSheet`, `AuditLogDrawer`,
+`useElapsedTime`). Total test count: 346, `npm run verify` green.
+
+The whole flow was also driven in real headless Chromium against the dev server, twice: once with
+real Hebrew content (create game → rapid multi-row buy-ins → batch bar with correct per-row and
+total figures → decrement-to-zero removal prompt → cash paid → settle → red pot banner with the
+correct discrepancy → resolution sheet → shared cost → audit log with working category filters) and
+once with the network fully disabled after first load (`context.setOffline(true)`) repeating buy-ins,
+cash paid and the audit log. Zero console errors in either run. The pseudo-locale was checked at the
+document level (`dir` flips to `ltr`, the pre-existing new-game screen holds up) rather than
+screenshotted per new sheet — see Left undone.
+
+**Deviated.**
+- **A real ordering bug, found and fixed.** `fold()`'s tie-break on identical `clientCreatedAt`
+  timestamps falls back to `clientEventId` — a random UUID compare, unrelated to causal order. Two
+  appends in the same millisecond (e.g. `settlePlayer` immediately followed by `editSettledChips`,
+  which this step's settle-sheet reuse makes a real, easy-to-hit sequence) could silently apply in
+  the wrong order. Fixed at the call site, not in `fold()`: `core/offline/clock.ts`'s
+  `nextTimestamp()` stamps every event this device creates with a strictly-increasing timestamp,
+  and `createUndoEvent` now takes an optional explicit timestamp so `undoEvent` can supply one too.
+  `fold()`'s comparator itself is untouched — still exactly as simple as `core/events.ts`'s purity
+  contract wants.
+- **A second, latent bug found and *not* generically fixed: undoing `shared_cost_removed`.**
+  `createUndoEvent`'s generic payload-copying only works when the inverse type's payload is a
+  subset of the original's. That holds for every pair already in `INVERSE_TYPES` except one:
+  `shared_cost_removed`'s real payload is `{ costId }`, nowhere near enough to reconstruct the
+  `shared_cost_added` it would invert to (label, amount, payer, split, shares) — undoing a removal
+  would append a malformed event and crash the fold. Rather than special-case the generic mechanism,
+  `core/events.ts` now exports `GENERICALLY_REVERSIBLE_TYPES` / `isGenericallyReversible`, a
+  narrower allow-list than `INVERSE_TYPES`, and the audit log's undo affordance is gated on that.
+  Removing a shared cost is simply not undoable through this path yet — a real fix (an explicit
+  inverse-payload override on `createUndoEvent`) is left for whenever shared-cost editing needs it.
+- **The pot banner's "still-playing" semantics are a build-time reading, not a spec quote.**
+  05-settlement.md defines `discrepancy = totalBuyIns − totalChips` but doesn't say what an
+  unsettled player contributes, because the doc's own worked examples are all settlement-time.
+  Documented and tested in `core/pot.ts` (see Built) rather than left as a silent assumption.
+- **"Split evenly among players"**, the safeguard's third resolution, is not built. It needs a
+  settlement transfer graph to distribute the discrepancy into — step 8 — which doesn't exist yet.
+  "Fix the counts" and "assign to the house" (both fully realizable now) are built; the third button
+  is simply absent rather than present-and-broken.
+- **The header `⋯` opens a one-item menu** (shared costs only) rather than the spec's full game
+  settings (rename, viewers, share, hand over, reopen/close, delete) — every other item belongs to
+  steps 12/13/16, matching the precedent step 6 set for the row action sheet.
+- **The action bar has two items, not four.** `שיתוף` (step 9's share-as-text / step 13's share
+  link) and `סיום משחק` (step 9) don't exist yet; a button that can't do its one job is worse than
+  no button, per `CLAUDE.md`. `+ שחקן` and `יומן` are both fully real.
+- **"Player history in this game"** and **"Edit chips" as a literal spec line item** — the former is
+  deferred to statistics (step 15); the latter *is* built, reusing `SettleSheet` in `edit` mode
+  (`chips_set` instead of `player_settled`) rather than being a separate component.
+- **The audit log's "long-press to undo"** is a tap that reveals a `בטל`/`ביטול` confirm pair, not
+  literal 500ms long-press timing — easier to discover, easier to test, same outcome, matching the
+  spirit (not the letter) of the row-action-sheet's own long-press-plus-`⋯` precedent from step 6.
+- **The buy-in counter's `−` button is 48px, same as `+`** — collision #1 from `docs/11` /
+  `docs/build/NOTES.md`, resolved by weight (filled accent circle vs. an outlined one) rather than
+  by an undersized hit target.
+- **Late-joiner caption now shows the real join time** (`הצטרף 23:40`) instead of step 6's
+  placeholder static text — a small correctness fix made in passing since `PlayerRow` was being
+  rewritten anyway.
+
+**Left undone.**
+- *Tested at a real game* — the plan's own exit criterion for this step, and it cannot be satisfied
+  from here. Everything else is checked: `npm run verify` is green, the flow was driven end-to-end
+  in a real browser twice (see Built), and offline behaviour was verified with the network actually
+  disabled, not just assumed from the architecture. The step stays `in progress` until a real
+  Thursday night confirms it, per `09-roadmap.md#m1--the-napkin-replacement`.
+- The pseudo-locale was checked at the document level (RTL→LTR flip, no hardcoded direction) but not
+  screenshotted per new sheet the way step 3 did for its component gallery — worth a pass before
+  step 8 if time allows, though every class used is logical-properties-only and the lint rules that
+  catch physical utilities are green.
+- "Split evenly" (see Deviated) and the fuller game-settings menu (see Deviated) — explicitly
+  deferred, not attempted.
+
+**Watch out.**
+- **`fold()`'s tie-break needs help from its callers.** See Deviated — any *new* call site that
+  appends an event should go through `nextTimestamp()` (or plumb an explicit `clientCreatedAt`),
+  not bare `new Date().toISOString()`, or two same-millisecond events can silently reorder.
+- **Undoing a `shared_cost_removed` event is not offered, on purpose.** See Deviated. Don't route it
+  through the generic `undoEvent`/`isGenericallyReversible` path without first giving
+  `createUndoEvent` a way to carry an explicit inverse payload.
+- **The pot banner's chip-safeguard math never reads `cashPaidMinor` or shared costs, by design** —
+  `core/pot.test.ts` asserts this directly. If a future change threads either one through, re-read
+  05-settlement.md's money model first: they're both settlement-time concerns, not the buy-in ⇄
+  chip-count safeguard.
+- **Hebrew currency formatting puts the symbol *after* the number** (`Intl.NumberFormat('he', …)`
+  produces `‏50 ‏₪`, not `₪50`), with RLM marks around it. Assertions like `.toContain('−₪50')`
+  will fail against the real formatter — check for the digits and the sign as separate substrings
+  instead (`money.test.ts` and this step's component tests both do this correctly; a couple of
+  first-draft tests here didn't, and the real i18next-backed `buyInText.test.ts` caught it).
+- **Component tests can't see interpolated i18next content.** `react-i18next` outside an initialised
+  `i18next` instance falls back to returning the raw key, params dropped — confirmed against this
+  codebase directly, not assumed. Every component test here (like the rest of the suite) asserts on
+  keys and behaviour; the handful of modules whose actual *wording* matters
+  (`buyInText.ts`, `auditLogText.ts`) import the real singleton from `@i18n/index` instead and
+  assert on real Hebrew sentences.
