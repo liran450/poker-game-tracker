@@ -5,6 +5,8 @@ import { minor, type Minor } from './money';
 import {
   buildGameSnapshot,
   computeBalances,
+  computeReconciliation,
+  computeSettlementProgress,
   computeTransfers,
   HOUSE_ID,
   POT_ID,
@@ -447,6 +449,84 @@ describe('buildGameSnapshot', () => {
     expect(snapshot.playerResults[0]!.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
     );
+  });
+
+  it('writes a host-edited transfer list verbatim, skipping computeTransfers entirely', () => {
+    // A deliberately "wrong" manual transfer (מור pays דנה the whole ₪20,
+    // rather than the ₪20 an optimum computation would split differently) —
+    // proves transfersOverride is written as-is, not recomputed underneath.
+    const snapshot = buildGameSnapshot(
+      {
+        ...baseInput,
+        players: [
+          {
+            id: 'mor',
+            seatOrder: 0,
+            userId: null,
+            guestName: 'מור',
+            displayName: 'מור',
+            buysCount: 1,
+            cashPaidMinor: minor(0),
+            chipsFinal: 80,
+            joinedAt: '2026-07-29T22:00:00.000Z',
+            leftAt: '2026-07-30T01:00:00.000Z',
+            settledPosition: 1,
+          },
+          {
+            id: 'dana',
+            seatOrder: 1,
+            userId: null,
+            guestName: 'דנה',
+            displayName: 'דנה',
+            buysCount: 1,
+            cashPaidMinor: minor(0),
+            chipsFinal: 120,
+            joinedAt: '2026-07-29T22:00:00.000Z',
+            leftAt: '2026-07-30T01:00:00.000Z',
+            settledPosition: 2,
+          },
+        ],
+      },
+      () => 'fixed-id',
+      [{ fromId: 'mor', toId: 'dana', amountMinor: minor(999999) }],
+    );
+
+    expect(snapshot.transfers).toEqual([
+      { fromId: 'mor', toId: 'dana', amountMinor: 999999, orderIndex: 0 },
+    ]);
+  });
+});
+
+describe('computeReconciliation and computeSettlementProgress', () => {
+  const nodes: SettlementNode[] = [
+    { id: 'a', seatOrder: 0, amountMinor: minor(-4000) },
+    { id: 'b', seatOrder: 1, amountMinor: minor(2000) },
+    { id: 'c', seatOrder: 2, amountMinor: minor(2000) },
+  ];
+
+  it('reports every node as reconciled once transfers match balances exactly', () => {
+    const transfers: Transfer[] = [
+      { fromId: 'a', toId: 'b', amountMinor: minor(2000) },
+      { fromId: 'a', toId: 'c', amountMinor: minor(2000) },
+    ];
+    const rows = computeReconciliation(nodes, transfers);
+    expect(rows.every((r) => r.isReconciled)).toBe(true);
+    expect(rows.find((r) => r.nodeId === 'a')!.actuallyAssignedMinor).toBe(-4000);
+
+    const progress = computeSettlementProgress(nodes, transfers);
+    expect(progress).toEqual({ assignedMinor: 4000, totalToMoveMinor: 4000, isComplete: true });
+  });
+
+  it('reports the gap, signed, when a transfer is short', () => {
+    const transfers: Transfer[] = [{ fromId: 'a', toId: 'b', amountMinor: minor(1500) }];
+    const rows = computeReconciliation(nodes, transfers);
+    const b = rows.find((r) => r.nodeId === 'b')!;
+    expect(b.actuallyAssignedMinor).toBe(1500);
+    expect(b.differenceMinor).toBe(-500); // בפועל − אמור
+    expect(b.isReconciled).toBe(false);
+
+    const progress = computeSettlementProgress(nodes, transfers);
+    expect(progress).toEqual({ assignedMinor: 1500, totalToMoveMinor: 4000, isComplete: false });
   });
 });
 

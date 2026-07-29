@@ -45,6 +45,55 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### `tsc --noEmit -p .` is not `npm run typecheck` — it silently misses real errors
+**Step 9 · 2026-07-29 · trap · environment**
+
+`package.json`'s `typecheck` script is `tsc -b` (project-references build mode — the root
+`tsconfig.json` has `"files": []` and only `references`, delegating to `tsconfig.app.json`/
+`tsconfig.node.json`). Running `npx tsc --noEmit -p .` instead — which looks equivalent and is the
+natural ad hoc command to reach for — does **not** catch errors that `tsc -b` does. Concretely: it
+missed `SettlementRoute.tsx` passing `TransferState[]` (fields `fromPlayerId`/`toPlayerId`) where
+`computeReconciliation`/`computeSettlementProgress` require `Transfer[]` (fields `fromId`/`toId`) —
+a real bug (every reconciliation row silently read "actually assigned" as 0, so the settlement
+banner could never reach `הכל שויך ✓`) that sat undetected through several rounds of `tsc --noEmit
+-p .` reporting clean, and was only caught by the Playwright e2e test actually exercising the
+screen. Isolated confirmation: the same code, checked with `tsc -b --force` against a stripped-down
+reproduction, reports the missing-properties error immediately.
+
+**Always run the actual `npm run typecheck` (or `npm run verify`)**, never an ad hoc `tsc` 
+invocation, and don't trust a clean ad hoc run as proof of type safety in this repo.
+
+### A `BottomSheet`'s entrance animation makes a Playwright drag miss its target
+**Step 9 · 2026-07-29 · trap**
+
+`SlideToConfirm` inside `EndGameConfirmSheet` (a `BottomSheet`) uses real `onPointerDown`/
+`onPointerMove` handlers with `setPointerCapture`. Driving it with Playwright — `slider.
+boundingBox()` immediately after opening the sheet, then `page.mouse.down()`/`move()`/`up()` at
+those coordinates — silently did nothing: no error, `dragging.current` never even flips (confirmed
+by a temporary `console.log` in the handler), progress stays 0 forever. Root cause: `BottomSheet`
+slides in over 260ms (`--animate-sheet-in`), and `boundingBox()` was called mid-animation — by the
+time the real mouse-down event lands, the thumb has already moved to its final resting position, so
+the click/drag starts on empty space (or whatever's now behind it) instead. Confirmed by adding
+`page.waitForTimeout(400)` before measuring: the exact same drag code then works every time.
+
+**Rule for any future e2e test that measures element geometry right after opening a sheet, a
+snackbar, or anything else with an entrance transition:** wait for the animation to settle first —
+a fixed wait comfortably longer than the token's duration is enough; Playwright's own
+`locator.click()` handles this internally via its actionability checks, but raw `page.mouse`
+sequences do not.
+
+### The settlement graph needed a second non-player sentinel, so `transfer_edited` dropped `null`-for-pot
+**Step 9 · 2026-07-29 · decision**
+
+`transfer_edited`'s `fromPlayerId`/`toPlayerId` (step 4) were `string | null`, with `null` meaning
+the pot — reasonable when the pot was the only non-player party anyone had modelled. Step 8 added a
+second one, the house/unaccounted node, with no existing convention for representing it. Rather than
+inventing a second special value (`null` for pot, something else for house), the payload's fields
+became plain `string`, and `POT_ID`/`HOUSE_ID` (`core/settlement.ts`'s existing sentinel constants,
+already structurally distinct from a real player id) are used for both. Nothing outside
+`core/events.ts` depended on the old `null` convention yet (confirmed by grep before changing it),
+so this was a clean, low-risk rename rather than a real migration.
+
 ### Step 3's token extraction missed gradients, glows and elevation shadows
 **Step 8 (design audit) · 2026-07-29 · trap · decision**
 

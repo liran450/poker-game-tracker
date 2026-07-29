@@ -1,0 +1,467 @@
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { AppShell } from '@components/AppShell';
+import { BottomSheet } from '@components/BottomSheet';
+import { Snackbar } from '@components/Snackbar';
+import { SyncIndicator } from '@components/SyncIndicator';
+import { Button } from '@components/shared/Button';
+import { IconButton } from '@components/shared/IconButton';
+import { AddPlayersSheet } from './AddPlayersSheet';
+import { AuditLogDrawer } from './AuditLogDrawer';
+import { BuyInBatchBar } from './BuyInBatchBar';
+import { CashPaidSheet } from './CashPaidSheet';
+import { EndGameConfirmSheet } from './EndGameConfirmSheet';
+import { PlayerActionsSheet } from './PlayerActionsSheet';
+import { PlayerRow } from './PlayerRow';
+import { PotBanner } from './PotBanner';
+import { PotResolutionSheet } from './PotResolutionSheet';
+import { SettleSheet } from './SettleSheet';
+import { SharedCostsSheet } from './SharedCostsSheet';
+import { useBuyInBatchStore, type BuyInBatchEntry } from './buyInBatch';
+import { formatBuyInChange } from './buyInText';
+import { formatTimeOfDay } from './time';
+import { buildAuditLog } from '@core/auditLog';
+import {
+  addBuyIn,
+  addPlayersToGame,
+  addSharedCost,
+  beginSettlement,
+  editSettledChips,
+  removeBuyIn,
+  removePlayer,
+  removeSharedCost,
+  renamePlayer,
+  reopenPlayer,
+  setCashPaid,
+  settlePlayer,
+  setUnaccounted,
+  undoEvent,
+  updateSharedCost,
+} from '@core/offline/gameActions';
+import { listRecentPlayers } from '@core/offline/recentPlayers';
+import { useGame } from '@core/offline/useGame';
+import { useSyncState } from '@core/offline/useSyncState';
+import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
+import { useElapsedTime } from '../../hooks/useElapsedTime';
+import { useWakeLock } from '../../hooks/useWakeLock';
+import { dedupeDisplayNames, renderPlayerName } from '@core/players';
+import { add, formatChipValue, formatMoney, minor, sum, type Minor } from '@core/money';
+import { computePotStatus } from '@core/pot';
+
+type CashPaidTarget = { playerId: string; name: string; currentAmountMinor: Minor };
+type SettleTarget = { playerId: string; name: string; mode: 'settle' | 'edit'; initialChips: number };
+
+function hapticTick(): void {
+  if ('vibrate' in navigator) navigator.vibrate(10);
+}
+
+export interface LiveGameViewProps {
+  gameId: string;
+}
+
+/**
+ * The live game screen — buy-ins, cash paid, settling, shared costs, the pot
+ * safeguard, the audit log. Everything reachable while `state.status` is
+ * `setup` or `active`; `settling`/`finished` are separate screens
+ * (`SettlementRoute`/`SummaryRoute`) that `GamePage` dispatches to instead.
+ */
+export function LiveGameView({ gameId }: LiveGameViewProps) {
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
+  const game = useGame(gameId);
+  const recentNames =
+    useLiveQuery(() => listRecentPlayers().then((players) => players.map((p) => p.name)), []) ?? [];
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
+  const [actionsForPlayerId, setActionsForPlayerId] = useState<string | null>(null);
+  const [cashPaidTarget, setCashPaidTarget] = useState<CashPaidTarget | null>(null);
+  const [settleTarget, setSettleTarget] = useState<SettleTarget | null>(null);
+  const [pendingRemovalPlayerId, setPendingRemovalPlayerId] = useState<string | null>(null);
+  const [gameMenuOpen, setGameMenuOpen] = useState(false);
+  const [sharedCostsOpen, setSharedCostsOpen] = useState(false);
+  const [potResolutionOpen, setPotResolutionOpen] = useState(false);
+  const [auditLogOpen, setAuditLogOpen] = useState(false);
+  const [endGameOpen, setEndGameOpen] = useState(false);
+
+  const batch = useBuyInBatchStore();
+  const sync = useSyncState(gameId);
+  useWakeLock(game?.state.status === 'active');
+  useBeforeUnloadGuard(sync.pendingCount > 0);
+  const elapsed = useElapsedTime(game?.state.startedAt ?? null);
+
+  if (!game?.record) return null;
+
+  const { record, state, events } = game;
+  const locale = i18n.resolvedLanguage ?? 'he';
+  const currency = record.currencyCode ?? 'ILS';
+  const buyAmountMinor = minor(record.buyAmountMinor ?? 0);
+  const chipsPerBuy = record.chipsPerBuy ?? 1;
+
+  const activePlayers = [...state.players.values()].filter((p) => !p.isRemoved);
+  const displayNames = dedupeDisplayNames(
+    activePlayers.map((p) => ({ id: p.id, name: renderPlayerName(p), order: p.seatOrder })),
+  );
+  const sortedPlayers = [...activePlayers].sort((a, b) => a.seatOrder - b.seatOrder);
+  const actionsPlayer = actionsForPlayerId ? state.players.get(actionsForPlayerId) : undefined;
+  const pendingRemovalPlayer = pendingRemovalPlayerId ? state.players.get(pendingRemovalPlayerId) : undefined;
+
+  const potStatus = computePotStatus(activePlayers, buyAmountMinor, chipsPerBuy, state.unaccountedMinor);
+  const sharedCosts = [...state.sharedCosts.values()];
+  const sharedCostsTotal = sum(sharedCosts.map((c) => c.amountMinor));
+  const totalCashPaid = sum(activePlayers.map((p) => p.cashPaidMinor));
+  const unsettledPlayers = activePlayers.filter((p) => !p.isSettled);
+
+  // Chip units, not money — how many chips are still uncounted across the
+  // table, used only for the settle sheet's soft "exceeds remaining" warning.
+  const totalBoughtChips = activePlayers.reduce((chips, p) => chips + p.buysCount * chipsPerBuy, 0);
+  function chipsRemainingExcluding(playerId: string): number {
+    const claimedByOthers = activePlayers
+      .filter((p) => p.isSettled && p.chipsFinal !== null && p.id !== playerId)
+      .reduce((chips, p) => chips + (p.chipsFinal ?? 0), 0);
+    return totalBoughtChips - claimedByOthers;
+  }
+
+  const handleIncrement = async (playerId: string): Promise<void> => {
+    const event = await addBuyIn(gameId, playerId);
+    hapticTick();
+    batch.addTap(playerId, 1, event);
+  };
+
+  const handleDecrement = async (playerId: string): Promise<void> => {
+    const player = state.players.get(playerId);
+    if (!player || player.buysCount <= 0) return;
+    const event = await removeBuyIn(gameId, playerId);
+    hapticTick();
+    batch.addTap(playerId, -1, event);
+    if (player.buysCount === 1) setPendingRemovalPlayerId(playerId);
+  };
+
+  const undoBatchEntries = async (entries: readonly BuyInBatchEntry[]): Promise<void> => {
+    for (const entry of entries) {
+      for (const event of entry.events) {
+        await undoEvent(event);
+      }
+    }
+    batch.clear();
+  };
+
+  const singleEntry = batch.entries.length === 1 ? (batch.entries[0] ?? null) : null;
+  const showResultingCount = singleEntry !== null && singleEntry.events.length === 1;
+
+  return (
+    <AppShell
+      header={
+        <div className="flex flex-col gap-1 px-2 py-3">
+          <div className="flex items-center gap-2">
+            <IconButton label={t('game.backToHome')} onClick={() => void navigate('/')}>
+              {'✕'}
+            </IconButton>
+            <h1 className="flex-1 truncate text-center text-heading font-bold">
+              {record.name}
+              {record.isPrivate && (
+                <span className="ms-2 rounded-pill bg-surface-raised px-2 py-0.5 align-middle text-caption font-semibold text-fg-tertiary">
+                  {t('game.privateBadge')}
+                </span>
+              )}
+            </h1>
+            <div className="flex items-center gap-1">
+              <span className="text-caption tabular-nums text-fg-tertiary" dir="ltr">
+                {elapsed}
+              </span>
+              <SyncIndicator state={sync.state} pendingCount={sync.pendingCount} />
+              <IconButton label={t('game.menu')} onClick={() => setGameMenuOpen(true)}>
+                {'⋯'}
+              </IconButton>
+            </div>
+          </div>
+          <p className="text-center text-body-sm text-fg-tertiary">
+            {t('game.headerSummary', {
+              chipValue: formatChipValue(buyAmountMinor, chipsPerBuy, locale, currency),
+              buyAmount: formatMoney(buyAmountMinor, { locale, currency }),
+              count: sortedPlayers.length,
+            })}
+          </p>
+          <PotBanner
+            status={potStatus}
+            currency={currency}
+            locale={locale}
+            onOpenResolution={() => setPotResolutionOpen(true)}
+          />
+          {sharedCosts.length > 0 && (
+            <p className="text-center text-body-sm text-fg-tertiary">
+              {t('sharedCosts.summaryLine', { amount: formatMoney(sharedCostsTotal, { locale, currency }) })}
+            </p>
+          )}
+        </div>
+      }
+      footer={
+        <div className="flex gap-2 px-4 py-3">
+          <Button variant="primary" fullWidth onClick={() => setAddSheetOpen(true)}>
+            {t('game.addPlayer')}
+          </Button>
+          <Button variant="secondary" onClick={() => setAuditLogOpen(true)}>
+            {t('auditLog.actionBarLabel')}
+          </Button>
+          <Button variant="secondary" onClick={() => setEndGameOpen(true)}>
+            {t('game.endGame')}
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-2 p-4">
+        {sortedPlayers.map((player) => (
+          <PlayerRow
+            key={player.id}
+            name={displayNames.get(player.id) ?? ''}
+            buysCount={player.buysCount}
+            cashPaidMinor={player.cashPaidMinor}
+            buyAmountMinor={buyAmountMinor}
+            chipsPerBuy={chipsPerBuy}
+            currency={currency}
+            isSettled={player.isSettled}
+            chipsFinal={player.chipsFinal}
+            lateJoinedAt={
+              state.startedAt !== null && player.joinedAt > state.startedAt
+                ? formatTimeOfDay(player.joinedAt)
+                : null
+            }
+            onIncrement={() => void handleIncrement(player.id)}
+            onDecrement={() => void handleDecrement(player.id)}
+            onOpenCashPaid={() =>
+              setCashPaidTarget({
+                playerId: player.id,
+                name: displayNames.get(player.id) ?? '',
+                currentAmountMinor: player.cashPaidMinor,
+              })
+            }
+            onOpenActions={() => setActionsForPlayerId(player.id)}
+          />
+        ))}
+      </div>
+
+      <AddPlayersSheet
+        open={addSheetOpen}
+        onClose={() => setAddSheetOpen(false)}
+        onCommit={(names) => void addPlayersToGame(gameId, names)}
+        recentNames={recentNames}
+      />
+
+      {actionsPlayer && (
+        <PlayerActionsSheet
+          open={actionsForPlayerId !== null}
+          onClose={() => setActionsForPlayerId(null)}
+          playerName={displayNames.get(actionsPlayer.id) ?? ''}
+          hasBuyIns={actionsPlayer.buysCount > 0}
+          isSettled={actionsPlayer.isSettled}
+          onRename={(name) => void renamePlayer(gameId, actionsPlayer.id, name)}
+          onRemove={() => void removePlayer(gameId, actionsPlayer.id)}
+          onSettle={() =>
+            setSettleTarget({
+              playerId: actionsPlayer.id,
+              name: displayNames.get(actionsPlayer.id) ?? '',
+              mode: 'settle',
+              initialChips: 0,
+            })
+          }
+          onReopen={() => void reopenPlayer(gameId, actionsPlayer.id)}
+          onEditChips={() =>
+            setSettleTarget({
+              playerId: actionsPlayer.id,
+              name: displayNames.get(actionsPlayer.id) ?? '',
+              mode: 'edit',
+              initialChips: actionsPlayer.chipsFinal ?? 0,
+            })
+          }
+          onOpenCashPaid={() =>
+            setCashPaidTarget({
+              playerId: actionsPlayer.id,
+              name: displayNames.get(actionsPlayer.id) ?? '',
+              currentAmountMinor: actionsPlayer.cashPaidMinor,
+            })
+          }
+        />
+      )}
+
+      {cashPaidTarget && (
+        <CashPaidSheet
+          open
+          onClose={() => setCashPaidTarget(null)}
+          playerName={cashPaidTarget.name}
+          currentAmountMinor={cashPaidTarget.currentAmountMinor}
+          buyAmountMinor={buyAmountMinor}
+          currency={currency}
+          locale={locale}
+          onSave={(amountMinor) => void setCashPaid(gameId, cashPaidTarget.playerId, amountMinor)}
+        />
+      )}
+
+      {settleTarget && (
+        <SettleSheet
+          open
+          onClose={() => setSettleTarget(null)}
+          playerName={settleTarget.name}
+          mode={settleTarget.mode}
+          initialChips={settleTarget.initialChips}
+          buysCount={state.players.get(settleTarget.playerId)?.buysCount ?? 0}
+          buyAmountMinor={buyAmountMinor}
+          chipsPerBuy={chipsPerBuy}
+          currency={currency}
+          locale={locale}
+          chipsRemainingInPlay={chipsRemainingExcluding(settleTarget.playerId)}
+          onSave={(chips) =>
+            void (settleTarget.mode === 'settle'
+              ? settlePlayer(gameId, settleTarget.playerId, chips)
+              : editSettledChips(gameId, settleTarget.playerId, chips))
+          }
+        />
+      )}
+
+      {pendingRemovalPlayer && (
+        <BottomSheet
+          open
+          onClose={() => setPendingRemovalPlayerId(null)}
+          title={t('players.zeroDecrementTitle')}
+        >
+          <div className="flex flex-col gap-2.5">
+            <p className="text-body-sm text-fg-secondary">
+              {t('players.zeroDecrementPrompt', { name: displayNames.get(pendingRemovalPlayer.id) ?? '' })}
+            </p>
+            <Button
+              variant="destructive"
+              fullWidth
+              onClick={() => {
+                void removePlayer(gameId, pendingRemovalPlayer.id);
+                setPendingRemovalPlayerId(null);
+              }}
+            >
+              {t('players.remove')}
+            </Button>
+            <Button variant="ghost" fullWidth onClick={() => setPendingRemovalPlayerId(null)}>
+              {t('ui.cancel')}
+            </Button>
+          </div>
+        </BottomSheet>
+      )}
+
+      <BottomSheet open={gameMenuOpen} onClose={() => setGameMenuOpen(false)} title={t('game.menu')}>
+        <Button
+          variant="secondary"
+          fullWidth
+          onClick={() => {
+            setGameMenuOpen(false);
+            setSharedCostsOpen(true);
+          }}
+        >
+          {t('sharedCosts.title')}
+        </Button>
+      </BottomSheet>
+
+      <SharedCostsSheet
+        open={sharedCostsOpen}
+        onClose={() => setSharedCostsOpen(false)}
+        costs={sharedCosts}
+        players={sortedPlayers.map((p) => ({ id: p.id, name: displayNames.get(p.id) ?? '' }))}
+        currency={currency}
+        locale={locale}
+        onAdd={(input) => void addSharedCost(gameId, input)}
+        onUpdate={(costId, input) => void updateSharedCost(gameId, costId, input)}
+        onRemove={(costId) => void removeSharedCost(gameId, costId)}
+      />
+
+      <PotResolutionSheet
+        open={potResolutionOpen}
+        onClose={() => setPotResolutionOpen(false)}
+        discrepancyMinor={potStatus.discrepancyMinor}
+        currency={currency}
+        settledPlayers={activePlayers
+          .filter((p) => p.isSettled && p.chipsFinal !== null && p.settledAt !== null)
+          .map((p) => ({
+            id: p.id,
+            name: displayNames.get(p.id) ?? '',
+            chipsFinal: p.chipsFinal!,
+            settledAt: p.settledAt!,
+          }))}
+        onSelectPlayer={(playerId) => {
+          setPotResolutionOpen(false);
+          const player = state.players.get(playerId);
+          if (!player) return;
+          setSettleTarget({
+            playerId,
+            name: displayNames.get(playerId) ?? '',
+            mode: 'edit',
+            initialChips: player.chipsFinal ?? 0,
+          });
+        }}
+        onAssignToHouse={() => {
+          void setUnaccounted(gameId, add(state.unaccountedMinor, potStatus.discrepancyMinor));
+          setPotResolutionOpen(false);
+        }}
+      />
+
+      <AuditLogDrawer
+        open={auditLogOpen}
+        onClose={() => setAuditLogOpen(false)}
+        entries={buildAuditLog(events)}
+        playerNames={displayNames}
+        currency={currency}
+        locale={locale}
+        onUndo={(entry) => {
+          const original = events.find((e) => e.clientEventId === entry.id);
+          if (original) void undoEvent(original);
+        }}
+      />
+
+      <EndGameConfirmSheet
+        open={endGameOpen}
+        onClose={() => setEndGameOpen(false)}
+        playerCount={sortedPlayers.length}
+        totalPotMinor={totalCashPaid}
+        sharedCostsMinor={sharedCostsTotal}
+        currency={currency}
+        locale={locale}
+        unsettledPlayerNames={unsettledPlayers.map((p) => displayNames.get(p.id) ?? '')}
+        hasPendingSync={sync.pendingCount > 0}
+        discrepancyMinor={potStatus.discrepancyMinor}
+        onConfirm={() => {
+          setEndGameOpen(false);
+          void beginSettlement(gameId);
+        }}
+      />
+
+      {singleEntry && (
+        <Snackbar
+          key={batch.tapCount}
+          open
+          duration={3000}
+          onClose={() => batch.clear()}
+          onUndo={() => void undoBatchEntries([singleEntry])}
+        >
+          {formatBuyInChange(t, {
+            name: displayNames.get(singleEntry.playerId) ?? '',
+            deltaBuys: singleEntry.deltaBuys,
+            showResultingCount,
+            resultingBuysCount: state.players.get(singleEntry.playerId)?.buysCount ?? 0,
+            buyAmountMinor,
+            chipsPerBuy,
+            currency,
+            locale,
+          })}
+        </Snackbar>
+      )}
+
+      {batch.entries.length > 1 && (
+        <BuyInBatchBar
+          entries={batch.entries}
+          playerNames={displayNames}
+          buyAmountMinor={buyAmountMinor}
+          chipsPerBuy={chipsPerBuy}
+          currency={currency}
+          locale={locale}
+          onUndoAll={() => void undoBatchEntries(batch.entries)}
+          onConfirm={() => batch.clear()}
+        />
+      )}
+    </AppShell>
+  );
+}

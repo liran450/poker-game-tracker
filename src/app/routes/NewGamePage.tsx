@@ -8,6 +8,7 @@ import { TextField } from '@components/shared/TextField';
 import { SelectionChip } from '@components/SelectionChip';
 import { InfoExplainer } from '@components/InfoExplainer';
 import { AddPlayersSheet } from '@features/game/AddPlayersSheet';
+import { formatDateShort } from '@features/game/time';
 import { createGame } from '@core/offline/gameActions';
 import { listRecentPlayers } from '@core/offline/recentPlayers';
 import { formatChipValue, formatMoney, fromMajor } from '@core/money';
@@ -15,20 +16,13 @@ import { formatChipValue, formatMoney, fromMajor } from '@core/money';
 const CURRENCY = 'ILS'; // inherited from the group; not user-visible in v1 (01-product-spec.md#61)
 const AMOUNT_PRESETS = [20, 50, 100];
 
-function formatDefaultDate(now: Date): string {
-  const dd = String(now.getDate()).padStart(2, '0');
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const yy = String(now.getFullYear() % 100).padStart(2, '0');
-  return `${dd}.${mm}.${yy}`;
-}
-
 export function NewGamePage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const locale = i18n.resolvedLanguage ?? 'he';
 
   const [name, setName] = useState(() =>
-    t('newGame.defaultName', { date: formatDefaultDate(new Date()) }),
+    t('newGame.defaultName', { date: formatDateShort(new Date()) }),
   );
   const [buyAmountMajor, setBuyAmountMajor] = useState(50);
   const [chipsPerBuy, setChipsPerBuy] = useState(100);
@@ -48,7 +42,7 @@ export function NewGamePage() {
     if (!canStart) return;
     setSubmitting(true);
     const { gameId } = await createGame({
-      name: name.trim() || t('newGame.defaultName', { date: formatDefaultDate(new Date()) }),
+      name: name.trim() || t('newGame.defaultName', { date: formatDateShort(new Date()) }),
       buyAmountMinor,
       chipsPerBuy,
       currencyCode: CURRENCY,

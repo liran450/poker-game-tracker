@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { GameEvent } from '../events';
+import type { GameSnapshot } from '../settlement';
 
 /**
  * A local index of known games, so a games list can render without a fold.
@@ -54,12 +55,26 @@ export interface MetaRecord {
   readonly value: string;
 }
 
+/**
+ * The permanent-table snapshot (03-data-model.md#permanent-tables), built by
+ * `core/settlement.ts#buildGameSnapshot` and written once on finalisation.
+ * Local-only for now — step 11 is what actually pushes this shape to
+ * Supabase's three permanent tables. Reopening within 24h deletes this row so
+ * there is never a stale duplicate (03-data-model.md), and it's rewritten on
+ * the next `game_ended`.
+ */
+export interface SnapshotRecord {
+  readonly gameId: string;
+  readonly snapshot: GameSnapshot;
+}
+
 export class AppDatabase extends Dexie {
   games!: EntityTable<CachedGameRecord, 'id'>;
   events!: EntityTable<GameEvent, 'clientEventId'>;
   outbox!: EntityTable<OutboxEntry, 'clientEventId'>;
   recentPlayers!: EntityTable<RecentPlayerRecord, 'name'>;
   meta!: EntityTable<MetaRecord, 'key'>;
+  snapshots!: EntityTable<SnapshotRecord, 'gameId'>;
 
   constructor(name = 'poker-game-tracker') {
     super(name);
@@ -69,6 +84,7 @@ export class AppDatabase extends Dexie {
       outbox: 'clientEventId, gameId, status, enqueuedAt',
       recentPlayers: 'name, playCount',
       meta: 'key',
+      snapshots: 'gameId',
     });
   }
 }

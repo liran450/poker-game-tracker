@@ -111,8 +111,9 @@ export interface EventPayloadMap {
   unaccounted_set: { amountMinor: number };
   transfer_edited: {
     transferId: string;
-    fromPlayerId: string | null;
-    toPlayerId: string | null;
+    /** A real player id, or `POT_ID`/`HOUSE_ID` from `core/settlement.ts` — never `null`. */
+    fromPlayerId: string;
+    toPlayerId: string;
     amountMinor: number;
   };
   note: { text: string };
@@ -219,8 +220,8 @@ const payloadSchemas = {
   unaccounted_set: z.object({ amountMinor: z.number().int() }),
   transfer_edited: z.object({
     transferId: z.string(),
-    fromPlayerId: z.string().nullable(),
-    toPlayerId: z.string().nullable(),
+    fromPlayerId: z.string(),
+    toPlayerId: z.string(),
     amountMinor: z.number().int(),
   }),
   note: z.object({ text: z.string() }),
@@ -284,8 +285,9 @@ export interface ClaimState {
 
 export interface TransferState {
   readonly id: string;
-  readonly fromPlayerId: string | null;
-  readonly toPlayerId: string | null;
+  /** A real player id, or `POT_ID`/`HOUSE_ID` from `core/settlement.ts`. */
+  readonly fromPlayerId: string;
+  readonly toPlayerId: string;
   readonly amountMinor: Minor;
   readonly isManual: boolean;
 }

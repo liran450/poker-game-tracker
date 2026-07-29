@@ -1,0 +1,14 @@
+.progressTrack {
+  block-size: 6px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-surface-app);
+  overflow: hidden;
+}
+
+.progressFill {
+  block-size: 100%;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-accent);
+  inline-size: calc(var(--settlement-progress, 0) * 100%);
+  transition: inline-size 200ms ease-out;
+}

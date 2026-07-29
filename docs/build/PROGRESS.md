@@ -35,7 +35,7 @@ change — otherwise the history stops meaning anything.
 | 6 | Game setup, player list, add-players sheet | done | 2026-07-29 | _(this commit)_ |
 | 7 | The buy-in counter and the game page | in progress — code complete, blocked on a real game only the owner can play | | |
 | 8 | Settlement core | done | 2026-07-29 | _(this commit)_ |
-| 9 | End game, edit mode, share text | not started | | |
+| 9 | End game, edit mode, share text | in progress — code complete, blocked on a real WhatsApp paste test | | |
 | 10 | Database foundation and RLS | not started | | |
 | 11 | Snapshots, statistics source, retention | not started | | |
 | 12 | Auth and cloud sync | not started | | |
@@ -45,11 +45,10 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** step 7 still needs a real game played on it before it can flip to `done` (needs the
-repository owner — see its entry). Step 8 (settlement core) doesn't depend on that playtest, only
-on step 7's code, so it was built in the meantime. **Start step 9** once step 7's playtest lands;
-until then, step 9's own exit criteria ("a full game runs start to finish... on a phone") are
-blocked on the same playtest anyway 🎯.
+**Next up:** steps 7 and 9 are both code-complete and both blocked on the repository owner — step 7
+on a real game played on the build, step 9 on pasting its share text into real WhatsApp on iOS and
+Android. Neither blocks step 10 (database foundation and RLS), which has no dependency on either
+playtest. **Start step 10** next; flip 7 and 9 to `done` whenever the owner has run those checks 🎯.
 
 ### Checkpoints that are not steps
 
@@ -58,8 +57,8 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | Checkpoint | Gates | Status |
 |---|---|---|
 | **Design assets committed to `docs/design/`, `docs/11` written from them** | Step 3 | ✅ done 2026-07-28 |
-| **Play a real game on the step-7 build** | Step 8 | not reached — needs the repository owner, see step 7's entry |
-| **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached |
+| **Play a real game on the step-7 build** | Step 7 `done` | not reached — needs the repository owner |
+| **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached — needs the repository owner |
 
 ---
 
@@ -673,3 +672,116 @@ preference, not a correctness invariant, and nothing in `PLAN.md`'s exit criteri
 - **`buildGameSnapshot` needs already-settled players.** `SnapshotPlayerInput.chipsFinal` is a
   plain `number`, not nullable — the caller (step 9's ending flow) is responsible for the
   missing-players check before assembling this input; this module doesn't re-derive it.
+
+---
+
+### Step 9 — End game, edit mode, share text
+**Status:** in progress — code complete, blocked on a real WhatsApp paste test
+**Sessions:** 1  **Commits:** 1
+
+**Built.** The whole rest of a single game's lifecycle, on top of step 8's settlement core:
+
+- **`core/settlement.ts` additions:** `computeReconciliation` (אמור/בפועל/פער per node) and
+  `computeSettlementProgress` (the sticky banner's assigned/total/complete). `buildGameSnapshot`
+  gained an optional `transfersOverride` parameter — when given, it writes that list verbatim and
+  skips `computeTransfers` (and its sum-to-zero assertion) entirely, since a host's hand-edited
+  transfers are allowed to not balance perfectly pending an explicit override.
+- **`core/events.ts` change:** `transfer_edited`'s `fromPlayerId`/`toPlayerId` (and `TransferState`'s)
+  went from `string | null` (null = pot) to plain `string`, using `POT_ID`/`HOUSE_ID` from
+  `core/settlement.ts` as sentinels instead of null. Needed because the settlement graph has *two*
+  non-player parties now (pot and house), not just one — see `NOTES.md`.
+- **`core/offline/db.ts`:** a `snapshots` table (`gameId → GameSnapshot`), written once on
+  finalisation, deleted on reopen.
+- **`core/offline/gameActions.ts` additions:** `beginSettlement` (`game_settling`, then seeds the
+  computed-optimum transfer list as real `transfer_edited` events — from that point on
+  `state.transfers` is the single source of truth, no separate "computed default" merging logic
+  anywhere), `editTransfer`/`addManualTransfer`/`deleteTransfer` (delete zeroes the row rather than
+  removing it — nothing is ever deleted from the log — and the UI filters zero-amount rows),
+  `recomputeTransfers` (zeroes every current row, reseeds fresh), `finalizeGame` (builds and stores
+  the snapshot from the host's final transfer list, *then* appends `game_ended`, so a `finished`
+  game can never be found without one), `reopenGame` (`game_reopened` + deletes the now-stale
+  snapshot).
+- **New components** (`features/game/`): `EndGameConfirmSheet` (summary, the missing-players check,
+  the discrepancy acknowledgement gating the slide, `SlideToConfirm`), `TransferPartyPicker` (the
+  "chip picker" — a grid of name chips including `קופה`), `TransferRow` (one component, read mode
+  for the summary screen and edit mode for the settlement screen — inline amount editing via a
+  focus-and-replace field, not a separate sheet, per the spec's "numeric keypad inline"), `SettlementBanner`
+  (the sticky progress banner, its fill width driven by a CSS custom property set via a ref effect —
+  never the `style` prop, which the lint rule bans), `ReconciliationStrip`, `SettlementScreen` and
+  `SummaryScreen` (the two big composed screens), wired to live state by `SettlementRoute` and
+  `SummaryRoute`.
+- **`features/game/shareText.ts`:** `formatLiveStatusText` and `formatFinalSettlementText`, both
+  templates from `07-hebrew-glossary.md`, composed the same way as `buyInText.ts`/`auditLogText.ts`
+  — real i18next keys, every amount through `formatMoneyPlainText` (LRI/PDI-isolated). Verified
+  against the glossary's own worked examples in `shareText.test.ts`.
+- **`GamePage.tsx` restructured into a thin dispatcher.** It now only fetches the game and branches
+  on `state.status`: `settling` → `SettlementRoute`, `finished` → `SummaryRoute`, otherwise the
+  existing live game, extracted verbatim into `features/game/LiveGameView.tsx` (was outgrowing a
+  single file even before this step — see `CLAUDE.md`'s "components stay small"). The whole game
+  lifecycle stays at one URL, `/#/game/:id`, so a bookmark or share link works regardless of which
+  phase the game has reached.
+- **`useReopenWindow`/`useInstallPrompt`** (`src/hooks/`): the 24h reopen countdown, and the
+  `beforeinstallprompt` wrapper behind the summary screen's install nudge (Chromium/Android only —
+  see Deviated).
+
+**39 new/changed unit and component tests** across `settlement.test.ts`, `gameActions.test.ts`,
+`shareText.test.ts`, `EndGameConfirmSheet.test.tsx`, `TransferRow.test.tsx`, `useReopenWindow.test.ts`,
+`useInstallPrompt.test.ts`. **A real Playwright e2e test** (`e2e/full-game.spec.ts`, the exit
+criterion): create → 4 players → buy-ins → a shared cost → settle everyone → end (a real drag
+gesture on `SlideToConfirm`) → the settlement screen shows `הכל שויך ✓` → finish → the summary
+screen → copy transfers → the clipboard actually contains the real share text. Run **twice** — once
+online, once with the network disabled after the first load — matching step 7's own precedent that
+offline is verified with the network actually off. Total unit/component test count: 401, `npm run
+verify` green.
+
+**A real bug found and fixed while wiring `SettlementRoute`.** Passed `TransferState[]`
+(`{fromPlayerId, toPlayerId, ...}`) directly to `computeReconciliation`/`computeSettlementProgress`,
+which expect `Transfer[]` (`{fromId, toId, ...}`) — every row's "actually assigned" silently read as
+0, so the banner could never reach `הכל שויך ✓` even though the underlying transfers were correct.
+**Caught by the e2e test, not by `npm run tsc --noEmit -p .`, which I had been running ad hoc all
+session and which does *not* catch this** — see the environment entry in `NOTES.md`, this is
+important for the next session.
+
+**Deviated.**
+- **`formatLiveStatusText` is built and tested but not wired to any button.** `PLAN.md` names "both
+  templates" as a build item; both exist. But wiring the live-game share button properly needs the
+  full 3-section share sheet (live link, viewers, text) from step 13 — building a text-only version
+  now would just mean rebuilding it there. `formatFinalSettlementText` *is* wired (summary screen's
+  `שיתוף`/`העתק העברות`, and the settlement screen's `שתף כטקסט`, using the current in-progress
+  transfer list). Matches step 7's own precedent for the same button.
+- **The end-game discrepancy acknowledgement checkbox's label
+  (`להמשיך למרות הפער`) is invented, not a glossary quote** — `07-hebrew-glossary.md` has the
+  mismatch *prompt* verbatim but no wording for this specific checkbox. Worth a native-speaker pass
+  alongside the rest of `07`'s "have a native speaker review this list once" note.
+- **The install prompt is Chromium/Android only.** iOS Safari has no `beforeinstallprompt`
+  equivalent and needs manual "Add to Home Screen" instructions — out of scope here, not attempted.
+- **Shared costs and `unaccountedMinor` are not editable from the settlement screen.** Once
+  `beginSettlement` fires there's no path back to `active` (no inverse event for `game_settling`,
+  by design — the pre-confirm sheet is the actual point of no return). Reasonable: those decisions
+  belong to the live phase, before ending.
+- **`SummaryRoute` reads live state, not the stored snapshot.** See its own doc comment:
+  `PlayerResultSnapshot` deliberately carries no live player id to join transfers against (matches
+  `03-data-model.md`'s real schema, which must survive the live rows being purged), so joining the
+  snapshot back to display names would mean inventing a schema field the permanent table doesn't
+  have. Reading live state — still fully populated immediately after finalising — is correct for
+  the window this screen actually serves; making the summary screen (and a purged game's results
+  card) work from the snapshot alone is step 16's job.
+
+**Left undone.** Nothing against `PLAN.md`'s exit criteria except the one thing that structurally
+can't be done here: pasting the share text into real WhatsApp on iOS and Android. Everything else —
+full offline flow, the banner refusing "complete" until the books actually balance, hand-correction,
+the Playwright test — is built and verified.
+
+**Watch out.**
+- **Use `npm run typecheck` (`tsc -b`), never an ad hoc `tsc --noEmit -p .`.** They are not
+  equivalent in this project — see `NOTES.md`. The real bug above went undetected through several
+  rounds of the wrong command actually reporting clean.
+- **A `BottomSheet`'s entrance animation is 260ms** (`--animate-sheet-in`). Any Playwright test that
+  measures element geometry (a drag, a precise click) right after opening one needs to wait for it
+  to settle first, or the coordinates are stale by the time the input lands — see `NOTES.md`.
+- **`transfer_edited`'s parties are never `null` anymore.** `POT_ID`/`HOUSE_ID` (from
+  `core/settlement.ts`) are the sentinels now, for both the pot and the house/unaccounted node. Any
+  future code touching a `TransferState` should not reintroduce a null-for-pot special case.
+- **Deleting a transfer zeroes it; it does not remove the row.** Every list derived from
+  `state.transfers` must filter `amountMinor > 0` before rendering or summing — `SettlementRoute`
+  and `SummaryRoute` both do this at the point they read `state.transfers`, not downstream.
