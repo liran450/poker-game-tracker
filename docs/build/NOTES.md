@@ -45,6 +45,100 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### `npm run test:db` on a fresh container: `postgres` has no password set yet
+**Step 10 · 2026-07-30 · environment**
+
+A fresh sandbox's local Postgres 16 cluster starts (`service postgresql start`) but the
+`postgres` superuser has no password set, so `test:db`'s default connection string
+(`postgres://postgres:postgres@127.0.0.1:5432/postgres`, from `supabase/tests/support/db.ts`)
+fails with `password authentication failed for user "postgres"` on the very first run. Fix:
+`sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"` once per fresh container,
+before the first `npm run test:db`. `npm ci` is also needed first if `node_modules` isn't already
+populated (`vitest: not found` otherwise) — neither of these is specific to this step, just the
+first time this session actually ran `test:db` against a truly fresh checkout.
+
+### The real Supabase project exists now — applied via MCP, and what its own linter caught
+**Step 10 · 2026-07-30 · environment · trap**
+
+The owner created the real Supabase project this session (`liran450's Project`,
+`ap-northeast-2`, Postgres 17.6) and connected it through the Supabase MCP server, which gave
+direct `apply_migration`/`execute_sql`/`get_advisors`/`list_tables` tool access to it — no
+`supabase` CLI, no `supabase link`, no Docker needed (this sandbox still has none of those, same
+as session 1). All 14 `supabase/migrations/` files were applied through it, in filename order, and
+verified afterward with `list_tables` (17/17 tables, RLS on for every one) and `list_migrations`
+(14/14 recorded).
+
+`get_advisors(type: 'security')` is a Supabase platform feature with no local-Postgres
+equivalent — `supabase/tests/`'s suite cannot catch what it catches, so running it against a real
+project for the first time is genuinely new information, not a re-check of something session 1
+already tested. It surfaced two real, fixable gaps (a third, `profiles_public`'s
+`SECURITY DEFINER` view, is flagged too but is intentional by design — see that entry below —
+and a fourth, `rls_auto_enable()`, is a Supabase-platform function owned by `postgres`, not ours,
+left untouched):
+
+1. **`prevent_buy_terms_change_after_buy_ins`** (`20260729120300_games.sql`) was the one function
+   in the whole schema created without `set search_path = public` — every sibling helper/RPC
+   function has it; this one was a plain oversight. Fixed with `alter function ... set search_path
+   = public` rather than recreating the function.
+2. **`apply_game_event_to_player_cache` and `log_join_requested`** — both `AFTER INSERT` trigger
+   functions only, never meant to be called directly — were exposed as callable public RPCs via
+   `/rest/v1/rpc/<name>`. Every Postgres function gets an implicit `EXECUTE` grant to `PUBLIC` at
+   creation unless revoked; neither migration revoked it.
+
+**The trap, worth knowing before touching grants on this schema again:** the first fix attempt,
+`revoke execute on function apply_game_event_to_player_cache() from anon, authenticated;`, silently
+did nothing. Re-running `get_advisors` afterward still flagged both functions — confirmed via
+`select proacl from pg_proc where proname = ...`, which showed `{=X/postgres,postgres=X/postgres,
+service_role=X/postgres}`: the `=X` entry (empty grantee) is `PUBLIC`, and neither function had
+ever had an explicit per-role grant to `anon`/`authenticated` at all — only the default `PUBLIC`
+one, which both roles fall back to regardless of what's revoked from their own names. The real fix
+was `revoke execute on function ... from public;`, confirmed by `proacl` shrinking to just
+`{postgres=X/postgres,service_role=X/postgres}` and by `get_advisors` no longer listing either
+function at all. **Rule: check `pg_proc.proacl` (or just re-run the advisor) after any
+`revoke ... from anon, authenticated` — if the function was never granted to those roles by name,
+only to `PUBLIC`, the revoke is a no-op and the advisor will still flag it.**
+
+**Revoking `EXECUTE` does not break the trigger itself.** Postgres's trigger manager calls a
+trigger function directly by OID when the trigger fires; that path isn't subject to the `EXECUTE`
+ACL check, which only gates an explicit SQL/RPC call to the same function. This is also Supabase's
+own documented remediation for this advisory (see the `0028`/`0029` lint docs linked in the
+advisor output), not a guess. **Not** revoked, on purpose, even though the advisor flags them too:
+every RLS helper (`is_host`, `can_read_game`, `is_game_player`, …) and every intentional RPC
+(`take_over_host`, `decide_join_request`, `mark_event_undone`) — RLS policies for `anon`/
+`authenticated` call the helpers directly inside `USING`/`WITH CHECK`, and *that* call genuinely is
+subject to the `EXECUTE` check, so revoking there would break the policies, not just quiet the
+linter.
+
+Not verified with a live insert against the real project — doing so would have meant writing
+fabricated game/event/auth.users rows into a brand-new **production** database to prove the trigger
+still fires post-revoke, which risks polluting real data (and possibly triggering Supabase-side
+side effects on `auth.users` that a transaction rollback wouldn't undo). Confirmed instead via the
+documented Postgres semantics above, Supabase's own recommended remediation, and the fact that
+`npm run test:db`'s 18 tests still pass locally with both new migrations applied (same engine
+semantics, even though that suite doesn't specifically drive these two triggers through a
+role-restricted connection). Worth a real check the first time step 12 wires up actual
+`player_added`/`join_requested` writes against this project.
+
+Two new migrations record both fixes: `20260730150000_security_advisor_fixes.sql` (the
+`search_path` fix and the first, incomplete `EXECUTE` revoke) and
+`20260730150100_revoke_public_execute_on_triggers.sql` (the real fix, kept as a separate file
+rather than folded into the first since the first was already applied to the live project before
+the gap was discovered — migrations are forward-only, never edited after being applied).
+
+**The MCP connection to Supabase (and GitHub) flapped repeatedly mid-session** — several
+disconnect/reconnect cycles, always between tool calls, never mid-call. No migration was
+double-applied or partially applied, confirmed by re-running `list_migrations` after each
+reconnect before continuing. If a future session sees the same flapping, re-verify state (don't
+assume the last call before a disconnect actually landed) rather than blindly retrying.
+
+**The anon key: two formats now exist, and this project uses the legacy one.** Supabase's
+`get_publishable_keys` returns both a legacy JWT-based `anon` key and a newer `sb_publishable_...`
+key. `.env.example`/`CLAUDE.md`/`maintenance.yml`'s `apikey`/`Authorization: Bearer` headers all
+predate the newer format and were written against the traditional anon-JWT convention, so the
+**legacy** key is the one that should go into `VITE_SUPABASE_ANON_KEY` and the
+`SUPABASE_ANON_KEY` repo secret — not the `sb_publishable_...` one — until/unless a later step
+deliberately migrates to the new key format project-wide.
+
 ### No Docker in this sandbox — the Supabase CLI's local stack can't run here
 **Step 10 · 2026-07-29 · environment**
 
