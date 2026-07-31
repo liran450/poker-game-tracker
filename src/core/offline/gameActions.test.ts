@@ -22,6 +22,7 @@ import {
   reopenGame,
   reopenPlayer,
   setCashPaid,
+  setPlayerNickname,
   settlePlayer,
   setUnaccounted,
   undoEvent,
@@ -145,6 +146,31 @@ describe('renamePlayer', () => {
 
     const after = fold(await loadGameEvents(gameId));
     expect(after.players.get(mor.id)?.guestName).toBe('הכריש');
+  });
+});
+
+describe('setPlayerNickname', () => {
+  it('sets a nickname via an appended event, trimmed', async () => {
+    const { gameId } = await createGame(baseInput);
+    const state = fold(await loadGameEvents(gameId));
+    const mor = [...state.players.values()].find((p) => p.guestName === 'מור')!;
+
+    await setPlayerNickname(gameId, mor.id, '  דני  ');
+
+    const after = fold(await loadGameEvents(gameId));
+    expect(after.players.get(mor.id)?.nickname).toBe('דני');
+  });
+
+  it('an empty nickname clears it back to null', async () => {
+    const { gameId } = await createGame(baseInput);
+    const state = fold(await loadGameEvents(gameId));
+    const mor = [...state.players.values()].find((p) => p.guestName === 'מור')!;
+
+    await setPlayerNickname(gameId, mor.id, 'דני');
+    await setPlayerNickname(gameId, mor.id, '   ');
+
+    const after = fold(await loadGameEvents(gameId));
+    expect(after.players.get(mor.id)?.nickname).toBeNull();
   });
 });
 

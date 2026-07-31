@@ -9,7 +9,10 @@ const baseProps = {
   playerName: 'מור',
   hasBuyIns: false,
   isSettled: false,
+  isRegistered: false,
+  currentNickname: null,
   onRename: vi.fn(),
+  onSetNickname: vi.fn(),
   onRemove: vi.fn(),
   onSettle: vi.fn(),
   onReopen: vi.fn(),
@@ -75,6 +78,31 @@ describe('<PlayerActionsSheet>', () => {
     expect(screen.queryByText('players.settle')).not.toBeInTheDocument();
     await userEvent.click(screen.getByText('players.reopen'));
     expect(onReopen).toHaveBeenCalled();
+  });
+
+  it('a registered player gets a nickname field, prefilled, instead of rename', async () => {
+    const onSetNickname = vi.fn();
+    const onRename = vi.fn();
+    render(
+      <PlayerActionsSheet
+        {...baseProps}
+        isRegistered
+        currentNickname="דני"
+        onSetNickname={onSetNickname}
+        onRename={onRename}
+      />,
+    );
+
+    expect(screen.queryByText('players.rename')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText('players.setNickname'));
+    const field = screen.getByLabelText('players.nicknameLabel');
+    expect(field).toHaveValue('דני');
+    await userEvent.clear(field);
+    await userEvent.type(field, 'דניאל');
+    await userEvent.click(screen.getByText('ui.save'));
+
+    expect(onSetNickname).toHaveBeenCalledWith('דניאל');
+    expect(onRename).not.toHaveBeenCalled();
   });
 
   it('cash paid is always offered and closes the sheet', async () => {

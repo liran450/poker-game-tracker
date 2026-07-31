@@ -39,7 +39,7 @@ change — otherwise the history stops meaning anything.
 | 10 | Database foundation and RLS | done | 2026-07-30 | _(this commit)_ |
 | 11 | Snapshots, statistics source, retention | done | 2026-07-31 | _(this commit)_ |
 | 12 | Auth and cloud sync | done | 2026-07-31 | _(this commit)_ |
-| 13 | Sharing, viewers, join requests, takeover | not started | | |
+| 13 | Sharing, viewers, join requests, takeover | in progress — code complete, not yet tested against the real Supabase project or a real device | | |
 | 14 | Groups, roles, private games | not started | | |
 | 15 | Statistics | not started | | |
 | 16 | Retention live, deletion, export | not started | | |
@@ -88,6 +88,20 @@ green, and the full Playwright e2e suite (including a fresh check of the new `/a
 against a real production build) passes with zero console errors. See this step's entry below for
 what's tested against fakes rather than the real project, and why.
 
+**Step 13 (sharing, viewers, join requests, takeover) is code-complete in one session** and is the
+largest step so far by migration surface — one new migration covering share links (token
+generation/hashing, the two anonymous read RPCs, revoke/rotate), both halves of "two paths in, one
+gate" (join requests and guest-row claims, each with a group-member direct-insert path and a
+share-link RPC path), host handover and the pre-existing `take_over_host` finally getting client UI,
+and a real pre-existing gap fixed along the way (`games.status` was never written server-side before
+this session — see the step's own entry). `npm run verify` (508 tests) and `npm run test:db` (63
+tests, up from 36) are both green. **Not yet `done`**: same standing limitation as steps 10–12, this
+sandbox cannot reach the real Supabase project, so nothing here has run against it or a real device
+— see the checkpoint table. One functional gap is also left open on purpose rather than silently:
+a signed-in viewer who reaches a live game through the app (not a share link) still sees the
+full host-editing screen, since only the token-based `/#/s/:token` route got the read-only
+treatment this session. See the step's own entry for the full account.
+
 ### Checkpoints that are not steps
 
 Things that gate progress but aren't build work, recorded here so they can't be quietly skipped:
@@ -101,6 +115,7 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; the deployed build's real cloud sync (step 12) | ⚠️ set but wrong 2026-07-31 — both secrets exist (the workflow no longer early-exits) but every real ping since has returned `401` from Supabase's REST gateway, confirmed against both the GitHub Actions run logs and the project's own API logs (see `NOTES.md`). Needs the repository owner to re-check the `SUPABASE_ANON_KEY` secret's value — no tool available here can read or set repo secrets. `deploy.yml` now maps these same two secrets to `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` at build time (2026-07-31), so once the value is fixed the very next deploy picks up real cloud sync with no further build changes — until then the deployed app builds fine but auth/sync silently behave as "not configured", same as this sandbox always does. |
 | **Apply the step-11 migrations to the real Supabase project** | Step 11 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner's go-ahead; a security-advisor follow-up migration was needed and applied too (see `NOTES.md`) |
 | **Sign in on a real device against the real Supabase project** | Step 12's auth/sync behaviour confirmed end-to-end | not reached — needs the repository owner and the `SUPABASE_ANON_KEY` fix above; this sandbox cannot reach `*.supabase.co` at all (see `NOTES.md`), so every step-12 module is tested against an in-memory fake, never the live project |
+| **Apply the step-13 migration to the real Supabase project** | Step 13 `done` | not reached — needs the repository owner, same connectivity limitation as above; `supabase/tests/` (63/63) and `npm test` (508/508) are green against local Postgres and fakes respectively |
 
 ---
 
@@ -1352,3 +1367,207 @@ never run against the live project — that needs the repository owner, and need
   query-builder calls used, not a generic Postgrest mock — if a future change to the transport
   uses a builder method the fake doesn't implement (a `.range()`, a `.in()`, ...), add it there
   rather than reaching for a broader mocking library.
+
+---
+
+### Step 13 — Sharing, viewers, join requests, takeover
+**Status:** in progress — code complete, not yet applied to the real Supabase project or tested
+on a real device  **Sessions:** 1  **Commits:** 1
+
+**Built.**
+- **A real, pre-existing gap found and fixed first.** `games.status`/`started_at`/`ended_at` were
+  never written server-side by anything — the game_events trigger's scope is deliberately narrow
+  (game_players only, step 10) and step 12's `SupabaseSyncTransport.applyDirectTableWrite` only
+  ever handled `shared_cost_*`/`transfer_edited`. Harmless for step 12 (nothing server-side read
+  `games.status` yet), but this step's claim window and `get_shared_game`'s live/finished routing
+  both need it to be real. Fixed the same way the existing direct-write cases already work:
+  `game_started`/`game_settling`/`game_ended`/`game_reopened` now also update `games` directly,
+  stamped with the event's own `clientCreatedAt` (not wall-clock "now" — a push can land long
+  after the action happened offline), including `claim_deadline = ended_at + 48h` and
+  `reopen_deadline = ended_at + 24h`.
+- **`supabase/migrations/20260731150000_step13_sharing_and_takeover.sql`** — one migration
+  covering all of this step's schema/RPCs:
+  - `pgcrypto` (needed for `digest()`, the first thing in this codebase to hash anything server-side).
+  - `player_results.game_player_id` (bare `uuid`, deliberately **not** a foreign key — see
+    Deviated) plus `finalize_game()` re-published to populate it, so a claim approved after a game
+    is finalised can find the permanent row it also needs to update.
+  - `find_valid_share_link(token, stamp_view)` — the one hash-lookup-plus-window-check every
+    share-link RPC below funnels through (internal-only, `revoke execute` from anon/authenticated,
+    same pattern as the step-10 trigger functions).
+  - `get_shared_game(token)` / `get_shared_settlement(token)` — the two anonymous-callable
+    projections from `03-data-model.md#anonymous-share-access`. A signed-in caller resolving a
+    live game is inserted into `game_viewers` inside the same call (self-insert via `SECURITY
+    DEFINER`, not an RLS policy change — see Deviated). A currently-finished game returns
+    `{kind: 'finished'}` rather than an error, since the token itself is still valid.
+  - `submit_join_request_via_link` / `submit_claim_via_link` — the share-link halves of the two
+    "two paths in, one gate" flows, both signed-in-only (see Deviated).
+  - `can_submit_claim()` — the claim window + "still an unclaimed guest row" check, shared by both
+    the link RPC and the group-member direct-insert path (`player_claims_insert`'s `with check`
+    now calls it too — that policy enforced neither before this step).
+  - `log_claim_requested` trigger — `player_claims` never logged a `claim_requested` event before
+    (deliberately deferred at step 10); one trigger now covers both ways a claim can be created.
+  - `decide_claim(claim_id, approve)` — host-only; sets `game_players.user_id` via the
+    `claim_approved` event (the trigger case for it existed since step 10, unused until now) and,
+    when the game is already finalised, `player_results.user_id` directly — the one field ever
+    mutable on a permanent row. Auto-rejects every other pending claim on the same row
+    ("the host picks one and the rest are rejected").
+  - `hand_over_host(game_id, new_host_id)` — voluntary handover, host-only, target must already be
+    a signed-in player or viewer (guests have no account to hand over to).
+  - `get_group_live_games(group_id)` — the thin lobby projection the in-app "ask to join" path
+    needs; built here per `PLAN.md`'s own step-13 build list even though nothing calls it yet (see
+    Left undone).
+  - `decide_join_request()` re-published: a registered requester's `profiles.default_nickname` now
+    seeds the new player's nickname instead of always `null` ("Nicknames for registered players").
+- **11 new SQL test files**, 63 tests total (up from 36): `shareLinks.test.ts` (revoked/unknown/
+  expired all reject with the same generic shape, 7-day vs 30-day window, `{kind: 'finished'}`
+  routing, `last_viewed_at`/`view_count` stamped only on success, `get_shared_settlement` surviving
+  a live-row purge), `joinRequestsViaLink.test.ts`, `claims.test.ts` (window enforcement on *both*
+  paths, unclaimed-guest-row requirement, two-people-can't-own-one-row via the auto-reject, claim
+  approval after finalisation updating `player_results` and nothing else), `hostHandover.test.ts`,
+  `groupLiveGames.test.ts`. All of `docs/09-roadmap.md#testing`'s "every rejection returns the
+  same generic shape" is asserted directly, not by convention.
+- **`src/data/shareLinks.ts`** — client-side token generation (`crypto.getRandomValues`, 256 bits,
+  base64url for the URL fragment) and SHA-256 hashing (`crypto.subtle.digest`) to a hex `bytea`
+  literal; `createShareLink`/`listShareLinks`/`revokeShareLink`/`rotateShareLink` are plain
+  `share_links`-table calls (`is_host` RLS already covers them, no RPC needed);
+  `resolveSharedGame`/`resolveSharedSettlement` wrap the two read RPCs.
+- **`src/data/joinRequests.ts`, `src/data/claims.ts`, `src/data/hostControl.ts`** — thin repository
+  wrappers over the rest of this step's RPCs and the plain-insert in-app paths, matching step 12's
+  established shape (`requireClient()`, row↔domain mappers, `client` as a trailing default param
+  for testability). `hostControl.ts` also gained `getHostLastSyncedAt` — `games.host_last_synced_at`
+  is server-only and was never part of the local fold (nothing in the event log derives it), so the
+  takeover warning modal fetches it fresh at the moment it's shown.
+- **~35 new data-layer tests** across `shareLinks.test.ts`, `joinRequests.test.ts`, `claims.test.ts`,
+  `hostControl.test.ts`, `profiles.test.ts` (new `getProfilesPublic`), against
+  `fakePostgrestClient.ts` — extended this session with `.in()`, an `.rpc()` result that supports
+  `.single()`/`.returns()` chaining (it previously only returned a bare `{error}`), matching the
+  same "faithful to real control flow, not a generic mock" standard as the rest of the fake.
+- **UI**, all wired into `LiveGameView` (`src/features/game`):
+  - `ShareSheet` — the three sections from `04-ux-spec.md#sharing-5-14`: live link (create/copy/
+    share/revoke/rotate, expiry caption), viewers (read-only list, resolved via
+    `profiles_public`), text preview (`formatLiveStatusText`, already built in step 9, reused
+    as-is) with its own share/copy pair. Host-only — see Deviated on why non-hosts never see it,
+    private or not.
+  - `PendingRequestsSheet` — join requests and claims together, one approve/reject pair each,
+    arrival caption (group member vs. link). A badge on the header's `⋯` button shows the pending
+    count, polled every 20s while the host has the game open and refreshed on sheet close.
+  - `HostControlSheets.tsx` — `HandOverHostSheet` (⋯ → העבר ניהול, lists signed-in current
+    players/viewers) and `TakeOverHostConfirm` (⋯ → קח ניהול, sync-freshness-coloured, a second
+    tap required when `host_last_synced_at` was never stamped at all — "unknown" is treated as the
+    worst case, not the best). A non-blocking `AnnouncementBanner` shows on every device with the
+    game open when a **fresh** `host_taken_over` event arrives (a ref tracks already-seen takeover
+    ids so mounting the view never announces history).
+  - `SharedGamePage` (`/#/s/:token`) — the anonymous/link viewer's whole experience: live (players,
+    pot-relevant figures, `בקש להצטרף` gated behind sign-in), finished (results + `TransferRow`s,
+    reused read-mode as-is), and the generic "not available" dead end for a revoked/expired/purged
+    token, all from one route since the same link's meaning changes with the game's status.
+    "זה אני" claims a guest row inline per player. Verified in a real headless-Chromium browser
+    against a production build (`vite preview`) with cloud unconfigured (this sandbox's only
+    option): the dead-end state renders correctly with zero console errors.
+  - `PlayerActionsSheet` gained nickname editing for registered players (`isRegistered` prop swaps
+    the rename field for a nickname field, pre-filled) — the other half of "Nicknames for
+    registered players", `core/offline/gameActions.ts#setPlayerNickname` appends `nickname_set`.
+
+**Deviated.**
+- **Failed-lookup throttling (`03-data-model.md#link-security`) is not built as persisted state.**
+  The first attempt — a table logging failed lookups, checked before each hash lookup — silently
+  logged nothing, ever: `find_valid_share_link` rejects by `raise exception`, and Postgres rolls
+  back the *entire* enclosing transaction when an uncaught exception propagates out of it, which
+  undoes the failure-row insert too, no matter how early in the function it ran. Proven by writing
+  exactly that and watching the row count stay zero after ten failed lookups, not assumed.
+  Persisting a counter across a rollback needs a genuinely separate transaction (`dblink` or the
+  `pg_background` extension), which this project has no other reason to add — 03-data-model.md
+  itself calls this mechanism a courtesy, not a real defence ("brute-forcing 256 bits is not a
+  real threat; this just keeps enumeration noise out of the logs"). Real protection is the token's
+  own 256-bit search space and Supabase's platform-level API rate limiting, both outside this
+  migration's reach. See `NOTES.md`.
+- **Asking to join via a share link requires being signed in — an anonymous (signed-out) tap does
+  not submit a request.** `game_events.actor_id` is `NOT NULL` (every event has a real actor, a
+  locked invariant since step 4) and `join_requests.user_id`, while nullable in the schema, has no
+  code path that leaves it null once `log_join_requested` (step 10) uses it as the event's
+  `actor_id` directly. `04-ux-spec.md`'s "anyone holding the link — signed in or not — gets one
+  action" describes who can *see* the button; the tap itself is a write, and every write in this
+  app is attributed to a signed-in actor already (`03-data-model.md#anonymous-share-access`:
+  "anonymous clients never get direct table access"). `SharedGamePage` routes an anonymous tap to
+  `/account` first, the same sign-in flow every other write already requires. Widening
+  `game_events.actor_id` to nullable to support a truly anonymous write was considered and
+  rejected — it would touch a heavily-tested core invariant for a case the rest of the data model
+  doesn't actually support anywhere else (claims and `game_viewers` both already require sign-in
+  too, for the identical reason).
+- **`share_links` is `is_host`-only for every game, private or not — the ShareSheet's `שיתוף`
+  button is host-only unconditionally, not host-only-for-private-games-only.**
+  `03-data-model.md#row-level-security`'s own RLS table says `share_links | is_host | is_host`
+  with no privacy qualifier, and that's exactly what step 10 already implemented. Read in
+  isolation, `04-ux-spec.md`'s private-games section ("`שתף קישור` is host-only [for a private
+  game]; for anyone else the section is replaced by one line") could suggest non-hosts can share a
+  link on a *non-private* game — but non-hosts can't even `select` from `share_links` either way,
+  so that reading isn't reachable regardless of the UI. Followed the unambiguous, already-built
+  RLS table rather than over-reading the UX copy.
+- **`player_results.game_player_id` is a bare `uuid`, not a foreign key.** The first draft added
+  `references game_players(id) on delete set null` — and immediately broke
+  `purgeExpiredGameData.test.ts`'s "byte-identical before/after a purge" assertion, since purging
+  `game_players` (tier 2) would silently null the column out, which *is* a change. Every other
+  column `player_results`/`game_summaries`/`transfer_summaries` carry that references the live
+  schema is already a bare, unenforced value for exactly this reason; this one now matches that
+  pattern instead of being the first exception.
+- **`get_group_live_games` excludes every private game unconditionally**, not the nuanced
+  "still visible to people already invited or in the game" rule `03-data-model.md#private-games`
+  describes. Private games are entirely step 14's build item (`PLAN.md`'s "Out of scope: Groups"
+  for step 13 sits oddly next to the same step's own build list naming this exact function — see
+  Left undone); excluding all of them is the conservative default, and step 14's own `is_private`
+  work is expected to revisit this function directly.
+
+**Left undone.**
+- **Not applied to the real Supabase project.** Same standing limitation as steps 10–12: this
+  sandbox cannot reach `*.supabase.co` at all. Every new RPC is tested against local Postgres
+  (`supabase/tests/`, 63/63 green) and every new data-layer module against
+  `fakePostgrestClient.ts` (`npm test`, 508/508 green) — nothing here has run against the live
+  project or a real device. Needs the repository owner, same as step 12's outstanding checkpoint.
+- **A signed-in viewer who opens `/#/game/:id` directly (added via an approved join request,
+  never touching a share link) still sees the full host-editing screen.** `LiveGameView` has no
+  read-only branch of its own — only the token-based `/#/s/:token` route (`SharedGamePage`) gets
+  the stripped-controls treatment `04-ux-spec.md#the-viewers-experience` describes. RLS still
+  blocks any actual write from reaching the server, so this isn't a security gap, but it's a real
+  UX gap: such a viewer sees buttons that will silently fail. Revisit before relying on the in-app
+  (non-link) viewer path for real use.
+- **The in-app "ask to join" path (`get_group_live_games`, path 2 of "two paths in one gate") has
+  no UI.** There is no groups screen to show a live-game lobby card on until step 14 builds one —
+  the RPC and its SQL tests exist now so step 14 doesn't need a migration for it, matching the
+  precedent step 10 set for `share_links`/`join_requests` being pre-built ahead of this very step.
+- **"Add viewer from group members" in the share sheet isn't built** — same reason, no group
+  member list exists yet to pick from. The viewer list is read-only (who's already watching).
+- **The share sheet's live text preview only covers the live-game status template** — no separate
+  preview for a finished game's summary; `SummaryRoute`'s existing share button (step 9) already
+  covers that case with `formatFinalSettlementText`, so `ShareSheet` only renders while the game is
+  live (`isFinished` is threaded through but always `false` from `LiveGameView`'s call site today).
+
+**Watch out.**
+- **`games.status`/`started_at`/`ended_at`/`claim_deadline`/`reopen_deadline` are now direct
+  writes from `SupabaseSyncTransport.applyDirectTableWrite`, keyed on `game_started`/
+  `game_settling`/`game_ended`/`game_reopened`.** If a future event type ever needs to change
+  `games`' own columns, it goes here too — the game_events trigger's scope is `game_players` only,
+  on purpose (docs/build/NOTES.md, step 10).
+- **Any exception raised inside a `SECURITY DEFINER` function rolls back everything the whole
+  transaction did, including work that function itself already performed before raising.** This
+  is why failed-lookup throttling isn't built as DB state (see Deviated) — don't repeat the
+  insert-then-raise pattern expecting the insert to survive; it won't, and there's no local-Postgres
+  test harness quirk involved — this is real Postgres/PostgREST transaction semantics, verified by
+  writing the broken version first.
+- **`can_submit_claim()` is the one place the claim window is enforced — both `player_claims_insert`
+  (RLS) and `submit_claim_via_link` (RPC) call it.** A future claim-writing path that doesn't call
+  it will silently skip the window/unclaimed-row check.
+- **`.rpc(...).returns<T>()` needs `.single()` first, or `tsc -b` fails** with a real supabase-js
+  type error ("Cannot cast array result to a single object... use `.single()`") — `tsc --noEmit`
+  run standalone against a looser config didn't catch this; only the project-references build
+  (`tsc -b`, what `npm run verify` actually runs) did. Every RPC wrapper in `shareLinks.ts`/
+  `claims.ts`/`joinRequests.ts` chains `.single().returns<T>()`; `FakePostgrestClient`'s `.rpc()`
+  result gained a matching no-op `.single()` to keep the fakes chainable the same way.
+- **`react-hooks/set-state-in-effect` (a newer eslint-plugin-react-hooks rule) flags calling any
+  function that itself calls `setState` directly from an effect body — even an `async` one, even
+  through a `.then()` on a call to a *named, outer-scope* helper — but not an inline
+  `void (async () => { ... })()` IIFE, and not a `.then()` chained directly off the async call at
+  the effect's own top level.** Hit this in both `LiveGameView` and `PendingRequestsSheet`; the
+  fix in both cases was the same shape `useSession.tsx` already established for its own
+  effect-plus-async-work — wrap in an inline IIFE (with a `cancelled` flag for the ones that can
+  outlive an unmount), don't call a pre-defined async function reference straight from the effect
+  body.

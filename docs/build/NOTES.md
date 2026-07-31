@@ -1213,3 +1213,108 @@ is purely a type-level issue — the runtime works correctly. The cast reference
 event is present in the table but may have been excluded from the count). The `EVENT_TYPES` array
 is the single source of truth; the spec's "~30" is treated as approximate. All 31 types are
 implemented and tested.
+
+### A `SECURITY DEFINER` function's own `raise exception` rolls back everything it already did
+**Step 13 · 2026-07-31 · trap**
+
+Tried to build the failed-lookup throttle from `03-data-model.md#link-security` ("after a handful
+of bad tokens from the same caller, back off") as an ordinary table: `find_valid_share_link()`
+would `insert into share_link_lookup_failures (...)` and then `raise exception 'not available'`.
+Every failed lookup logged nothing — the row count stayed at zero no matter how many bad tokens
+were tried, proven with a dedicated test before this was believed.
+
+Root cause: Postgres has one transaction per top-level statement here (this local/CI harness's
+`withTransaction` test wrapper aside — the same is true of a real PostgREST request, which is one
+statement, one implicit transaction). When an uncaught `raise exception` propagates all the way
+out, Postgres rolls back the *entire* transaction, not just "from where the error occurred" —
+anything the function did earlier in its own body, including an insert that already technically
+"ran," is undone along with everything else. A `BEGIN...EXCEPTION...END` block only helps if the
+exception is caught *and not re-raised*, and even then only protects work done *after* the
+enclosing savepoint; re-raising afterward (which a rejection RPC needs to do, to actually reject
+the caller) still takes everything down with it.
+
+There is no cheap fix — persisting something across a transaction that's about to abort needs a
+genuinely separate transaction (`dblink`, `pg_background`; both are extensions this project has no
+other reason to add). Abandoned the throttle-as-DB-state approach entirely rather than reach for
+either; `03-data-model.md` itself frames the mechanism as a courtesy ("this just keeps enumeration
+noise out of the logs"), not a real defence, so a 256-bit token's own search space plus Supabase's
+platform-level API rate limiting cover the actual threat. **Rule of thumb:** never design a
+`SECURITY DEFINER` (or any) function that needs one of its own writes to survive a later `raise` in
+the same call — restructure to return a sentinel instead of raising if the write truly must
+persist, or accept that the write can't be relied on to persist at all.
+
+### Every write in this app requires a signed-in actor — anonymous access is read-only, full stop
+**Step 13 · 2026-07-31 · decision**
+
+`04-ux-spec.md#the-viewers-experience` says "anyone holding the link — signed in or not — gets one
+action and one only: `בקש להצטרף למשחק`," which read literally would mean a genuinely anonymous
+visitor can submit a join request. That's not buildable without touching a locked invariant:
+`game_events.actor_id` is `NOT NULL` (every event has a real actor, true since step 4 and exercised
+by dozens of tests since), and `log_join_requested` (step 10) uses the request's own `user_id`
+directly as that `actor_id` — a null `user_id` would violate the column outright.
+
+Resolved by reading the UX line as "who can *see* the button," not "who can submit without ever
+signing in": `submit_join_request_via_link` requires `auth.uid()` to be non-null, and
+`SharedGamePage` routes an anonymous tap through the existing `/account` sign-in flow first — the
+same gate every other write in the app already goes through
+(`03-data-model.md#anonymous-share-access`'s own framing: "anonymous clients never get direct
+table access"). This isn't an isolated call: `game_viewers.user_id` and `player_claims.
+claimant_user_id` are both `NOT NULL` too, so claims and being recorded as a viewer already required
+sign-in before this step existed to test it. Widening `actor_id` to nullable to support one
+genuinely-anonymous write path was considered and rejected — it would touch the single
+most-tested module in the codebase for a capability nothing else in the data model actually
+supports either.
+
+### `games.status`/`started_at`/`ended_at` were never written server-side before step 13
+**Step 12 (gap), fixed in step 13 · 2026-07-31 · trap**
+
+Step 12 built `SupabaseSyncTransport.applyDirectTableWrite` to handle the event types whose effect
+isn't covered by the `game_players` cache trigger — but it only ever implemented the
+`shared_cost_*`/`transfer_edited` cases, the two the trigger's own scope comment named. Nothing
+ever wrote `games.status`/`started_at`/`ended_at` when `game_started`/`game_settling`/
+`game_ended`/`game_reopened` were pushed — those events landed in `game_events` and simply had no
+other effect server-side. Invisible at the time: step 12's own tests never depended on
+`games.status` reflecting the real game phase, only on `game_events` push/pull correctness.
+
+Step 13 is the first thing that actually needs `games.status` to be real server-side (the claim
+window, `get_shared_game`'s live-vs-finished routing). Fixed in the same place and the same shape
+as the two cases that already existed — `applyDirectTableWrite` now also handles the four
+game-lifecycle events, stamping `started_at`/`ended_at`/`claim_deadline` (`ended_at + 48h`) /
+`reopen_deadline` (`ended_at + 24h`) from the event's own `clientCreatedAt`, never wall-clock `now()`
+(a push can land long after the action happened, if it happened offline). **If a future event type
+ever needs to change a column on `games` itself, it belongs in this same function** — the
+game_events trigger's scope is `game_players` only, on purpose, and stays that way.
+
+### `.rpc(...).returns<T>()` needs `.single()` first, and only `tsc -b` catches it missing
+**Step 13 · 2026-07-31 · trap**
+
+`client.rpc('some_fn', args).returns<T>()` type-checked fine under a standalone `tsc --noEmit -p
+tsconfig.json` run, but failed the real `npm run verify` (which runs `tsc -b`, the project-references
+build) with supabase-js's own type error: `Type mismatch: Cannot cast array result to a single
+object... use .single()`. supabase-js's `.rpc()` builder types its result as array-shaped by
+default (matching PostgREST's general row-returning convention) regardless of whether the
+underlying SQL function actually returns a scalar/`jsonb`/single row; `.single()` is what narrows
+the type (and sets the `Accept` header PostgREST needs) before `.returns<T>()` can apply cleanly.
+The fix is `.rpc(...).single().returns<T>()` everywhere an RPC's result is consumed (see
+`shareLinks.ts`/`claims.ts`/`joinRequests.ts`), and `.single()` then makes `data` typed `T | null`
+even on success, needing an explicit null-check before returning it as `T`. **Always run `tsc -b`
+(or `npm run verify`), not a bare `tsc --noEmit`, before trusting a typecheck pass** — the two can
+disagree, and this session's first standalone check missed four real errors the build-mode one
+caught immediately.
+
+### `react-hooks/set-state-in-effect` wants an inline async IIFE, not a call to an outer async helper
+**Step 13 · 2026-07-31 · trap**
+
+A newer `eslint-plugin-react-hooks` rule flags a `useEffect` body that (transitively) calls
+`setState` — but the exact shape matters more than "is this safe": `setState(x)` called directly
+and synchronously in the effect body is flagged (obviously); `void someOuterAsyncFn()` where
+`someOuterAsyncFn` is defined earlier in the component and itself awaits before calling `setState`
+is *also* flagged, apparently by name/reference rather than by actually proving synchrony; but
+`void (async () => { ... setState(...) ... })()` — an inline IIFE defined right there in the effect
+body — is not flagged, and neither is a `.then()` chained directly off a call made at the effect's
+own top level. `src/hooks/useSession.tsx` already established the inline-IIFE-plus-`cancelled`-flag
+shape for exactly this reason (predating this step); `LiveGameView`'s viewer-name fetch and
+`PendingRequestsSheet`'s refresh-on-open both needed the same treatment. **When an effect needs to
+run existing async logic, wrap the call site in an inline `void (async () => { ... })()`, don't
+call a named async function defined outside the effect** — even when that function is provably
+safe, the linter can't tell.

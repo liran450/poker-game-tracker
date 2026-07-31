@@ -5,15 +5,18 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { db } from '@core/offline/db';
 import { createGame } from '@core/offline/gameActions';
 import { minor } from '@core/money';
+import { SessionProvider } from '../../hooks/useSession';
 import { GamePage } from './GamePage';
 
 function renderGame(gameId: string) {
   return render(
-    <MemoryRouter initialEntries={[`/game/${gameId}`]}>
-      <Routes>
-        <Route path="/game/:gameId" element={<GamePage />} />
-      </Routes>
-    </MemoryRouter>,
+    <SessionProvider>
+      <MemoryRouter initialEntries={[`/game/${gameId}`]}>
+        <Routes>
+          <Route path="/game/:gameId" element={<GamePage />} />
+        </Routes>
+      </MemoryRouter>
+    </SessionProvider>,
   );
 }
 

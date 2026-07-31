@@ -138,6 +138,54 @@ export class SupabaseSyncTransport implements SyncTransport {
         return;
       }
 
+      // games.status/started_at/ended_at/claim_deadline/reopen_deadline were never written by
+      // anything server-side before step 13 — the game_events trigger's scope is deliberately
+      // narrow (game_players only) and these four event types have empty payloads, so there was
+      // nothing here to derive them from until now. Step 13's claim window and get_shared_game's
+      // live/finished routing both need games.status to be real. clientCreatedAt, not wall-clock
+      // "now", since a push can land long after the action happened offline (docs/build/NOTES.md).
+      case 'game_started': {
+        const { error } = await this.client
+          .from('games')
+          .update({ status: 'active', started_at: event.clientCreatedAt })
+          .eq('id', event.gameId);
+        if (error) throw error;
+        return;
+      }
+
+      case 'game_settling': {
+        const { error } = await this.client
+          .from('games')
+          .update({ status: 'settling' })
+          .eq('id', event.gameId);
+        if (error) throw error;
+        return;
+      }
+
+      case 'game_ended': {
+        const endedAt = event.clientCreatedAt;
+        const { error } = await this.client
+          .from('games')
+          .update({
+            status: 'finished',
+            ended_at: endedAt,
+            claim_deadline: addHours(endedAt, 48),
+            reopen_deadline: addHours(endedAt, 24),
+          })
+          .eq('id', event.gameId);
+        if (error) throw error;
+        return;
+      }
+
+      case 'game_reopened': {
+        const { error } = await this.client
+          .from('games')
+          .update({ status: 'active', ended_at: null, claim_deadline: null, reopen_deadline: null })
+          .eq('id', event.gameId);
+        if (error) throw error;
+        return;
+      }
+
       default:
         return;
     }
@@ -203,6 +251,10 @@ export class SupabaseSyncTransport implements SyncTransport {
       .update({ host_last_synced_at: new Date().toISOString() })
       .eq('id', gameId);
   }
+}
+
+function addHours(isoString: string, hours: number): string {
+  return new Date(new Date(isoString).getTime() + hours * 60 * 60 * 1000).toISOString();
 }
 
 function requireClient(): SupabaseClient {

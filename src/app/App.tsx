@@ -6,6 +6,7 @@ import { AccountPage } from './routes/AccountPage';
 import { HomePage } from './routes/HomePage';
 import { NewGamePage } from './routes/NewGamePage';
 import { GamePage } from './routes/GamePage';
+import { SharedGamePage } from './routes/SharedGamePage';
 import { NotFoundPage } from './routes/NotFoundPage';
 import { DevBar } from './DevBar';
 
@@ -27,6 +28,7 @@ export function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/new" element={<NewGamePage />} />
           <Route path="/game/:gameId" element={<GamePage />} />
+          <Route path="/s/:token" element={<SharedGamePage />} />
           <Route path="/account" element={<AccountPage />} />
           {import.meta.env.DEV && (
             <Route
