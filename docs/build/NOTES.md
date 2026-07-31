@@ -45,6 +45,106 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### ESLint flat-config `no-restricted-imports` blocks don't merge — the last matching one wins, whole
+**Step 12 · 2026-07-31 · trap**
+
+Adding a second `no-restricted-imports` block (banning `@supabase/supabase-js` outside `src/data/`,
+alongside `src/core/*.ts`'s existing, stricter one banning React/Supabase/Dexie/UI entirely) nearly
+reintroduced a real gap: if a file matches two config blocks that both set `no-restricted-imports`,
+ESLint's flat config does **not** union their `patterns` arrays — the later block in the array
+*replaces* the rule's whole setting for any file it matches, silently dropping the earlier block's
+bans for that file. `src/core/*.ts` (a single-star glob — direct children of `core/` only, not
+`core/offline/**`) would have lost its React/Dexie ban entirely had the new block's `files` glob
+also matched it.
+
+**The fix is `ignores`, not care with ordering.** The new block explicitly lists `src/core/*.ts` in
+its own `ignores`, so it never matches those two files at all — correct regardless of which block
+comes first in the exported array. Before adding a third rule using the same rule name anywhere its
+`files` might overlap an existing one, check for this the same way: either merge the patterns into
+the *existing* block, or `ignores` the overlap out explicitly. A test that only inspects config
+*shape* (matching by rule name) can't catch this either, since both blocks legitimately "have the
+rule configured" — only actually linting a probe file and asserting the expected violation still
+fires would, which is why the new rule's test in `lint-rules.test.ts` runs a real `ESLint` instance
+against real file paths rather than just asserting on the parsed config object (unlike the older
+`src/core/*.ts` purity-guard test, which only checks config shape and would not have caught this).
+
+### A new view defaults to bypassing the querying user's RLS — `group_player_results` shipped that way
+**Step 11 · 2026-07-31 · trap**
+
+`get_advisors(type: 'security')` flagged `group_player_results` as a `security_definer_view`
+**ERROR** right after it was applied to the real project — not a false positive. A plain
+`create view ... as select ...` defaults to `security_invoker = false` (the pre-PG15 behaviour):
+the view runs with its *owner's* privileges, not the calling role's, so it sees every row the
+underlying tables' RLS policies would otherwise hide from that caller. `profiles_public`
+(step 10) already relies on exactly this — it's *why* it can show a co-member's `display_name`
+that `profiles_select_self` alone would hide — but it compensates with its own narrowing `WHERE`
+clause (`p.id = auth.uid() or exists (... shared group membership ...)`). `group_player_results`
+had no equivalent: it only filtered `not gs.is_private`, so any authenticated caller — a member of
+any group, or none — could read every group's statistics, not just their own.
+
+**The fix, applied as a follow-up migration
+(`20260731140000_step11_security_advisor_fixes.sql`):** `alter view group_player_results set
+(security_invoker = true)`, plus `grant select on group_player_results to authenticated` (views
+need their own grant even when the underlying tables already grant `anon`/`authenticated` by
+default — see the step-10 entry below). With `security_invoker = true`, the view evaluates
+`player_results_select`/`game_summaries_select` (both already `is_group_member(group_id) or
+user_id = auth.uid()`) as the *actual* calling role — safe here specifically because PostgREST
+always executes as `anon`/`authenticated`, never as the table owner, so there's no owner-bypass
+loophole to worry about on that side.
+
+**Two views, two different fixes — pick based on whether the base tables' own RLS already says
+the right thing:**
+- `profiles_public` needs the *definer* behaviour (an explicit `WHERE`) because
+  `profiles_select_self` genuinely is too narrow for the view's purpose (self-only vs.
+  co-members-too) — inverting to `security_invoker` would just make the view as restrictive as
+  the table, defeating the point of having it.
+- `group_player_results` needs `security_invoker = true` because `player_results_select`/
+  `game_summaries_select` *already* express the exact right scoping — the view exists to
+  pre-join two tables and add `not is_private`, not to change who can see what.
+
+**What actually caught this, and what didn't:** the two tests written alongside the view
+(`groupPlayerResultsView.test.ts`) both queried as `admin` (`actAsAdmin`), which bypasses RLS
+regardless of the view's security mode — they would have passed identically before and after this
+bug, and did. Only `get_advisors` caught it initially; a third test added afterward actually
+proves the fix, by querying the view as a signed-in member of a *different* group and asserting
+zero rows come back. **A test that only ever exercises the admin/superuser path proves nothing
+about RLS** — any future view or policy test needs at least one assertion made `actAs` a real,
+non-privileged role. Same lesson `rlsEnabled.test.ts` already encodes for "RLS is enabled" (it
+doesn't just check the flag, it disables RLS on a live table mid-test and confirms the same query
+catches it) — this is that same discipline applied to view security instead of table security.
+
+### The `SUPABASE_URL`/`SUPABASE_ANON_KEY` repo secrets are set but wrong — `401`, not "missing"
+**Step 10 (checkpoint) · 2026-07-31 · trap**
+
+Asked to "verify GitHub secrets for Supabase are working." `maintenance.yml`'s early-exit branch (for
+when the secrets are absent) is no longer taking — both secrets exist — but the `curl` ping to
+`$SUPABASE_URL/rest/v1/` has returned `401` on every run since the owner first set them, at
+2026-07-30T23:44Z. Confirmed two independent ways: `get_job_logs` on runs `30591451651`,
+`30591661392`, `30617272103` and a manual `workflow_dispatch` (`30631281222`) all show
+`curl: (22) The requested URL returned error: 401`; the Supabase project's own `get_logs(service:
+"api")` shows the matching `GET | 401 | .../rest/v1/ | curl/8.5.0` entries at those exact
+timestamps, ruling out a proxy or runner artifact — the request really is reaching Supabase and
+being rejected there.
+
+This isn't a rotation: the project's legacy anon key's JWT `iat` claim (`1785406666`) equals the
+project's `created_at` to the second, so it has never been reissued. The most likely cause is that
+whatever value went into the `SUPABASE_ANON_KEY` secret isn't that key — e.g. the newer
+`sb_publishable_...`-format key was pasted instead of the legacy JWT one (Supabase's dashboard now
+surfaces "Publishable key" more prominently than "anon", and `maintenance.yml`'s `curl` sends it as
+a `Bearer` token, which PostgREST needs to be a JWT to decode a role from).
+
+**The fix needs the owner** — no tool available in this environment can read or write repo secrets.
+The current correct value (`anon`, legacy JWT, project `axsftugpsysoxersudwr`), pulled fresh via the
+Supabase MCP connection so there's no ambiguity about which key is right:
+
+```
+SUPABASE_URL=https://axsftugpsysoxersudwr.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4c2Z0dWdwc3lzb3hlcnN1ZHdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU0MDY2NjYsImV4cCI6MjEwMDk4MjY2Nn0.aHQyMk6r_vdkB6TXyDa_RCzhbl0eY9EI0U-Rth_TxvQ
+```
+
+Re-check by re-running `maintenance.yml` via `workflow_dispatch` after updating the secret — a clean
+run means `curl -sSf` exits 0 (no output at all on success is expected and correct).
+
 ### The pot banner's "chips" figure: money value vs. real chip count — the doc's own example is ambiguous
 **Step 7 (owner's first real play) · 2026-07-31 · decision**
 

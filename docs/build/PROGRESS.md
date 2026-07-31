@@ -37,8 +37,8 @@ change — otherwise the history stops meaning anything.
 | 8 | Settlement core | done | 2026-07-29 | _(this commit)_ |
 | 9 | End game, edit mode, share text | in progress — code complete, blocked on a real WhatsApp paste test | | |
 | 10 | Database foundation and RLS | done | 2026-07-30 | _(this commit)_ |
-| 11 | Snapshots, statistics source, retention | not started | | |
-| 12 | Auth and cloud sync | not started | | |
+| 11 | Snapshots, statistics source, retention | done | 2026-07-31 | _(this commit)_ |
+| 12 | Auth and cloud sync | in progress — the real sync transport is built and tested; auth UI, realtime, and local-game migration are not started | | |
 | 13 | Sharing, viewers, join requests, takeover | not started | | |
 | 14 | Groups, roles, private games | not started | | |
 | 15 | Statistics | not started | | |
@@ -52,12 +52,35 @@ real Supabase project and, in this session, all 14 `supabase/migrations/` files 
 directly (via the Supabase MCP connection, not the CLI — no `supabase link`/`db push` needed from
 here), plus two follow-up migrations fixing gaps the project's own security advisor surfaced (see
 this step's entry below and `NOTES.md`). One piece of the old checkpoint is still outstanding and
-still needs the owner: the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml`
-needs are not set yet (no tool here can set repo secrets) — see the checkpoint table. That does not
-block step 10 itself (none of its four `PLAN.md` exit criteria mention repo secrets), but it does
-block the keep-alive cron actually pinging anything, and step 12 will want it too. **Start step 11**
-next (snapshots, statistics source, retention functions) — pure SQL, testable against local
-Postgres, blocked on nothing above.
+still needs the owner: the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets are now **set**
+(verified 2026-07-31 by dispatching `maintenance.yml` manually) but the ping still fails with a
+`401` — the secret values are wrong, not missing; see the checkpoint table and `NOTES.md` for the
+diagnosis and the correct value to paste in. No tool here can read or write repo secrets, so this
+still needs the owner. That does not block step 10 itself (none of its four `PLAN.md` exit criteria
+mention repo secrets), but it does block the keep-alive cron actually pinging anything, and step 12
+will want it too. **Step 11 is now genuinely `done`**: `finalize_game`, `chips_to_money_minor`,
+`group_player_results`, `purge_expired_game_data` — all four `PLAN.md` exit criteria covered by
+`supabase/tests/`, `npm run test:db` and `npm run verify` both green — applied to the real
+Supabase project this session (with the owner's go-ahead, after the session first paused to
+confirm before writing to the live database). `get_advisors(type: 'security')` afterward
+surfaced one real, newly-introduced gap — `group_player_results` had no equivalent to
+`profiles_public`'s own narrowing, so any authenticated caller could have read every group's
+statistics — fixed by a fourth migration (`security_invoker = true` plus the missing view grant)
+and proven with a dedicated cross-group test, not just re-running the advisor. See this step's
+entry below and `NOTES.md`.
+
+**Step 12 (auth and cloud sync) is in progress**, not done — it turned out to be the largest step
+in the plan so far, once "the real `SyncTransport`" turned out to also need translating two event
+types into direct table writes (`shared_costs`/`transfers`, the tables step 10 deliberately built
+as host-direct-write rather than event-derived). This session built and fully tested the hardest,
+most novel part — `SupabaseSyncTransport` (push, pull, the undo-marker RPC split, the
+shared-cost/transfer translation, `host_last_synced_at` stamping) and the lint rule enforcing
+"nothing outside `src/data/` imports `supabase-js`" — covering 2 of the step's 5 exit criteria at
+the sync-engine level (two-device convergence, a deposed host's events still merging). **Not yet
+started:** the Google/magic-link sign-in UI and session context, the realtime subscription with
+its 15s polling fallback, and local-only game migration on first sign-in (the remaining 3 exit
+criteria). See this step's entry below for exactly where it stops and what the next session picks
+up first.
 
 ### Checkpoints that are not steps
 
@@ -69,7 +92,8 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Play a real game on the step-7 build** | Step 7 `done` | in progress 2026-07-31 — owner started real play, reported two bugs, both fixed this session (see step 7 entry below and `NOTES.md`); not yet a full clean night |
 | **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached — needs the repository owner |
 | **Create the real Supabase project and apply `supabase/migrations/*.sql` to it** | Step 10 `done` | ✅ done 2026-07-30 — project created by the owner, migrations applied via the Supabase MCP connection this session |
-| **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; step 12 wants it too | not reached — needs the repository owner (no tool available here can set repo secrets) |
+| **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; step 12 wants it too | ⚠️ set but wrong 2026-07-31 — both secrets exist (the workflow no longer early-exits) but every real ping since has returned `401` from Supabase's REST gateway, confirmed against both the GitHub Actions run logs and the project's own API logs (see `NOTES.md`). Needs the repository owner to re-check the `SUPABASE_ANON_KEY` secret's value — no tool available here can read or set repo secrets. |
+| **Apply the step-11 migrations to the real Supabase project** | Step 11 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner's go-ahead; a security-advisor follow-up migration was needed and applied too (see `NOTES.md`) |
 
 ---
 
@@ -995,3 +1019,233 @@ chat, not committed anywhere — matching `.env.local`'s own "never commit a fil
   partially applied — confirmed by re-running `list_migrations` after a reconnect before continuing.
   If a future session hits the same flapping, re-check state before resuming rather than assuming
   the last call landed.
+
+---
+
+### Step 11 — Snapshots, statistics source, retention functions
+**Status:** done  **Sessions:** 1  **Commits:** 2
+
+**Built.** Four migrations (three plus one security-advisor follow-up — see Deviated), all tested
+against local Postgres (`supabase/tests/`, 36 tests across 6 files, up from 18) and applied to the
+real Supabase project:
+
+- **`chips_to_money_minor(chips, buy_amount_minor, chips_per_buy)`** — a SQL re-derivation of
+  `core/money.ts`'s `chipsToMoney()`/`bankersRound()` (round-half-to-even), done with exact integer
+  arithmetic instead of the TS original's float-plus-epsilon approach. Both agree on every input —
+  proven by `finalizeGame.test.ts`'s `chips_to_money_minor` suite, including two genuine
+  exact-half ties (one rounding down to an even floor, one rounding up to one).
+- **`finalize_game(game_id)`** — reads only the live tables (`games`, `game_players`,
+  `shared_costs`/`shared_cost_shares`, `transfers`) and writes `game_summaries`, `player_results`,
+  `transfer_summaries`. Reproduces `core/players.ts`'s display-name composition and per-game dedup
+  (`nickname (account name)` for registered players, guest name for guests, `"(1)"`/`"(2)"` suffixes
+  for repeats, ranked by `seat_order` then `joined_at`) and `gameActions.ts#finalizeGame`'s
+  `settled_position` ranking (across *every* player in the game, not just active ones, matching a
+  subtlety in the TS original). Idempotent by delete-then-insert rather than piecemeal upsert, so a
+  reopen-then-re-end can never leave a stale duplicate row. Verified byte-for-byte against
+  `core/settlement.ts#buildGameSnapshot()` on a shared fixture (two guests deliberately both named
+  "Dana", to exercise the dedup path; a shared cost; a hand-edited transfer list touching every
+  `settlement_party` — player, pot, house — as both sender and receiver, plus one zeroed-out
+  "deleted" transfer that must not survive into `transfer_summaries`).
+- **`group_player_results`** — the one statistics-source view this step builds, over
+  `player_results`/`game_summaries`, `where not gs.is_private`. Personal statistics (which must
+  still count private games) read the base tables directly instead; only the group-scoped path
+  goes through this view. Baking the exclusion in now means step 14 has nothing to retrofit here.
+- **`purge_expired_game_data()`** — tier 3 (`game_events`) at 30 days past `ended_at`, tier 2
+  (`games` and everything that cascades from it — `game_players`, `shared_costs`/
+  `shared_cost_shares`, `transfers`, `game_viewers`, `share_links`, `join_requests`,
+  `player_claims`) at 90 days, both joined against `game_summaries` so a finished game with no
+  snapshot yet is silently skipped rather than purged or erroring. Returns `(table_name,
+  deleted_count)` rows, ready for step 16's cron log line. Not wired into `maintenance.yml` — that
+  stays step 16's job, per `PLAN.md`'s explicit "out of scope."
+
+**Deviated.**
+- **`finalize_game(game_id)` is a from-scratch SQL re-derivation of the settlement maths, not a
+  thin writer of a client-supplied snapshot.** The alternative — taking a pre-built `GameSnapshot`
+  payload as a parameter — doesn't fit `03-data-model.md`'s own signature (`finalize_game(game_id)`,
+  one argument), and would leave the function unable to run standalone against server state once
+  step 12 makes a signed-in host's live game state actually live in these tables. This is the same
+  trade `20260729121200_game_events_trigger.sql` already made for the `game_players` cache — SQL
+  can't import `core/settlement.ts`, so the two are kept in sync by hand and cross-checked by test,
+  not by sharing code.
+- **The "reopening within 24h deletes the snapshot" behaviour from `03-data-model.md` isn't built
+  as an automatic trigger here.** `finalize_game()`'s own delete-then-insert makes a *second* call
+  correct, but nothing yet proactively deletes a snapshot the moment a game reopens without being
+  re-ended — there's no server-side "reopen" write path yet for it to hook into (that's still the
+  local-only `reopenGame()` in `gameActions.ts`, step 9). Revisit once step 12 gives games a real
+  server-side reopen path.
+- **The "byte-identical after an explicit deletion" exit criterion is tested against a raw `delete
+  from games`, not a `delete_game()` RPC** — that RPC doesn't exist until step 16 ("Delete-a-game").
+  Every FK from `games` down is already `on delete cascade`, so the raw delete already exercises the
+  real mechanism the eventual RPC will wrap; `purgeExpiredGameData.test.ts` covers it under that
+  name.
+- **A fourth migration** (`20260731140000_step11_security_advisor_fixes.sql`) **was needed after
+  applying to the real project**, matching step 10's own precedent of fixing advisor-surfaced gaps
+  as a follow-up rather than editing already-applied files. `get_advisors(type: 'security')` found
+  a real one this time, not just a warning: `group_player_results` had shipped without
+  `profiles_public`'s equivalent narrowing, so — because a plain view defaults to running with its
+  *owner's* privileges (`security_invoker = false`), bypassing the querying user's RLS on
+  `player_results`/`game_summaries` entirely — any authenticated caller could have read every
+  group's statistics, not just their own. Fixed with `alter view ... set (security_invoker =
+  true)` plus the view's own `grant select` (views need one even when the underlying tables
+  already grant `anon`/`authenticated` by default), and proven with a new test that queries the
+  view as a member of a *different* group and asserts zero rows come back — the first two tests in
+  `groupPlayerResultsView.test.ts` only ever queried as admin, which bypasses RLS regardless of
+  the view's security mode, so they would have passed either way and didn't actually catch this.
+  Also folded in the same fix `chips_to_money_minor` needed (a missing `set search_path = public`
+  — the exact class of gap `20260730150000_security_advisor_fixes.sql` fixed once already for
+  step 10).
+
+**Left undone.** Nothing from this step's `PLAN.md` build list. `purge_expired_game_data()` is
+built and tested but not cron-wired (step 16, explicitly out of scope here).
+
+**Watch out.**
+- **`game_summaries` must be inserted before `player_results`/`transfer_summaries`, not after.**
+  Both of the latter reference `game_summaries(game_id)`, *not* `games(id)` — easy to get backwards
+  (this session did, once) since it reads naturally the other way round. The FK exists so a
+  permanent snapshot survives its `games` row being purged.
+- **The temp table `finalize_game()` builds (`tmp_finalize_players`) is dropped explicitly at the
+  top of the function, not left to `on commit drop` alone** — a caller invoking `finalize_game()`
+  twice inside one still-open transaction (which `supabase/tests/` does constantly, since every
+  test wraps itself in a transaction it rolls back rather than commits) would otherwise collide
+  with the first call's temp table.
+- **A plain `create view` bypasses the querying user's RLS by default — this bit `group_player_
+  results` for real, see Deviated above.** Any new statistics view step 15 adds needs either
+  `security_invoker = true` (preferred, when the underlying tables' own RLS already expresses the
+  right scoping — the case here) or `profiles_public`'s pattern of an explicit narrowing `WHERE`
+  clause (when it doesn't). Forgetting either one is silent until `get_advisors` or a test that
+  actually queries as a non-privileged role catches it — querying as admin, like this step's first
+  two view tests did, proves nothing about RLS scoping.
+- **This session verified the GitHub-secrets checkpoint from step 10 and found it further along,
+  but not fixed**: `SUPABASE_URL`/`SUPABASE_ANON_KEY` are now set as repo secrets, but the value is
+  wrong — every real `maintenance.yml` ping since the owner set them has returned `401`. See the
+  checkpoint table above and `NOTES.md`'s dedicated entry for the diagnosis and the exact correct
+  value to paste in. This is still unresolved and still needs the owner — nothing in this step
+  touches it.
+
+---
+
+### Step 12 — Auth and cloud sync
+**Status:** in progress — see Left undone for exactly what's missing
+**Sessions:** 1  **Commits:** 1 (so far)
+
+**Built.**
+- **`core/offline/syncTransport.ts`'s `SyncTransport` interface gained `pull(gameId, cursor?)`**,
+  returning `{events, cursor}`. `cursor` is opaque and server-assigned (the real implementation
+  uses `game_events.id`, never a client timestamp — two events can share a `clientCreatedAt` to
+  the millisecond, see `NOTES.md`'s clock entry, but the server's identity column can't collide).
+- **`src/data/supabaseClient.ts`** — the `@supabase/supabase-js` client, session persisted via an
+  IndexedDB adapter (`db.meta`, the same table `localActorId` already used) rather than
+  `localStorage`, per `CLAUDE.md`'s security section. `null` when `VITE_SUPABASE_URL`/
+  `VITE_SUPABASE_ANON_KEY` aren't set — every environment except a real build with the repo
+  secrets wired in, and this sandbox always, since it can't reach the real project either way (see
+  `NOTES.md`'s step-10 entry on that). Consumers treat `null` as "cloud unavailable", never throw:
+  offline-first has no step-12 exception.
+- **`src/data/supabaseSyncTransport.ts`** — `SupabaseSyncTransport implements SyncTransport`.
+  `push()` splits the batch into plain inserts (upserted into `game_events` in one call,
+  `on conflict (client_event_id) do nothing`) and undo markers (`event.undoneBy !== null`), which
+  call the `mark_event_undone` RPC instead — a plain insert can't set `undone_by` at all, since the
+  column is the *server's* bigint id, not a client-known uuid. For the two event types the
+  server's own trigger deliberately does **not** derive from `game_events`
+  (`20260729121200_game_events_trigger.sql`'s scope note) — `shared_cost_added`/`_updated`/
+  `_removed` and `transfer_edited` — `push()` also performs the matching direct write to
+  `shared_costs`/`shared_cost_shares`/`transfers`. `transfer_edited`'s `POT_ID`/`HOUSE_ID`
+  sentinels resolve to the `settlement_party` enum; a transfer id not seen before gets the next
+  `order_index`, an existing one keeps its own. `pull()` selects `game_events` since a cursor,
+  resolves `undone_by` from the server's bigint back to the inverse event's `clientEventId`, and
+  validates every row through `core/events.ts`'s existing `gameEventSchema` before it can reach
+  `fold()`. Every successful `push()` stamps `games.host_last_synced_at` for each distinct game in
+  the batch.
+- **`core/offline/outbox.ts` gained `pullGameEvents(transport, gameId)`**, the pull-side twin of
+  `flushOutbox` — merges into `db.events` via `bulkPut` (idempotent on `clientEventId`) and
+  persists the new cursor in `db.meta`. `appendEvent`/`flushOutbox`/`pullGameEvents` all gained an
+  optional trailing `database: AppDatabase` parameter (defaulting to the module singleton) so
+  tests can run two independent local Dexie databases against one shared fake server — needed to
+  actually simulate two devices rather than one process sharing state with itself.
+- **`core/offline/stubTransport.ts`'s `StubSyncTransport` gained a `FakeSyncServer`** it can
+  optionally share with another `StubSyncTransport` instance, plus a `pull()` implementation —
+  what makes the two-device tests possible without a real network.
+- **The lint rule**: `no-restricted-imports` bans `@supabase/supabase-js` in every `src/**` file
+  except `src/data/**` (and, separately, `src/core/*.ts`'s own stricter pre-existing ban already
+  covers it there). Proven firing against a real probe in both a banned location and inside
+  `src/data/`, in `src/test/lint-rules.test.ts` — not just config-shape inspection.
+- **Testing infrastructure**: no live PostgREST endpoint is reachable from this environment (this
+  sandbox's outbound proxy blocks `*.supabase.co` directly — see `NOTES.md`'s secrets-verification
+  entry), so `SupabaseSyncTransport` is unit-tested against `src/data/testSupport/
+  fakePostgrestClient.ts`, a small in-memory stand-in implementing exactly the query-builder
+  surface the transport uses (`select`/`insert`/`upsert`/`update`/`delete`, `.eq`/`.gt`/`.order`/
+  `.maybeSingle`, the `{count, head}` form, `.rpc`) — tested as real behaviour against a real table
+  store, not "was this method called with these args".
+- 18 new tests: 13 for `SupabaseSyncTransport` (push mapping, all three shared-cost event shapes,
+  both transfer paths, the undo-RPC split, error propagation, pull mapping, undo resolution,
+  cursor incrementality, schema validation), 5 for the outbox/engine layer (`pullGameEvents`
+  incrementality, and the two hardest exit criteria: two-device convergence and a deposed host's
+  late events still merging).
+
+**Deviated.**
+- **`SupabaseSyncTransport` also performs direct-table writes for `shared_cost_*`/
+  `transfer_edited`, which `PLAN.md`'s one-line "the real `SyncTransport` behind step 5's
+  interface" doesn't call out.** This isn't scope creep: `beginSettlement` (step 9) seeds the
+  computed transfer list as real `transfer_edited` events for *every* game that reaches
+  settlement, so skipping this would mean no synced game's transfers ever appear server-side. The
+  server's own trigger was deliberately scoped to skip these tables in step 10
+  (`20260729121200_game_events_trigger.sql`'s comment); this is that other half, just living on
+  the client transport instead of a server trigger, since a client push is the only place that
+  needs it.
+- **Two devices "converging" is tested with two independent `AppDatabase` instances sharing one
+  `FakeSyncServer`, not two real browser tabs.** `outbox.ts`'s functions previously only operated
+  on the module-level `db` singleton; adding an optional trailing `database` parameter (default
+  unchanged) was the smallest change that made a genuine two-local-store test possible at all.
+
+**Left undone — this is most of the step.**
+1. **Auth UI and session.** No Google/magic-link sign-in screen exists (there's no mockup for one
+   either — `docs/11`'s "what the design does not cover" list doesn't name it explicitly, but the
+   screen map's own "Sign in" node has nothing behind it; build it in the established visual
+   language, same as every other undocumented state). No `SessionProvider`/`useSession()` context.
+   No profile-creation step (username + display name + optional default nickname) — `profiles
+   .username` is unique and not derivable from a Google name/email without a real collision
+   strategy, so this needs its own small flow. Username uniqueness should be handled by catching
+   the insert's unique-violation, not a new RPC — `find_user_by_username` (step 14) is a different,
+   narrower thing (exact-match lookup for invites), not a general availability check, and adding
+   one for this would be a real RPC no `PLAN.md` build item asks for.
+2. **Realtime subscription + 15s polling fallback**, wired into the sync engine so an open game
+   actually pulls on its own instead of only when something else happens to call
+   `pullGameEvents`.
+3. **Local-only game upload on first sign-in.** The key insight for whoever picks this up: it is
+   *not* a special one-time migration path. `SupabaseSyncTransport.push()` already assumes the
+   parent `games` row exists (a foreign-key violation otherwise, which `flushOutbox` already
+   treats as an ordinary failed-push retry — see Watch out). A brand-new local-only game and a
+   game created after sign-in hit the exact same first-push path once something ensures the
+   `games` row exists first from the local `CachedGameRecord`. The one genuinely special thing
+   pre-sign-in games need: every locally-authored event's `actorId` is a random `localActorId`
+   (`core/offline/localIdentity.ts`), not a real `profiles.id` — `game_events.actor_id references
+   profiles(id) not null`, so these need rewriting to the real profile id, once, before that
+   game's first push. Games created after sign-in never have this problem, since they're authored
+   with the real id from the start.
+4. Two exit criteria depending on the above: "airplane mode for the length of a game, then
+   reconnect" and "a pre-existing local game survives first sign-in with its snapshot intact".
+5. `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` aren't wired into `deploy.yml`'s build step yet —
+   needed before a real deployed build can use any of this, sourced from the same repo secrets
+   `maintenance.yml` already reads (once the checkpoint above gets them fixed).
+
+**Watch out.**
+- **`push()` assumes the game's parent `games` row already exists.** It doesn't create one — that
+  is deliberately a separate, one-time concern (see Left undone #3). A push against a game with no
+  server-side `games` row fails on the `game_events` foreign key, which surfaces as an ordinary
+  failed/retried outbox entry, not a crash — safe, but silent, so don't spend time debugging "why
+  isn't this pushing" without checking that first.
+- **`no-restricted-imports` rules don't merge across config blocks that match the same file** —
+  ESLint flat config replaces the whole rule setting per file, it doesn't union `patterns` arrays
+  from multiple matching blocks. The new supabase-js-import rule explicitly excludes `src/core/
+  *.ts` via `ignores` rather than relying on specificity, precisely so it can't silently clobber
+  that file's own, stricter, pre-existing ban. Keep this in mind before adding a third
+  `no-restricted-imports` block anywhere its `files` might overlap one of these two.
+- **Two events can share a `clientCreatedAt` to the millisecond** (`nextTimestamp()`'s own
+  entry in this file) **but never a server-assigned `game_events.id`** — that's why the pull
+  cursor is the latter, never the former, and why `SyncPullResult.cursor` is typed as opaque
+  rather than a timestamp.
+- **This sandbox cannot reach `*.supabase.co` at all** (confirmed while verifying the step-10/11
+  secrets — see `NOTES.md`), so `SupabaseSyncTransport` has never run against the real project,
+  only against `fakePostgrestClient.ts`. The fake is a faithful reimplementation of the exact
+  query-builder calls used, not a generic Postgrest mock — if a future change to the transport
+  uses a builder method the fake doesn't implement (a `.range()`, a `.in()`, ...), add it there
+  rather than reaching for a broader mocking library.

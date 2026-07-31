@@ -175,6 +175,73 @@ describe('i18n guard: literal user-facing strings', () => {
   });
 });
 
+describe('repository-layer guard: supabase-js only importable from src/data/', () => {
+  const dataEntry = (
+    eslintConfig as { files?: string[]; ignores?: string[]; rules?: Record<string, unknown> }[]
+  ).find((entry) => entry.ignores?.includes('src/data/**'));
+  const restricted = dataEntry?.rules?.['no-restricted-imports'] as
+    | [string, { patterns: { group: string[] }[] }]
+    | undefined;
+
+  it('is an error in the real config, not a warning', () => {
+    expect(restricted?.[0]).toBe('error');
+  });
+
+  it('bans @supabase/supabase-js in the real config', () => {
+    expect(restricted?.[1].patterns[0]?.group).toEqual(
+      expect.arrayContaining(['@supabase/supabase-js']),
+    );
+  });
+
+  /**
+   * Lints a probe at `filePath` with the real block's own `files`/`ignores`/
+   * `rules` (read straight from the config above, not restated) — but
+   * without type-aware parsing, which needs the probe to be a real file on
+   * disk and part of the tsconfig project. `no-restricted-imports` needs no
+   * type information, so this loses nothing the real config would have
+   * caught.
+   */
+  async function lintAt(filePath: string, code: string) {
+    const eslint = new ESLint({
+      overrideConfigFile: true,
+      overrideConfig: [
+        {
+          files: dataEntry?.files ?? [],
+          ignores: dataEntry?.ignores ?? [],
+          languageOptions: { parser: await import('@typescript-eslint/parser') },
+          rules: (dataEntry?.rules ?? {}) as never,
+        },
+      ],
+    });
+    const [result] = await eslint.lintText(code, { filePath });
+    return result?.messages ?? [];
+  }
+
+  it('rejects supabase-js imported from outside src/data/', async () => {
+    const messages = await lintAt(
+      'src/features/game/probe.ts',
+      "import { createClient } from '@supabase/supabase-js';\nexport const x = createClient;\n",
+    );
+    expect(messages.some((m) => m.ruleId === 'no-restricted-imports')).toBe(true);
+  });
+
+  it('rejects it from core/offline/ too — the seam is src/data/, not core/', async () => {
+    const messages = await lintAt(
+      'src/core/offline/probe.ts',
+      "import { createClient } from '@supabase/supabase-js';\nexport const x = createClient;\n",
+    );
+    expect(messages.some((m) => m.ruleId === 'no-restricted-imports')).toBe(true);
+  });
+
+  it('allows it inside src/data/ — that is the whole point of the seam', async () => {
+    const messages = await lintAt(
+      'src/data/probe.ts',
+      "import { createClient } from '@supabase/supabase-js';\nexport const x = createClient;\n",
+    );
+    expect(messages.some((m) => m.ruleId === 'no-restricted-imports')).toBe(false);
+  });
+});
+
 describe('purity guard: core/ imports nothing from React or the data layer', () => {
   it('bans the framework and the repository layer from core/', () => {
     const config = eslintConfig as { files?: string[]; rules?: Record<string, unknown> }[];

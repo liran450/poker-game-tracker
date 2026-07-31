@@ -14,6 +14,21 @@ export interface SyncPushResult {
   readonly acceptedEventIds: readonly string[];
 }
 
+/**
+ * `cursor` is opaque to everything except the transport that issued it — the
+ * real implementation uses the server's own monotonic event id, never a
+ * client timestamp (two events can share a `clientCreatedAt` to the
+ * millisecond; the server's identity column can't collide). The caller
+ * persists it and passes it back on the next `pull` for that game; omit it
+ * for a full pull (a brand-new local device, or a game opened for the first
+ * time).
+ */
+export interface SyncPullResult {
+  readonly events: readonly GameEvent[];
+  readonly cursor: string;
+}
+
 export interface SyncTransport {
   push(events: readonly GameEvent[]): Promise<SyncPushResult>;
+  pull(gameId: string, cursor?: string): Promise<SyncPullResult>;
 }
