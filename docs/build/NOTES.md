@@ -45,6 +45,50 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### An unlayered `@import` silently defeated every Tailwind utility, app-wide, since step 1
+**Cross-cutting (found post step-10) · 2026-07-31 · trap**
+
+Every screen built so far (steps 6–9 — Home, NewGame, GamePage and every sheet) rendered with no
+button fill, no padding, no text-color/weight distinction, and no card background — despite every
+component having exactly the right Tailwind classes in its JSX the whole time. Found by the
+repository owner comparing real screenshots against the design; confirmed by driving a real
+production build (`npm run build` + `vite preview`, matching the deployed base path) with
+Playwright and reading `getComputedStyle` on a button with class `bg-accent text-on-accent
+font-bold ... px-5 ... rounded-xl`: `backgroundColor` came back transparent, `padding` came back
+`0px`, `color` came back the wrong token, `fontWeight` came back `400` — but `borderRadius` came
+back correct. That last detail is what pinpointed it: only the properties `reset.css` also touches
+were wrong.
+
+Root cause: `src/styles/index.css` is `@import 'tailwindcss'; ... @import './reset.css';` — a plain
+import with no `layer(...)`. Tailwind v4 wraps every rule it generates in named cascade layers
+(`@layer theme, base, components, utilities`). Per the CSS Cascade Layers spec, **an unlayered
+rule always wins over a layered one, regardless of source order or specificity** — so `reset.css`'s
+`* { margin: 0; padding: 0; }` and `button, input, textarea, select { font: inherit; color:
+inherit; background: none; border: none; }` silently beat every `p-*`/`bg-*`/`text-*`/`font-*`
+utility on every element, everywhere, no matter how many later, more-specific-looking utility
+classes were applied. `border-radius` was never touched by `reset.css`, which is exactly why it was
+the one property still working — the tell that made this findable instead of just "generally looks
+bad."
+
+**Fix — one line:** `@import './reset.css';` → `@import './reset.css' layer(base);`, slotting it
+into the same `base` layer Tailwind already declares (where Tailwind's own preflight would normally
+live), so the existing layer order (`theme, base, components, utilities`) makes utilities win over
+the reset exactly as intended. Verified before/after with the same Playwright + computed-style
+check: `backgroundColor` went from `rgba(0,0,0,0)` to the real `#E9A23C`, `padding` from `0px` to
+`0px 20px`, `color` to the correct `#1A1508`, `fontWeight` to `700`. Re-screenshotted the New Game
+and Game screens against a real production build afterward — full padding, card backgrounds, the
+amber buy-in `+`, the pot banner pill, all present, matching the prototype far more closely.
+
+**Why nothing caught this for three build steps:** every e2e/component test in this repo asserts
+DOM content, attributes and behaviour (text present, ARIA state, click handlers firing) — never a
+computed style or a visual screenshot diff. That's the right tradeoff for most of the suite, but it
+means a whole class of "the class is on the element but a competing rule wins" bugs is invisible to
+`npm run verify` and `npm run e2e` alike. **If a future session adds any more hand-written CSS
+(another `.css` file, another `@import`, a third-party stylesheet) alongside Tailwind, it must be
+imported with an explicit `layer(...)` (or wrapped in `@layer` directly) — an unlayered import is
+the trap, not cascade layers themselves.** Worth a real visual/screenshot check the next time a
+new global stylesheet is added, since this is exactly the kind of regression `verify` cannot see.
+
 ### `npm run test:db` on a fresh container: `postgres` has no password set yet
 **Step 10 · 2026-07-30 · environment**
 

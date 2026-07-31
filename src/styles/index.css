@@ -18,4 +18,4 @@
 @import '@fontsource/rubik/latin-700.css';
 @import '@fontsource/rubik/latin-800.css';
 @import './tokens.css';
-@import './reset.css';
+@import './reset.css' layer(base);
