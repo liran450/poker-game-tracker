@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { dedupeDisplayNames, renderPlayerName } from './players';
+import type { GameEvent } from './events';
+import { dedupeDisplayNames, firstBuyInTimestamp, renderPlayerName } from './players';
+
+let eventCounter = 0;
+function event(type: GameEvent['type'], clientCreatedAt: string): GameEvent {
+  eventCounter += 1;
+  return {
+    clientEventId: `evt-${eventCounter}`,
+    gameId: 'g1',
+    playerId: null,
+    actorId: 'a1',
+    clientCreatedAt,
+    undoneBy: null,
+    type,
+    payload: {},
+  } as GameEvent;
+}
 
 describe('renderPlayerName', () => {
   it('shows the guest name as-is for a guest', () => {
@@ -87,5 +103,35 @@ describe('dedupeDisplayNames', () => {
     ]);
     expect(result.get('a')).toBe('מור');
     expect(result.get('b')).toBe('מור (1)');
+  });
+});
+
+describe('firstBuyInTimestamp', () => {
+  it('is null when no buy-in has happened yet', () => {
+    expect(
+      firstBuyInTimestamp([
+        event('game_started', '2026-01-01T00:00:00.000Z'),
+        event('player_added', '2026-01-01T00:00:01.000Z'),
+      ]),
+    ).toBeNull();
+  });
+
+  it('is the earliest buy_in_added timestamp, regardless of event order', () => {
+    expect(
+      firstBuyInTimestamp([
+        event('buy_in_added', '2026-01-01T00:05:00.000Z'),
+        event('buy_in_added', '2026-01-01T00:02:00.000Z'),
+        event('buy_in_added', '2026-01-01T00:08:00.000Z'),
+      ]),
+    ).toBe('2026-01-01T00:02:00.000Z');
+  });
+
+  it('ignores every other event type', () => {
+    expect(
+      firstBuyInTimestamp([
+        event('player_added', '2026-01-01T00:00:00.000Z'),
+        event('cash_paid_set', '2026-01-01T00:00:01.000Z'),
+      ]),
+    ).toBeNull();
   });
 });

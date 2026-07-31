@@ -45,6 +45,77 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### The pot banner's "chips" figure: money value vs. real chip count — the doc's own example is ambiguous
+**Step 7 (owner's first real play) · 2026-07-31 · decision**
+
+The owner reported the pot banner as buggy: buy ₪50 for 100 chips, and the green banner read
+"קניות ₪50 = ₪50" instead of showing the actual 100 chips — the undo snackbar right after tapping
+`+` gets this right (`+100 ז'יטונים · +₪50`), which is what made the banner's version look wrong by
+comparison. Traced to `core/pot.ts`: `totalChipsMinor` is the chips' *money value*
+(`chipsToMoney(chipsFinal, ...)`, or `owed(buysCount, buyAmountMinor)` — identical to the buy-in
+figure — for anyone still unsettled), not a chip count, and `PotBanner` rendered it through
+`formatMoneyPlainText` under a "ז'יטונים" label. `05-settlement.md`'s own worked example —
+`מאוזן · קניות ₪600 = ז'יטונים ₪600` — is written exactly this way, so the existing code was a
+faithful, literal reading of the doc, not a slip.
+
+But the doc's example doesn't actually disambiguate money-value-of-chips from chip-count, because
+nothing in it states the chip-per-buy ratio for that example — the two readings only look identical
+when 1 chip ≈ ₪1. The real app defaults to a 0.5 chip value (buy ₪50 / 100 chips), where the two
+readings diverge sharply and the money-value reading reads as visibly wrong to a real user, exactly
+as reported. Confirmed by reproducing the exact scenario in a real browser before touching any code
+(a fresh game, buy ₪50/100 chips, three players with 2/3/3 buy-ins) — the banner read
+"קניות ₪400 = ₪400" against an actual 800 chips on the table.
+
+**Resolved with the owner, not guessed:** the banner now shows the real chip count.
+`core/pot.ts#PotStatus` gained `totalChipsCount` (settled players' counted chips + unsettled
+players' assumed-bought chips, mirroring the existing money computation exactly but in chip units),
+and `PotBanner` composes it through the same `pot.chipsCount` phrase (`{{count}} ז'יטונים`) already
+used by `PotResolutionSheet`, one shared source of truth for that wording rather than a second copy.
+`totalChipsMinor` — the money figure the safeguard's actual balance/discrepancy math runs on — is
+completely untouched; this was a display-only change confirmed by re-running the full
+`core/pot.test.ts` suite (all totals still assert correctly) plus a new `PotBanner` regression test
+that locks in the exact reported scenario (buy ₪50/100 chips → banner shows "100", not "50" twice).
+**If a future session touches this banner again: `totalChipsMinor` (money) and `totalChipsCount`
+(chip units) are deliberately two different fields for two different purposes — don't collapse them
+back into one.**
+
+### The "late joiner" caption needs an activity signal, not a wall-clock one
+**Step 7 (owner's first real play) · 2026-07-31 · trap · decision**
+
+The owner also reported an unwanted "time" showing on every player row. Reproduced directly: start
+a game with the setup screen's player field left empty, then seat everyone via the in-game
+`+ שחקן` action right after — a completely ordinary way to run a game (start immediately, seat
+people as they arrive) — and every single player showed a `הצטרף HH:MM` badge, all at the same
+timestamp. Root cause: `LiveGameView` compared `player.joinedAt` against `state.startedAt`
+(`game_started`'s own timestamp), and `nextTimestamp()`'s strict per-device monotonicity
+(`core/offline/clock.ts` — see the step-7 entry above) guarantees every event appended *after*
+`game_started`, including a `player_added` fired one second later, has a strictly greater
+timestamp. So "later than `game_started`" was true for essentially every player seated this way,
+not just genuine latecomers.
+
+The fix isn't a grace period or a fixed number of minutes — the owner's own instinct during the
+conversation ("late" should mean "everyone else already had a buy-in") pointed at the right signal
+directly: activity, not wall-clock proximity to `game_started`. `core/players.ts#firstBuyInTimestamp`
+scans the event log for the earliest `buy_in_added`; a player only reads as a late joiner if their
+`joinedAt` is after that moment. Before any buy-in has happened, *nobody* can be flagged, no matter
+how the table was seated. Once real money is on the table, anyone added after that point genuinely
+is joining a game already in progress — this self-calibrates to how fast a given table actually
+moves instead of guessing a constant that would be wrong for both a slow-starting table and a fast
+one. Verified with three real-browser scenarios: players seated before start (no badge, unchanged
+from before), players seated via `+ שחקן` before any buy-in (no badge — this is the fix), and a
+player added after another player already bought in (badge shown correctly, proving the feature
+still works for a genuine latecomer).
+
+**Deliberately not built:** the owner raised "planned games" (inviting people ahead of a scheduled
+game, marking yourself as arriving late against a plan) in the same conversation, and separately
+floated moving late joiners into their own list. Both are real product ideas but out of scope here
+— locations and scheduled games are already reserved-schema-only and deferred post-v1
+(`01-product-spec.md#10-planned-not-in-v1`, `PLAN.md`'s "Deliberately not in this plan"), and
+nothing about that changed this session. If a future session builds scheduled games, revisit
+whether "late" should mean something different there (relative to the *planned* start time) than it
+does for an ad hoc game (relative to the first real buy-in) — the two are genuinely different
+questions, per the owner's own framing.
+
 ### An unlayered `@import` silently defeated every Tailwind utility, app-wide, since step 1
 **Cross-cutting (found post step-10) · 2026-07-31 · trap**
 

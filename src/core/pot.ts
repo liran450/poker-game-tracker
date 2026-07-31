@@ -13,6 +13,8 @@ export interface PotPlayerInput {
 export interface PotStatus {
   readonly totalBuyInsMinor: Minor;
   readonly totalChipsMinor: Minor;
+  /** The actual number of chips in play — settled players' counted chips, unsettled players' assumed (bought) chips. Display only; the safeguard's own math runs on `totalChipsMinor`. */
+  readonly totalChipsCount: number;
   readonly unaccountedMinor: Minor;
   readonly discrepancyMinor: Minor;
   readonly isBalanced: boolean;
@@ -44,15 +46,18 @@ export function computePotStatus(
 ): PotStatus {
   let totalBuyInsMinor = 0 as Minor;
   let totalChipsMinor = 0 as Minor;
+  let totalChipsCount = 0;
 
   for (const player of players) {
     const buyIn = owed(player.buysCount, buyAmountMinor);
     totalBuyInsMinor = add(totalBuyInsMinor, buyIn);
 
-    const accountedFor =
-      player.isSettled && player.chipsFinal !== null
-        ? chipsToMoney(player.chipsFinal, buyAmountMinor, chipsPerBuy)
-        : buyIn;
+    const chipsCounted = player.isSettled && player.chipsFinal !== null;
+    totalChipsCount += chipsCounted ? player.chipsFinal : player.buysCount * chipsPerBuy;
+
+    const accountedFor = chipsCounted
+      ? chipsToMoney(player.chipsFinal, buyAmountMinor, chipsPerBuy)
+      : buyIn;
     totalChipsMinor = add(totalChipsMinor, accountedFor);
   }
 
@@ -61,6 +66,7 @@ export function computePotStatus(
   return {
     totalBuyInsMinor,
     totalChipsMinor,
+    totalChipsCount,
     unaccountedMinor,
     discrepancyMinor,
     isBalanced: isZero(discrepancyMinor),

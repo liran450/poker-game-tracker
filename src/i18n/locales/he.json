@@ -200,8 +200,8 @@
     "chipsPerBuy": "ז'יטונים לקנייה",
     "pot": "קופה",
     "unaccountedBucket": "לא מזוהה / הבית",
-    "balanced": "מאוזן · קניות {{buyTotal}} = ז'יטונים {{chipTotal}}",
-    "discrepancy": "פער של {{amount}} · קניות {{buyTotal}} · ז'יטונים {{chipTotal}}",
+    "balanced": "מאוזן · קניות {{buyTotal}} = {{chipCount}}",
+    "discrepancy": "פער של {{amount}} · קניות {{buyTotal}} · {{chipCount}}",
     "total": "סה\"כ"
   },
   "share": {

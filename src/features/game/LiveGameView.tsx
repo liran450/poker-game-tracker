@@ -46,7 +46,7 @@ import { useSyncState } from '@core/offline/useSyncState';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { useElapsedTime } from '../../hooks/useElapsedTime';
 import { useWakeLock } from '../../hooks/useWakeLock';
-import { dedupeDisplayNames, renderPlayerName } from '@core/players';
+import { dedupeDisplayNames, firstBuyInTimestamp, renderPlayerName } from '@core/players';
 import { add, formatChipValue, formatMoney, minor, sum, type Minor } from '@core/money';
 import { computePotStatus } from '@core/pot';
 
@@ -107,6 +107,7 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
   const pendingRemovalPlayer = pendingRemovalPlayerId ? state.players.get(pendingRemovalPlayerId) : undefined;
 
   const potStatus = computePotStatus(activePlayers, buyAmountMinor, chipsPerBuy, state.unaccountedMinor);
+  const firstBuyInAt = firstBuyInTimestamp(events);
   const sharedCosts = [...state.sharedCosts.values()];
   const sharedCostsTotal = sum(sharedCosts.map((c) => c.amountMinor));
   const totalCashPaid = sum(activePlayers.map((p) => p.cashPaidMinor));
@@ -222,7 +223,7 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
             isSettled={player.isSettled}
             chipsFinal={player.chipsFinal}
             lateJoinedAt={
-              state.startedAt !== null && player.joinedAt > state.startedAt
+              firstBuyInAt !== null && player.joinedAt > firstBuyInAt
                 ? formatTimeOfDay(player.joinedAt)
                 : null
             }

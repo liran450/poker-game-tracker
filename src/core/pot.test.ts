@@ -16,6 +16,7 @@ describe('computePotStatus', () => {
     const status = computePotStatus(players, BUY_AMOUNT, CHIPS_PER_BUY, ZERO);
     expect(status.totalBuyInsMinor).toBe(25000);
     expect(status.totalChipsMinor).toBe(25000);
+    expect(status.totalChipsCount).toBe(500); // (3 + 2) buy-ins × 100 chips, both still assumed
     expect(status.discrepancyMinor).toBe(0);
     expect(status.isBalanced).toBe(true);
   });
@@ -32,6 +33,7 @@ describe('computePotStatus', () => {
     const status = computePotStatus(players, BUY_AMOUNT, CHIPS_PER_BUY, ZERO);
     expect(status.totalBuyInsMinor).toBe(60000);
     expect(status.totalChipsMinor).toBe(60000);
+    expect(status.totalChipsCount).toBe(1200); // 300 + 200 counted, (3 + 4) × 100 assumed
     expect(status.isBalanced).toBe(true);
   });
 
@@ -46,6 +48,7 @@ describe('computePotStatus', () => {
     const status = computePotStatus(players, BUY_AMOUNT, CHIPS_PER_BUY, ZERO);
     expect(status.totalBuyInsMinor).toBe(15000);
     expect(status.totalChipsMinor).toBe(13000);
+    expect(status.totalChipsCount).toBe(260); // 160 counted + 1 assumed buy-in × 100
     expect(status.discrepancyMinor).toBe(2000);
     expect(status.isBalanced).toBe(false);
   });
@@ -55,6 +58,7 @@ describe('computePotStatus', () => {
     const status = computePotStatus(players, BUY_AMOUNT, CHIPS_PER_BUY, ZERO);
     expect(status.totalBuyInsMinor).toBe(5000);
     expect(status.totalChipsMinor).toBe(7000);
+    expect(status.totalChipsCount).toBe(140);
     expect(status.discrepancyMinor).toBe(-2000);
     expect(status.isBalanced).toBe(false);
   });
@@ -94,6 +98,7 @@ describe('computePotStatus', () => {
     const status = computePotStatus([], BUY_AMOUNT, CHIPS_PER_BUY, ZERO);
     expect(status.totalBuyInsMinor).toBe(0);
     expect(status.totalChipsMinor).toBe(0);
+    expect(status.totalChipsCount).toBe(0);
     expect(status.isBalanced).toBe(true);
   });
 });
