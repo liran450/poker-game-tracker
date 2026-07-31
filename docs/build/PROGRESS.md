@@ -39,7 +39,7 @@ change — otherwise the history stops meaning anything.
 | 10 | Database foundation and RLS | done | 2026-07-30 | _(this commit)_ |
 | 11 | Snapshots, statistics source, retention | done | 2026-07-31 | _(this commit)_ |
 | 12 | Auth and cloud sync | done | 2026-07-31 | _(this commit)_ |
-| 13 | Sharing, viewers, join requests, takeover | in progress — code complete, not yet tested against the real Supabase project or a real device | | |
+| 13 | Sharing, viewers, join requests, takeover | in progress — migration applied to the real Supabase project; not yet tested on a real device | | |
 | 14 | Groups, roles, private games | not started | | |
 | 15 | Statistics | not started | | |
 | 16 | Retention live, deletion, export | not started | | |
@@ -95,12 +95,29 @@ gate" (join requests and guest-row claims, each with a group-member direct-inser
 share-link RPC path), host handover and the pre-existing `take_over_host` finally getting client UI,
 and a real pre-existing gap fixed along the way (`games.status` was never written server-side before
 this session — see the step's own entry). `npm run verify` (508 tests) and `npm run test:db` (63
-tests, up from 36) are both green. **Not yet `done`**: same standing limitation as steps 10–12, this
-sandbox cannot reach the real Supabase project, so nothing here has run against it or a real device
-— see the checkpoint table. One functional gap is also left open on purpose rather than silently:
-a signed-in viewer who reaches a live game through the app (not a share link) still sees the
-full host-editing screen, since only the token-based `/#/s/:token` route got the read-only
-treatment this session. See the step's own entry for the full account.
+tests, up from 36) are both green.
+
+**The step-13 migration was applied to the real Supabase project in a follow-up, same session.**
+This sandbox's own outbound network still cannot reach `*.supabase.co` at all — confirmed freshly
+this session (`curl` to the project's REST endpoint fails with a `403` from the pre-configured
+egress proxy's own `CONNECT` tunnel, before ever reaching Supabase) — but the Supabase MCP
+connection is a *separate* integration with its own credentials and its own connectivity, entirely
+unrelated to this sandbox's network and to the `SUPABASE_ANON_KEY` GitHub secret (see this step's
+Watch out for the full explanation; the two "can't reach Supabase" facts sound contradictory but
+describe different paths). Applying it surfaced a real, pre-existing bug: every earlier migration
+(steps 10/11, applied the same way) was recorded in the remote `supabase_migrations.schema_migrations`
+table under the timestamp it was *applied* at, not the timestamp in its filename — invisible until
+something actually diffed remote-vs-local migration versions, which the Supabase GitHub
+integration's deploy check finally did on this PR's merge to `main`. Fixed by repairing all 21
+version numbers to match their filenames (a metadata-only correction, no schema change) and, while
+in there, fixing two functions (`find_valid_share_link`, `log_claim_requested`) that were still
+anon/authenticated-executable despite an intended revoke — the identical "revoked from the wrong
+grantee" trap already documented in `NOTES.md` from step 10. See this step's own entry.
+
+**One functional gap is left open on purpose, not silently:** a signed-in viewer who reaches a live
+game through the app (not a share link) still sees the full host-editing screen, since only the
+token-based `/#/s/:token` route got the read-only treatment this session. See the step's own entry
+for the full account.
 
 ### Checkpoints that are not steps
 
@@ -115,7 +132,7 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; the deployed build's real cloud sync (step 12) | ⚠️ set but wrong 2026-07-31 — both secrets exist (the workflow no longer early-exits) but every real ping since has returned `401` from Supabase's REST gateway, confirmed against both the GitHub Actions run logs and the project's own API logs (see `NOTES.md`). Needs the repository owner to re-check the `SUPABASE_ANON_KEY` secret's value — no tool available here can read or set repo secrets. `deploy.yml` now maps these same two secrets to `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` at build time (2026-07-31), so once the value is fixed the very next deploy picks up real cloud sync with no further build changes — until then the deployed app builds fine but auth/sync silently behave as "not configured", same as this sandbox always does. |
 | **Apply the step-11 migrations to the real Supabase project** | Step 11 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner's go-ahead; a security-advisor follow-up migration was needed and applied too (see `NOTES.md`) |
 | **Sign in on a real device against the real Supabase project** | Step 12's auth/sync behaviour confirmed end-to-end | not reached — needs the repository owner and the `SUPABASE_ANON_KEY` fix above; this sandbox cannot reach `*.supabase.co` at all (see `NOTES.md`), so every step-12 module is tested against an in-memory fake, never the live project |
-| **Apply the step-13 migration to the real Supabase project** | Step 13 `done` | not reached — needs the repository owner, same connectivity limitation as above; `supabase/tests/` (63/63) and `npm test` (508/508) are green against local Postgres and fakes respectively |
+| **Apply the step-13 migration to the real Supabase project** | Step 13 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner confirmed; surfaced and fixed a real migration-history drift bug across all 21 migrations plus two under-revoked functions (see the step's own entry and `NOTES.md`). `supabase/tests/` (63/63) and `npm test` (508/508) are green against local Postgres and fakes respectively; still not tested against a real signed-in device — that part still needs the owner |
 
 ---
 
@@ -1371,8 +1388,8 @@ never run against the live project — that needs the repository owner, and need
 ---
 
 ### Step 13 — Sharing, viewers, join requests, takeover
-**Status:** in progress — code complete, not yet applied to the real Supabase project or tested
-on a real device  **Sessions:** 1  **Commits:** 1
+**Status:** in progress — code complete, migration applied to the real Supabase project, not yet
+tested on a real device  **Sessions:** 1  **Commits:** 2
 
 **Built.**
 - **A real, pre-existing gap found and fixed first.** `games.status`/`started_at`/`ended_at` were
@@ -1518,11 +1535,13 @@ on a real device  **Sessions:** 1  **Commits:** 1
   work is expected to revisit this function directly.
 
 **Left undone.**
-- **Not applied to the real Supabase project.** Same standing limitation as steps 10–12: this
-  sandbox cannot reach `*.supabase.co` at all. Every new RPC is tested against local Postgres
-  (`supabase/tests/`, 63/63 green) and every new data-layer module against
-  `fakePostgrestClient.ts` (`npm test`, 508/508 green) — nothing here has run against the live
-  project or a real device. Needs the repository owner, same as step 12's outstanding checkpoint.
+- **Applied to the real Supabase project (in a same-session follow-up, after the PR merged), but
+  not yet tested on a real signed-in device.** The Supabase MCP connection is a separate
+  integration from this sandbox's own network — see Watch out — so applying the migration itself
+  needed no owner action, but a real sign-in/end-to-end confirmation still does, same as step 12's
+  outstanding checkpoint. Every new RPC is tested against local Postgres (`supabase/tests/`,
+  63/63 green) and every new data-layer module against `fakePostgrestClient.ts` (`npm test`,
+  508/508 green).
 - **A signed-in viewer who opens `/#/game/:id` directly (added via an approved join request,
   never touching a share link) still sees the full host-editing screen.** `LiveGameView` has no
   read-only branch of its own — only the token-based `/#/s/:token` route (`SharedGamePage`) gets
@@ -1571,3 +1590,39 @@ on a real device  **Sessions:** 1  **Commits:** 1
   effect-plus-async-work — wrap in an inline IIFE (with a `cancelled` flag for the ones that can
   outlive an unmount), don't call a pre-defined async function reference straight from the effect
   body.
+- **The Supabase MCP connection and this sandbox's own outbound network are two entirely separate
+  paths — "this sandbox can't reach Supabase" and "the MCP tool just applied a migration to the
+  real project" are both true at once, not a contradiction.** Confirmed directly this session:
+  `curl` from this sandbox to the real project's REST endpoint fails with a `403` from the
+  pre-configured egress proxy's own `CONNECT` tunnel — the proxy denies the host before the
+  request ever reaches Supabase. The MCP tools (`mcp__Supabase__*`) don't go through that proxy at
+  all; they're a separate, pre-authorised integration with its own credentials and connectivity,
+  which is how steps 10, 11 and now 13 all applied real migrations despite the app's own runtime
+  code (`SupabaseSyncTransport`, tested only against fakes) never having reached the project
+  directly. Neither of these is related to the third, separate `SUPABASE_ANON_KEY` GitHub-secret
+  problem (still unresolved) — that's the deployed app and `maintenance.yml` failing
+  authentication *after* successfully reaching Supabase over the public internet from a GitHub
+  Actions runner, a fourth path with its own credentials again.
+- **Applying a migration via the MCP `apply_migration` tool stamps `supabase_migrations.
+  schema_migrations.version` with the timestamp it was applied at, not the version encoded in the
+  migration's own filename.** This was already true for every migration steps 10/11 applied
+  (invisible until something actually diffed remote-vs-local migration versions — the Supabase
+  GitHub integration's deploy check finally did, on this PR's merge to `main`, and reported
+  "remote migration versions not found in local migrations directory"). Fixed by rewriting
+  `version` on all 21 rows to match the `left(name, 14)` prefix already sitting in each row's own
+  `name` column (that column *did* get the real filename correctly). **If a future session applies
+  a migration via this tool, immediately follow up with `update supabase_migrations.
+  schema_migrations set version = '<the filename's own version>' where name = '<filename stem>'`**
+  — otherwise the drift silently reappears the next time anything diffs the two.
+- **`revoke execute on function f() from anon, authenticated` can still be a no-op even when the
+  function ends up anon/authenticated-executable anyway — check `pg_proc.proacl`, don't trust the
+  revoke statement's success.** Recurrence of the exact trap `NOTES.md` already documents from step
+  10, hit twice in the same live-deployment follow-up: `find_valid_share_link` only ever had the
+  Postgres-default `EXECUTE FROM PUBLIC` grant, so revoking from the two named roles did nothing —
+  `revoke ... from public` was the fix. `log_claim_requested` had gone further: it carried an
+  *explicit* `anon=X`/`authenticated=X` grant in its `proacl` in addition to the PUBLIC default
+  (apparently added automatically by the platform on function creation), so it needed *both*
+  `revoke ... from public` *and* `revoke ... from anon, authenticated` before `get_advisors`
+  actually stopped flagging it. The advisor is the only reliable way to confirm a revoke actually
+  landed — a revoke statement returning success proves nothing about whether the target role can
+  still call the function some other way.
