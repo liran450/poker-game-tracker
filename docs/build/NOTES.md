@@ -45,6 +45,29 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### ESLint flat-config `no-restricted-imports` blocks don't merge — the last matching one wins, whole
+**Step 12 · 2026-07-31 · trap**
+
+Adding a second `no-restricted-imports` block (banning `@supabase/supabase-js` outside `src/data/`,
+alongside `src/core/*.ts`'s existing, stricter one banning React/Supabase/Dexie/UI entirely) nearly
+reintroduced a real gap: if a file matches two config blocks that both set `no-restricted-imports`,
+ESLint's flat config does **not** union their `patterns` arrays — the later block in the array
+*replaces* the rule's whole setting for any file it matches, silently dropping the earlier block's
+bans for that file. `src/core/*.ts` (a single-star glob — direct children of `core/` only, not
+`core/offline/**`) would have lost its React/Dexie ban entirely had the new block's `files` glob
+also matched it.
+
+**The fix is `ignores`, not care with ordering.** The new block explicitly lists `src/core/*.ts` in
+its own `ignores`, so it never matches those two files at all — correct regardless of which block
+comes first in the exported array. Before adding a third rule using the same rule name anywhere its
+`files` might overlap an existing one, check for this the same way: either merge the patterns into
+the *existing* block, or `ignores` the overlap out explicitly. A test that only inspects config
+*shape* (matching by rule name) can't catch this either, since both blocks legitimately "have the
+rule configured" — only actually linting a probe file and asserting the expected violation still
+fires would, which is why the new rule's test in `lint-rules.test.ts` runs a real `ESLint` instance
+against real file paths rather than just asserting on the parsed config object (unlike the older
+`src/core/*.ts` purity-guard test, which only checks config shape and would not have caught this).
+
 ### A new view defaults to bypassing the querying user's RLS — `group_player_results` shipped that way
 **Step 11 · 2026-07-31 · trap**
 

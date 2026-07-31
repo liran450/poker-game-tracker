@@ -108,6 +108,36 @@ export default tseslint.config(
     },
   },
 
+  // The repository layer is the whole point of a swappable seam
+  // (docs/02-architecture.md#database-choice: "keep the data access behind a
+  // thin repository layer so the swap is contained"). Every supabase-js
+  // import lives in src/data/; everywhere else goes through core/offline's
+  // SyncTransport interface or a src/data export instead
+  // (docs/build/PLAN.md step 12's "nothing outside src/data imports
+  // supabase-js" exit criterion). src/core/*.ts is excluded here, not
+  // exempted: it already gets its own, stricter ban from the block above
+  // (no Supabase, Dexie, React or UI at all), and re-listing it here with a
+  // narrower pattern would replace that block's rule for those two files
+  // rather than add to it — flat config rules don't merge across blocks.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/data/**', 'src/core/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@supabase/supabase-js', '@supabase/supabase-js/*'],
+              message:
+                'supabase-js may only be imported from src/data/ — the swappable repository-layer seam (docs/02-architecture.md#database-choice). Add what you need there and export it instead.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Node-side config files.
   {
     files: ['*.config.{ts,js}', 'eslint-local/**/*.js', 'e2e/**/*.ts', 'supabase/tests/**/*.ts'],

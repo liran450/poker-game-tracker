@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fold, type GameEvent } from '../events';
-import { db } from './db';
-import { appendEvent, flushOutbox, getOutboxSummary, loadGameEvents } from './outbox';
-import { StubSyncTransport } from './stubTransport';
+import { AppDatabase, db } from './db';
+import { appendEvent, flushOutbox, getOutboxSummary, loadGameEvents, pullGameEvents } from './outbox';
+import { FakeSyncServer, StubSyncTransport } from './stubTransport';
 
 let seq = 0;
 function ts(offsetSeconds: number): string {
@@ -38,7 +38,7 @@ function playerAdded(overrides: Partial<GameEvent> = {}): GameEvent {
 }
 
 beforeEach(async () => {
-  await Promise.all([db.games.clear(), db.events.clear(), db.outbox.clear()]);
+  await Promise.all([db.games.clear(), db.events.clear(), db.outbox.clear(), db.meta.clear()]);
   seq = 0;
 });
 
@@ -152,6 +152,132 @@ describe('flushOutbox', () => {
   it('is a no-op when the outbox is empty', async () => {
     const transport = new StubSyncTransport();
     expect(await flushOutbox(transport)).toEqual({ pushed: 0, failedCount: 0 });
+  });
+});
+
+describe('pullGameEvents', () => {
+  it('merges server-only events into the local log and advances the cursor', async () => {
+    const server = new FakeSyncServer();
+    const remoteEvent = buyIn({ gameId: 'game-1' });
+    server.push([remoteEvent]);
+    const transport = new StubSyncTransport({}, server);
+
+    const result = await pullGameEvents(transport, 'game-1');
+
+    expect(result).toEqual({ pulled: 1 });
+    expect(await loadGameEvents('game-1')).toEqual([remoteEvent]);
+    expect((await db.meta.get('pullCursor:game-1'))?.value).toBe('1');
+  });
+
+  it('pulls only what arrived since the stored cursor, not the whole log again', async () => {
+    const server = new FakeSyncServer();
+    server.push([buyIn({ gameId: 'game-1' })]);
+    const transport = new StubSyncTransport({}, server);
+    await pullGameEvents(transport, 'game-1');
+
+    const secondEvent = buyIn({ gameId: 'game-1' });
+    server.push([secondEvent]);
+    const second = await pullGameEvents(transport, 'game-1');
+
+    expect(second).toEqual({ pulled: 1 });
+    expect(await loadGameEvents('game-1')).toHaveLength(2);
+  });
+
+  it('is a no-op when the server has nothing new', async () => {
+    const transport = new StubSyncTransport();
+    expect(await pullGameEvents(transport, 'game-1')).toEqual({ pulled: 0 });
+    expect(await loadGameEvents('game-1')).toEqual([]);
+  });
+});
+
+describe('multi-device convergence (docs/build/PLAN.md step 12 exit criteria)', () => {
+  let deviceA: AppDatabase;
+  let deviceB: AppDatabase;
+
+  beforeEach(async () => {
+    deviceA = new AppDatabase('outbox-test-device-a');
+    deviceB = new AppDatabase('outbox-test-device-b');
+    await deviceA.open();
+    await deviceB.open();
+  });
+
+  afterEach(async () => {
+    deviceA.close();
+    deviceB.close();
+    await Promise.all([deviceA.delete(), deviceB.delete()]);
+  });
+
+  it('two devices editing the same game concurrently converge, including +1 buy-in from both', async () => {
+    const server = new FakeSyncServer();
+    const transportA = new StubSyncTransport({}, server);
+    const transportB = new StubSyncTransport({}, server);
+    const gameId = 'shared-game';
+
+    const player = playerAdded({ gameId });
+    await appendEvent(player, deviceA);
+    await flushOutbox(transportA, gameId, deviceA);
+    await pullGameEvents(transportB, gameId, deviceB);
+
+    // Both devices now see the player. Each device adds its own buy-in
+    // concurrently, offline from each other, then both sync.
+    await appendEvent(buyIn({ gameId, playerId: player.playerId, actorId: 'device-a' }), deviceA);
+    await appendEvent(buyIn({ gameId, playerId: player.playerId, actorId: 'device-b' }), deviceB);
+
+    await flushOutbox(transportA, gameId, deviceA);
+    await flushOutbox(transportB, gameId, deviceB);
+
+    // Each device pulls what the other pushed.
+    await pullGameEvents(transportA, gameId, deviceA);
+    await pullGameEvents(transportB, gameId, deviceB);
+
+    const stateA = fold(await deviceA.events.where('gameId').equals(gameId).toArray());
+    const stateB = fold(await deviceB.events.where('gameId').equals(gameId).toArray());
+
+    expect(stateA.players.get(player.playerId!)?.buysCount).toBe(2);
+    expect(stateB.players.get(player.playerId!)?.buysCount).toBe(2);
+  });
+
+  it('events pushed by a deposed host are still accepted and merged', async () => {
+    const server = new FakeSyncServer();
+    const oldHostTransport = new StubSyncTransport({}, server);
+    const newHostTransport = new StubSyncTransport({}, server);
+    const gameId = 'takeover-game';
+
+    const player = playerAdded({ gameId, actorId: 'old-host' });
+    await appendEvent(player, deviceA);
+    await flushOutbox(oldHostTransport, gameId, deviceA);
+    await pullGameEvents(newHostTransport, gameId, deviceB);
+
+    // deviceB takes over — appends a host_taken_over event and continues
+    // playing, all pushed by the *new* host's transport.
+    const takeover: GameEvent = {
+      clientEventId: 'evt-takeover',
+      gameId,
+      playerId: null,
+      actorId: 'new-host',
+      clientCreatedAt: ts(1000),
+      undoneBy: null,
+      type: 'host_taken_over',
+      payload: { previousHostId: 'old-host' },
+    };
+    await appendEvent(takeover, deviceB);
+    await flushOutbox(newHostTransport, gameId, deviceB);
+
+    // The *old* (now-deposed) host's device was mid-air with one more
+    // buy-in appended just before losing control, and pushes it late —
+    // through its own transport, not the new host's.
+    const lateBuyIn = buyIn({ gameId, playerId: player.playerId, actorId: 'old-host' });
+    await appendEvent(lateBuyIn, deviceA);
+    const lateResult = await flushOutbox(oldHostTransport, gameId, deviceA);
+
+    expect(lateResult).toEqual({ pushed: 1, failedCount: 0 });
+    expect(server.hasSeen(lateBuyIn.clientEventId)).toBe(true);
+
+    // The new host pulls and sees the deposed host's late event merged in.
+    await pullGameEvents(newHostTransport, gameId, deviceB);
+    const stateB = fold(await deviceB.events.where('gameId').equals(gameId).toArray());
+    expect(stateB.players.get(player.playerId!)?.buysCount).toBe(1);
+    expect(stateB.hostId).toBe('new-host');
   });
 });
 

@@ -1,6 +1,10 @@
 import type { GameEvent } from '../events';
-import { db } from './db';
+import { db, type AppDatabase } from './db';
 import type { SyncTransport } from './syncTransport';
+
+function pullCursorKey(gameId: string): string {
+  return `pullCursor:${gameId}`;
+}
 
 /**
  * The write path: append to the log, apply optimistically (the caller folds
@@ -8,12 +12,12 @@ import type { SyncTransport } from './syncTransport';
  * `clientEventId` is already known only touches the events table (a same-value
  * put), never re-enqueues or resets outbox state for it.
  */
-export async function appendEvent(event: GameEvent): Promise<void> {
-  await db.transaction('rw', db.games, db.events, db.outbox, async () => {
-    const alreadyKnown = (await db.events.get(event.clientEventId)) !== undefined;
-    await db.events.put(event);
+export async function appendEvent(event: GameEvent, database: AppDatabase = db): Promise<void> {
+  await database.transaction('rw', database.games, database.events, database.outbox, async () => {
+    const alreadyKnown = (await database.events.get(event.clientEventId)) !== undefined;
+    await database.events.put(event);
     if (!alreadyKnown) {
-      await db.outbox.add({
+      await database.outbox.add({
         clientEventId: event.clientEventId,
         gameId: event.gameId,
         event,
@@ -26,8 +30,8 @@ export async function appendEvent(event: GameEvent): Promise<void> {
     // Merge, not overwrite: `createGame` (step 6) writes the game's real
     // fields once, before any events exist for it, and every later bump must
     // preserve them rather than clobbering the row back down to an id.
-    const existingGame = await db.games.get(event.gameId);
-    await db.games.put({ ...existingGame, id: event.gameId, updatedAt: new Date().toISOString() });
+    const existingGame = await database.games.get(event.gameId);
+    await database.games.put({ ...existingGame, id: event.gameId, updatedAt: new Date().toISOString() });
   });
 }
 
@@ -118,21 +122,27 @@ export interface FlushResult {
  * outbox for the next retry — never duplicated, since the outbox key is the
  * event's own `clientEventId` and a retry re-uses the same row.
  */
-export async function flushOutbox(transport: SyncTransport, gameId?: string): Promise<FlushResult> {
-  const entries = await (gameId ? db.outbox.where('gameId').equals(gameId) : db.outbox.toCollection()).toArray();
+export async function flushOutbox(
+  transport: SyncTransport,
+  gameId?: string,
+  database: AppDatabase = db,
+): Promise<FlushResult> {
+  const entries = await (
+    gameId ? database.outbox.where('gameId').equals(gameId) : database.outbox.toCollection()
+  ).toArray();
   if (entries.length === 0) return { pushed: 0, failedCount: 0 };
 
   try {
     const result = await transport.push(entries.map((entry) => entry.event));
     const accepted = new Set(result.acceptedEventIds);
     const acceptedIds = entries.filter((entry) => accepted.has(entry.clientEventId)).map((entry) => entry.clientEventId);
-    await db.outbox.bulkDelete(acceptedIds);
+    await database.outbox.bulkDelete(acceptedIds);
     return { pushed: acceptedIds.length, failedCount: entries.length - acceptedIds.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await db.transaction('rw', db.outbox, async () => {
+    await database.transaction('rw', database.outbox, async () => {
       for (const entry of entries) {
-        await db.outbox.put({
+        await database.outbox.put({
           ...entry,
           status: 'failed',
           attempts: entry.attempts + 1,
@@ -142,4 +152,39 @@ export async function flushOutbox(transport: SyncTransport, gameId?: string): Pr
     });
     return { pushed: 0, failedCount: entries.length };
   }
+}
+
+export interface PullResult {
+  readonly pulled: number;
+}
+
+/**
+ * Pulls whatever the server has for `gameId` since the last cursor this
+ * device saw and merges it into the local log. `db.events.bulkPut` is
+ * idempotent on `clientEventId` — an event already known locally (this
+ * device's own, already round-tripped) is simply overwritten with the same
+ * value, and one arriving from another device (or a since-deposed host,
+ * 02-architecture.md#offline-first) is added — `fold()` doesn't care which
+ * device authored an event or what order they arrive in, only their
+ * `clientCreatedAt`. The cursor is opaque and only ever compared to itself
+ * (see `SyncTransport`), so it's stored as-is; a fresh device with no stored
+ * cursor pulls everything.
+ */
+export async function pullGameEvents(
+  transport: SyncTransport,
+  gameId: string,
+  database: AppDatabase = db,
+): Promise<PullResult> {
+  const key = pullCursorKey(gameId);
+  const stored = await database.meta.get(key);
+  const result = await transport.pull(gameId, stored?.value);
+
+  if (result.events.length > 0) {
+    await database.events.bulkPut(result.events);
+    const existingGame = await database.games.get(gameId);
+    await database.games.put({ ...existingGame, id: gameId, updatedAt: new Date().toISOString() });
+  }
+  await database.meta.put({ key, value: result.cursor });
+
+  return { pulled: result.events.length };
 }
