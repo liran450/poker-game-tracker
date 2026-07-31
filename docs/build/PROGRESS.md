@@ -36,7 +36,7 @@ change — otherwise the history stops meaning anything.
 | 7 | The buy-in counter and the game page | in progress — code complete, blocked on a real game only the owner can play | | |
 | 8 | Settlement core | done | 2026-07-29 | _(this commit)_ |
 | 9 | End game, edit mode, share text | in progress — code complete, blocked on a real WhatsApp paste test | | |
-| 10 | Database foundation and RLS | in progress — code complete, blocked on the owner creating a real Supabase project | | |
+| 10 | Database foundation and RLS | done | 2026-07-30 | _(this commit)_ |
 | 11 | Snapshots, statistics source, retention | not started | | |
 | 12 | Auth and cloud sync | not started | | |
 | 13 | Sharing, viewers, join requests, takeover | not started | | |
@@ -45,13 +45,19 @@ change — otherwise the history stops meaning anything.
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
-**Next up:** steps 7, 9 and 10 are all code-complete and each blocked on a real-world action only
-the repository owner can take — step 7 on a real game played on the build, step 9 on pasting its
-share text into real WhatsApp on iOS and Android, step 10 on actually creating a Supabase project
-(a cloud signup, not something buildable from here) and applying `supabase/migrations/` to it.
-None of the three block **step 11** (snapshots, statistics source, retention functions), which —
-like step 10 — is pure SQL testable against a local Postgres with no live project needed. **Start
-step 11** next; flip 7, 9 and 10 to `done` whenever their respective checkpoints clear 🎯.
+**Next up:** steps 7 and 9 are code-complete and each blocked on a real-world action only the
+repository owner can take — step 7 on a real game played on the build, step 9 on pasting its share
+text into real WhatsApp on iOS and Android. Step 10 is now genuinely `done`: the owner created a
+real Supabase project and, in this session, all 14 `supabase/migrations/` files were applied to it
+directly (via the Supabase MCP connection, not the CLI — no `supabase link`/`db push` needed from
+here), plus two follow-up migrations fixing gaps the project's own security advisor surfaced (see
+this step's entry below and `NOTES.md`). One piece of the old checkpoint is still outstanding and
+still needs the owner: the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml`
+needs are not set yet (no tool here can set repo secrets) — see the checkpoint table. That does not
+block step 10 itself (none of its four `PLAN.md` exit criteria mention repo secrets), but it does
+block the keep-alive cron actually pinging anything, and step 12 will want it too. **Start step 11**
+next (snapshots, statistics source, retention functions) — pure SQL, testable against local
+Postgres, blocked on nothing above.
 
 ### Checkpoints that are not steps
 
@@ -62,7 +68,8 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Design assets committed to `docs/design/`, `docs/11` written from them** | Step 3 | ✅ done 2026-07-28 |
 | **Play a real game on the step-7 build** | Step 7 `done` | not reached — needs the repository owner |
 | **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached — needs the repository owner |
-| **Create the real Supabase project, run `supabase link && supabase db push` (or paste `supabase/migrations/*.sql` into its SQL editor) against it, and set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` repo secrets `maintenance.yml` needs** | Step 10 `done`, and step 12 can't start without it | not reached — needs the repository owner |
+| **Create the real Supabase project and apply `supabase/migrations/*.sql` to it** | Step 10 `done` | ✅ done 2026-07-30 — project created by the owner, migrations applied via the Supabase MCP connection this session |
+| **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; step 12 wants it too | not reached — needs the repository owner (no tool available here can set repo secrets) |
 
 ---
 
@@ -793,8 +800,7 @@ the Playwright test — is built and verified.
 ---
 
 ### Step 10 — Database foundation and RLS
-**Status:** in progress — code complete, blocked on the owner creating a real Supabase project
-**Sessions:** 1  **Commits:** 1
+**Status:** done  **Sessions:** 2  **Commits:** 2
 
 **Built.** The whole schema and permission model, in `supabase/migrations/` (14 files, Supabase's
 own timestamp-prefixed naming so `supabase link && supabase db push` will accept them unmodified
@@ -876,14 +882,51 @@ whenever a real project exists):
   sets `undone_by` on the original" both appear in `03-data-model.md` and can't both be true
   without some sanctioned exception. Added one, narrow and forward-only. See `NOTES.md`.
 
-**Left undone.** All four of `PLAN.md`'s exit criteria are met and `npm run test:db` (alongside
-`npm run verify`) is green — but **no real Supabase project exists yet**. That's the one thing
-this session structurally cannot do: creating one is a cloud signup under the repository owner's
-own account, not a build step. The new checkpoint in the table above tracks it. Until it clears:
-`supabase/migrations/` is untested against a live project (only against local Postgres, which
-implements the same RLS/auth semantics but isn't Supabase itself), and `maintenance.yml`'s
-keep-alive ping stays a no-op. None of this blocks step 11, which is exactly as local-Postgres-
-testable as step 10 was.
+**Session 2 (2026-07-30) — the real project.** The owner created the actual Supabase project
+(`liran450's Project`, region `ap-northeast-2`, Postgres 17.6) and connected it via the Supabase
+MCP server. All 14 migrations from session 1 were applied to it directly — `apply_migration`
+against the live project, not `supabase link && supabase db push` (no CLI/Docker available here
+either, same constraint as session 1's local-only testing) — verified after the fact with
+`list_tables` (all 17 tables present, RLS on for every one) and `list_migrations` (all 14 recorded).
+
+Running `get_advisors(type: 'security')` against the live project — a Supabase platform feature
+with no local-Postgres equivalent, so this is genuinely new information session 1 had no way to
+produce — surfaced three real, fixable gaps that `supabase/tests/`'s local suite doesn't check for:
+
+1. `prevent_buy_terms_change_after_buy_ins` (the one function in the whole schema) was missing
+   `set search_path = public` — every sibling helper/RPC function has it, this one was a plain
+   miss.
+2. `apply_game_event_to_player_cache` and `log_join_requested` — both AFTER INSERT trigger
+   functions only, never meant to be called directly — were callable as public RPCs via
+   `/rest/v1/rpc/<name>`, because every Postgres function gets an implicit `EXECUTE` grant to
+   `PUBLIC` at creation unless revoked, and neither revoked it.
+3. A first attempt at fixing (2) — `revoke execute ... from anon, authenticated` — turned out to
+   be a no-op for these two specific functions: their `pg_proc.proacl` showed they'd never had an
+   explicit per-role grant at all, only the default `PUBLIC` one, so revoking from the named roles
+   left `PUBLIC` (which both roles fall back to) untouched. Caught by re-running `get_advisors`
+   after the first fix and seeing both still flagged; fixed for real by revoking from `PUBLIC`
+   directly. See `NOTES.md` for the full mechanism — worth knowing before revoking EXECUTE on
+   anything else in this schema.
+
+Two new migrations record both fixes (`20260730150000_security_advisor_fixes.sql`,
+`20260730150100_revoke_public_execute_on_triggers.sql`), applied to the live project and committed
+to `supabase/migrations/` so the directory stays the single source of truth. Deliberately **not**
+touched, even though the advisor flags them too: the `profiles_public` security-definer view (by
+design — see this step's own "profiles_public" NOTES.md entry) and every RLS helper/RPC function
+that genuinely needs to stay callable by `anon`/`authenticated` (`is_host`, `can_read_game`,
+`take_over_host`, `decide_join_request`, `mark_event_undone`, etc. — RLS policies for those roles
+call them directly, so revoking would break the policies, not just the advisory noise). Also seen
+and left alone: `rls_auto_enable()`, owned by `postgres` — a Supabase platform function, not one of
+ours. `npm run test:db` (18/18) and `npm run verify` were re-run after adding the two new migration
+files and both stay green.
+
+**Left undone.** All four of `PLAN.md`'s exit criteria are met, `npm run test:db`/`npm run verify`
+are green, and the real project now has the full schema applied. The one thing still outstanding —
+tracked in the checkpoint table, not one of `PLAN.md`'s four exit criteria — is the
+`SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs: no tool available
+in this session can set repo secrets, so the keep-alive cron stays a no-op (it warns and exits 0)
+until the owner adds them by hand. The real anon key and project URL were surfaced to the owner in
+chat, not committed anywhere — matching `.env.local`'s own "never commit a filled-in `.env`" rule.
 
 **Watch out.**
 - **Never give a table's own RLS policy a helper function that re-queries that same table.** See
@@ -902,3 +945,22 @@ testable as step 10 was.
   `profiles_public`, `groups`, etc. *view* objects beyond what's already there** — if a future step
   adds a new view, remember views need their own `grant select` even when the underlying tables
   already have RLS-gated access; view privileges and table privileges are separate.
+- **`revoke execute on function f() from anon, authenticated` is a no-op if `f` only ever had the
+  default `PUBLIC` grant** — check `pg_proc.proacl` (or just re-run `get_advisors`) after revoking;
+  revoke from `PUBLIC` explicitly when that's what's actually granted. Hit this for real fixing
+  `apply_game_event_to_player_cache`/`log_join_requested` in session 2 — see this step's own entry
+  above and `NOTES.md`.
+- **Revoking `EXECUTE` on a trigger function does not break the trigger.** Postgres's trigger
+  manager invokes the function directly by OID when the trigger fires, which isn't gated by the
+  invoking role's `EXECUTE` privilege — that check only applies to an explicit SQL/RPC call to the
+  same function. Safe to revoke on any function that's trigger-only and never meant to be called
+  directly; not safe on anything an RLS policy calls inside `USING`/`WITH CHECK`; not verified with
+  a live insert against the real project (would have meant writing fabricated game data into a
+  brand-new production database, not local Postgres) — worth a real check the first time step 12
+  actually exercises `player_added`/`join_requested` against this project.
+- **The Supabase MCP connection in this environment is flaky** — it dropped and reconnected several
+  times mid-session (visible as "MCP server disconnected"/"reconnected" system reminders). Every
+  drop happened between tool calls, never mid-call, and no migration was double-applied or
+  partially applied — confirmed by re-running `list_migrations` after a reconnect before continuing.
+  If a future session hits the same flapping, re-check state before resuming rather than assuming
+  the last call landed.
