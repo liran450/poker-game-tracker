@@ -38,7 +38,7 @@ change — otherwise the history stops meaning anything.
 | 9 | End game, edit mode, share text | in progress — code complete, blocked on a real WhatsApp paste test | | |
 | 10 | Database foundation and RLS | done | 2026-07-30 | _(this commit)_ |
 | 11 | Snapshots, statistics source, retention | done | 2026-07-31 | _(this commit)_ |
-| 12 | Auth and cloud sync | in progress — the real sync transport is built and tested; auth UI, realtime, and local-game migration are not started | | |
+| 12 | Auth and cloud sync | done | 2026-07-31 | _(this commit)_ |
 | 13 | Sharing, viewers, join requests, takeover | not started | | |
 | 14 | Groups, roles, private games | not started | | |
 | 15 | Statistics | not started | | |
@@ -69,18 +69,24 @@ statistics — fixed by a fourth migration (`security_invoker = true` plus the m
 and proven with a dedicated cross-group test, not just re-running the advisor. See this step's
 entry below and `NOTES.md`.
 
-**Step 12 (auth and cloud sync) is in progress**, not done — it turned out to be the largest step
-in the plan so far, once "the real `SyncTransport`" turned out to also need translating two event
-types into direct table writes (`shared_costs`/`transfers`, the tables step 10 deliberately built
-as host-direct-write rather than event-derived). This session built and fully tested the hardest,
-most novel part — `SupabaseSyncTransport` (push, pull, the undo-marker RPC split, the
-shared-cost/transfer translation, `host_last_synced_at` stamping) and the lint rule enforcing
-"nothing outside `src/data/` imports `supabase-js`" — covering 2 of the step's 5 exit criteria at
-the sync-engine level (two-device convergence, a deposed host's events still merging). **Not yet
-started:** the Google/magic-link sign-in UI and session context, the realtime subscription with
-its 15s polling fallback, and local-only game migration on first sign-in (the remaining 3 exit
-criteria). See this step's entry below for exactly where it stops and what the next session picks
-up first.
+**Step 12 (auth and cloud sync) is now genuinely `done`**, across two sessions — it turned out to
+be the largest step in the plan so far. Session 1 built and fully tested the hardest, most novel
+part — `SupabaseSyncTransport` (push, pull, the undo-marker RPC split, the shared-cost/transfer
+translation, `host_last_synced_at` stamping) and the lint rule enforcing "nothing outside
+`src/data/` imports `supabase-js`". Session 2 closed out the remaining three exit criteria: the
+Google/magic-link sign-in UI and `SessionProvider`/`useSession` context, profile creation
+(username/display name/optional nickname, unique-violation caught and surfaced inline), the
+realtime subscription with its 15s polling fallback (`useLiveGameSync`, wired into the live game
+screen), and local-only game migration on first sign-in (`src/data/localGameMigration.ts` —
+rewrites the device's pre-sign-in `actorId` to the real profile id exactly once, then creates each
+local game's server-side `games` row and pushes its whole outbox, calling `finalize_game` for any
+game that already finished locally). `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` are now wired
+into `deploy.yml`'s build step, from the same repo secrets `maintenance.yml` already reads. All
+five `PLAN.md` exit criteria are covered by tests (including a new one added this session for
+"airplane mode for the length of a game, then reconnect", `outbox.test.ts`), `npm run verify` is
+green, and the full Playwright e2e suite (including a fresh check of the new `/account` route
+against a real production build) passes with zero console errors. See this step's entry below for
+what's tested against fakes rather than the real project, and why.
 
 ### Checkpoints that are not steps
 
@@ -92,8 +98,9 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Play a real game on the step-7 build** | Step 7 `done` | in progress 2026-07-31 — owner started real play, reported two bugs, both fixed this session (see step 7 entry below and `NOTES.md`); not yet a full clean night |
 | **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached — needs the repository owner |
 | **Create the real Supabase project and apply `supabase/migrations/*.sql` to it** | Step 10 `done` | ✅ done 2026-07-30 — project created by the owner, migrations applied via the Supabase MCP connection this session |
-| **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; step 12 wants it too | ⚠️ set but wrong 2026-07-31 — both secrets exist (the workflow no longer early-exits) but every real ping since has returned `401` from Supabase's REST gateway, confirmed against both the GitHub Actions run logs and the project's own API logs (see `NOTES.md`). Needs the repository owner to re-check the `SUPABASE_ANON_KEY` secret's value — no tool available here can read or set repo secrets. |
+| **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; the deployed build's real cloud sync (step 12) | ⚠️ set but wrong 2026-07-31 — both secrets exist (the workflow no longer early-exits) but every real ping since has returned `401` from Supabase's REST gateway, confirmed against both the GitHub Actions run logs and the project's own API logs (see `NOTES.md`). Needs the repository owner to re-check the `SUPABASE_ANON_KEY` secret's value — no tool available here can read or set repo secrets. `deploy.yml` now maps these same two secrets to `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` at build time (2026-07-31), so once the value is fixed the very next deploy picks up real cloud sync with no further build changes — until then the deployed app builds fine but auth/sync silently behave as "not configured", same as this sandbox always does. |
 | **Apply the step-11 migrations to the real Supabase project** | Step 11 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner's go-ahead; a security-advisor follow-up migration was needed and applied too (see `NOTES.md`) |
+| **Sign in on a real device against the real Supabase project** | Step 12's auth/sync behaviour confirmed end-to-end | not reached — needs the repository owner and the `SUPABASE_ANON_KEY` fix above; this sandbox cannot reach `*.supabase.co` at all (see `NOTES.md`), so every step-12 module is tested against an in-memory fake, never the live project |
 
 ---
 
@@ -1125,8 +1132,7 @@ built and tested but not cron-wired (step 16, explicitly out of scope here).
 ---
 
 ### Step 12 — Auth and cloud sync
-**Status:** in progress — see Left undone for exactly what's missing
-**Sessions:** 1  **Commits:** 1 (so far)
+**Status:** done  **Sessions:** 2  **Commits:** 2
 
 **Built.**
 - **`core/offline/syncTransport.ts`'s `SyncTransport` interface gained `pull(gameId, cursor?)`**,
@@ -1196,43 +1202,140 @@ built and tested but not cron-wired (step 16, explicitly out of scope here).
   on the module-level `db` singleton; adding an optional trailing `database` parameter (default
   unchanged) was the smallest change that made a genuine two-local-store test possible at all.
 
-**Left undone — this is most of the step.**
-1. **Auth UI and session.** No Google/magic-link sign-in screen exists (there's no mockup for one
-   either — `docs/11`'s "what the design does not cover" list doesn't name it explicitly, but the
-   screen map's own "Sign in" node has nothing behind it; build it in the established visual
-   language, same as every other undocumented state). No `SessionProvider`/`useSession()` context.
-   No profile-creation step (username + display name + optional default nickname) — `profiles
-   .username` is unique and not derivable from a Google name/email without a real collision
-   strategy, so this needs its own small flow. Username uniqueness should be handled by catching
-   the insert's unique-violation, not a new RPC — `find_user_by_username` (step 14) is a different,
-   narrower thing (exact-match lookup for invites), not a general availability check, and adding
-   one for this would be a real RPC no `PLAN.md` build item asks for.
-2. **Realtime subscription + 15s polling fallback**, wired into the sync engine so an open game
-   actually pulls on its own instead of only when something else happens to call
-   `pullGameEvents`.
-3. **Local-only game upload on first sign-in.** The key insight for whoever picks this up: it is
-   *not* a special one-time migration path. `SupabaseSyncTransport.push()` already assumes the
-   parent `games` row exists (a foreign-key violation otherwise, which `flushOutbox` already
-   treats as an ordinary failed-push retry — see Watch out). A brand-new local-only game and a
-   game created after sign-in hit the exact same first-push path once something ensures the
-   `games` row exists first from the local `CachedGameRecord`. The one genuinely special thing
-   pre-sign-in games need: every locally-authored event's `actorId` is a random `localActorId`
-   (`core/offline/localIdentity.ts`), not a real `profiles.id` — `game_events.actor_id references
-   profiles(id) not null`, so these need rewriting to the real profile id, once, before that
-   game's first push. Games created after sign-in never have this problem, since they're authored
-   with the real id from the start.
-4. Two exit criteria depending on the above: "airplane mode for the length of a game, then
-   reconnect" and "a pre-existing local game survives first sign-in with its snapshot intact".
-5. `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` aren't wired into `deploy.yml`'s build step yet —
-   needed before a real deployed build can use any of this, sourced from the same repo secrets
-   `maintenance.yml` already reads (once the checkpoint above gets them fixed).
+**Session 2 (2026-07-31) — the remaining three exit criteria, closing out the step.**
+
+- **`core/offline/localIdentity.ts` gained `getCurrentProfileId`/`setCurrentProfileId`/`getActorId`.**
+  `getActorId()` is the real profile id once one is set, falling back to the pre-existing device-local
+  `getLocalActorId()` otherwise — `core/offline/gameActions.ts` now calls `getActorId()` exclusively
+  (every `getLocalActorId()` call site swapped), so every event appended *after* sign-in is stamped
+  with the real `profiles.id` from the start, not just events migrated retroactively. `getLocalActorId`
+  itself is untouched and still used directly by the one-time migration below, which needs the *old*
+  device id specifically to know what to rewrite away from.
+- **`src/data/auth.ts`** — the two providers `02-architecture.md#auth` names: `signInWithGoogle`
+  (`signInWithOAuth`, redirecting back to wherever the user currently is — the hash route survives the
+  round trip), `signInWithMagicLink` (`signInWithOtp`), `signOut`, plus `getCurrentUser`/
+  `onAuthUserChange` for session state. A domain-local `AppUser` (`{id, email}`) is exported rather than
+  re-exporting supabase-js's own `User`/`Session` types, so nothing outside `src/data/` needs to import
+  from `@supabase/supabase-js` to use this, even for types.
+- **`src/data/profiles.ts`** — `getProfile`/`createProfile`. `profiles` has no server-side
+  "create on sign-up" trigger (`profiles_insert_self` is a plain RLS-gated insert), so the client
+  creates the row once, right after first sign-in. Username uniqueness is enforced by the table's own
+  `unique` constraint, not a new RPC (per session 1's own note) — `createProfile` catches the `23505`
+  and throws a typed `UsernameTakenError` the UI shows inline, rather than a raw Postgres error.
+- **`src/data/realtime.ts`** — `subscribeToGameEvents(gameId, onChange)`: a Realtime Postgres-changes
+  subscription on `game_events` INSERTs filtered to one game. Deliberately **not** also subscribed to
+  `game_players`, even though `PLAN.md` names both — every write this app makes to `game_players` is
+  itself derived, in the same transaction, from a `game_events` insert (the cache trigger) or from an
+  RPC that also appends a matching event (`take_over_host`, `decide_join_request`); there is no write
+  path that touches `game_players` without a `game_events` row landing in the same instant, so a second
+  subscription would only ever fire alongside the first. The callback is a plain "something changed, go
+  pull" signal, not the changed row — `pull()`'s own cursor stays the single source of truth for what's
+  actually new.
+- **`core/offline/syncEngine.ts` gained `syncPull`/`startPolling`.** `syncPull` wraps `pullGameEvents`
+  the same way the pre-existing `syncOutbox` wraps `flushOutbox` (same "syncing" indicator, both
+  directions). `startPolling(transport, gameId, intervalMs = 15_000)` is the 15s fallback for networks
+  that block WebSockets — realtime is the fast path, polling is what keeps a game current if that
+  channel never connects at all, not just a backstop for a dropped one.
+- **`src/hooks/useLiveGameSync.ts`** — combines the above into what an open game actually needs: an
+  initial pull, the realtime subscription, and the polling fallback, torn down together on unmount. A
+  no-op wherever cloud sync isn't configured. Wired into `LiveGameView` alongside `useWakeLock`/
+  `useBeforeUnloadGuard` — the first real screen this hook runs against.
+- **`src/hooks/useSession.tsx`** — `SessionProvider`/`useSession()`, the actual `SessionContext` +
+  `useSession()` `PLAN.md` names. Tracks `user`/`profile`/`loading`/`needsProfile`, drives
+  `setCurrentProfileId` and the local-game migration sweep (below) off real auth state changes, and
+  exposes `signInWithGoogle`/`signInWithMagicLink`/`signOut`/`createProfile` to the UI.
+- **`src/app/routes/AccountPage.tsx`** (`/account`) — one route, three states, since there's no
+  navigation between them, only a state transition on the same screen: signed out (Google button +
+  email magic-link form), signed in without a profile yet (username/display-name/nickname form,
+  username-taken shown inline), and fully signed in (name, `@username`, sign out). No mockup exists for
+  this screen — the screen map's "Sign in" node has nothing behind it, and `docs/11`'s "what the design
+  does not cover" list doesn't name it either — built in the established visual language per
+  `CLAUDE.md`'s "extend it yourself, review afterward" working style. `HomePage`'s header gained a `👤`
+  button to it, shown only when `cloudConfigured`.
+- **`src/data/localGameMigration.ts`** — the local-only-game migration `PLAN.md` needs, built exactly as
+  session 1's note anticipated: `rewriteLocalActorId(newUserId)` rewrites every locally-authored event's
+  `actorId` (and `host_changed`'s embedded `newHostId` payload field, the one other place the same id
+  shows up) from the device's pre-sign-in `localActorId` to the real profile id, once, guarded by a
+  recorded marker so a second sign-in on the same device is a no-op rather than a rescan.
+  `ensureGameRowExists` creates the server-side `games` row from the local `CachedGameRecord` and folded
+  state, a no-op once the row exists. `uploadLocalGame` is the full first-push path for one game:
+  ensure the row, push the whole outbox via `syncOutbox`, and call the `finalize_game` RPC if the game
+  already finished locally — so a pre-existing local game's snapshot exists server-side too, not just on
+  the device. `migrateAllLocalGames` runs the whole sweep across every cached game, one game failing
+  (logged, not thrown) never stopping the rest, since every step it calls is independently retriable.
+  `SessionProvider` calls it once whenever a profile is adopted (freshly created or found on sign-in).
+- **`.github/workflows/deploy.yml`** — a dedicated `Production build with real Supabase config`
+  step (`npm run build`, gated `if: github.ref == 'refs/heads/main'`, run right before
+  `upload-pages-artifact`) sets `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` from the same
+  `SUPABASE_URL`/`SUPABASE_ANON_KEY` repo secrets `maintenance.yml` already reads — closing
+  session 1's "Left undone #5". **Not** set on the `npm run verify` step itself — see the CI-caught
+  bug below and `NOTES.md`'s dedicated entry: `vitest run` is part of that same chain and reads
+  `import.meta.env` from `process.env` exactly like a real build, so a secret scoped there isn't
+  scoped to "the build" at all, and two tests that specifically exercise the *unconfigured* path
+  ended up constructing a real `SupabaseClient` and calling out to the live project. `vite.config.ts`'s
+  CSP plugin and `src/data/supabaseClient.ts` were both already gated on these vars from session 1.
+  Empty on a fork PR (no secrets, and the step is `main`-only regardless) — `supabaseClient.ts`
+  already treats that as "cloud unavailable" either way.
+- **A real CI failure, found and fixed after this PR opened.** The first push of this step's `deploy.yml`
+  change put the two secrets directly on `npm run verify`'s step, which broke CI exactly as described
+  above — reproduced locally with the same env vars set, fixed by moving the secrets to the separate
+  main-only rebuild step instead of touching the two correct test assertions. See `NOTES.md`'s
+  dedicated entry for the full mechanism; this is the one thing in this step that shipped broken and
+  needed a second look before merge.
+- **A new test closing the "airplane mode, then reconnect" exit criterion** (`outbox.test.ts`): events
+  appended while every push fails (a `StubSyncTransport` with `failureRate: 1`, simulating airplane
+  mode) stay queued, not lost or duplicated; a fresh transport pointed at the same `FakeSyncServer`
+  ("reconnecting") then drains the outbox completely, and the server's own folded copy of the log is
+  asserted byte-identical to the local one.
+- **~90 new tests** across 9 new files (`localIdentity`, `auth`, `profiles`, `realtime`,
+  `localGameMigration`, `syncEngine`, `useSession`, `useLiveGameSync`, plus the new case in
+  `outbox.test.ts`) and 2 new fakes (`testSupport/fakeAuthClient.ts`, `testSupport/fakeRealtimeClient.ts`
+  — same rationale as session 1's `fakePostgrestClient.ts`: no live Supabase endpoint is reachable from
+  this sandbox, so these drive the real modules through real control flow instead of asserting "was this
+  called with these args"). `fakePostgrestClient.ts` itself gained unique-column-violation simulation
+  (`23505`) and `.insert().select().maybeSingle()` support, needed for `createProfile`'s tests. Total
+  test count: 484, `npm run verify` green, and the full Playwright e2e suite (including a dedicated
+  check of `/account` against a real production build) passes with zero console errors.
+
+**Deviated (session 2).**
+- **Realtime subscribes to `game_events` only, not `game_players` too** — see Built above. A reasoned
+  narrowing, not an oversight; documented in the module itself.
+- **Auth UI and profile setup share one route (`/account`) with three states**, rather than separate
+  `/signin` and `/profile/setup` pages `PLAN.md`'s prose might suggest — there's no navigation between
+  the three states, only a transition driven by session state, so one route stays simpler without losing
+  anything a user could do with more pages.
+- **`getActorId()` supersedes `getLocalActorId()` as what `gameActions.ts` stamps events with**, not
+  named as its own build item in `PLAN.md` but required for "new events after sign-in use the real id" —
+  the alternative (only rewriting already-existing events at migration time) would mean every event
+  created after sign-in still carried the stale device id and hit the exact same FK violation the
+  migration was built to fix, forever, not just once.
+
+**Left undone.** Nothing against `PLAN.md`'s exit criteria — all five are now met and tested.
+**Not tested against the real Supabase project** — this sandbox cannot reach `*.supabase.co` at all
+(session 1's finding, still true), so every new module here is proven against an in-memory fake
+(`fakeAuthClient.ts`, `fakePostgrestClient.ts`, `fakeRealtimeClient.ts`), the same standard session 1
+set for `SupabaseSyncTransport`. A real sign-in, a real profile row, and a real local-game upload have
+never run against the live project — that needs the repository owner, and needs the
+`SUPABASE_ANON_KEY` secret checkpoint fixed first (see the checkpoint table).
 
 **Watch out.**
+- **`gameActions.ts` stamps every new event via `getActorId()`, not `getLocalActorId()` directly
+  anymore.** If a future change adds a new mutation function to that file, call `getActorId()` — calling
+  `getLocalActorId()` directly there would silently revert to the pre-sign-in device id for a signed-in
+  user's new events.
+- **The local-game migration is idempotent by a recorded marker (`actorIdMigratedTo` in `db.meta`), not
+  by re-scanning being cheap.** A second sign-in on the same device with the same profile id is a
+  no-op; don't remove the marker check as an optimisation "since it's safe to redo" — it's safe, but the
+  point is to avoid redoing it, not just to tolerate redoing it.
+- **`ensureGameRowExists`/`uploadLocalGame` assume the local `CachedGameRecord` is complete** (`name`,
+  `buyAmountMinor`, `chipsPerBuy` all set) — true for every game `createGame` has ever produced, so this
+  throws rather than silently guessing defaults if it's ever not, which would otherwise insert a
+  `games` row that fails `buy_amount_minor > 0`'s check constraint anyway.
 - **`push()` assumes the game's parent `games` row already exists.** It doesn't create one — that
-  is deliberately a separate, one-time concern (see Left undone #3). A push against a game with no
-  server-side `games` row fails on the `game_events` foreign key, which surfaces as an ordinary
-  failed/retried outbox entry, not a crash — safe, but silent, so don't spend time debugging "why
-  isn't this pushing" without checking that first.
+  is deliberately a separate concern, `ensureGameRowExists` (session 2, see Built above). A push
+  against a game with no server-side `games` row fails on the `game_events` foreign key, which
+  surfaces as an ordinary failed/retried outbox entry, not a crash — safe, but silent, so don't
+  spend time debugging "why isn't this pushing" without checking that first.
 - **`no-restricted-imports` rules don't merge across config blocks that match the same file** —
   ESLint flat config replaces the whole rule setting per file, it doesn't union `patterns` arrays
   from multiple matching blocks. The new supabase-js-import rule explicitly excludes `src/core/

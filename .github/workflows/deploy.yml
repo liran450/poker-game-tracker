@@ -29,6 +29,14 @@ jobs:
 
       # typecheck → lint → lint:css → test → audit:prod → build.
       # Nothing is marked done in docs/build/PROGRESS.md until this is green.
+      #
+      # Deliberately NO Supabase secrets on this step: `test` runs inside this same `verify`
+      # chain, and vitest (like vite) reads `import.meta.env` straight from `process.env` — a
+      # real project's credentials here would mean the unit suite itself instantiates a real
+      # `supabase-js` client and can reach out to it, which is exactly what happened once (a
+      # test asserting "throws when unconfigured" instead called the real Google OAuth/realtime
+      # endpoint and crashed on a stray websocket event — see docs/build/NOTES.md). Verifying
+      # still needs to prove the app *builds* without them, which this build step already does.
       - run: npm run verify
 
       - name: End-to-end smoke tests
@@ -42,6 +50,19 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+      # A second, production build — main only, right before the deploy artifact is taken —
+      # is the one and only place these secrets are used. Mapped to the VITE_ prefix Vite embeds
+      # at build time (docs/build/PROGRESS.md step 1's "connect-src is 'self' only until
+      # VITE_SUPABASE_URL is set" watch-out). Empty on a fork PR (no access to repo secrets) —
+      # supabaseClient.ts already treats that as "cloud unavailable", never throws, so this
+      # step never runs there anyway (it's gated to `main`, which forks never push to).
+      - name: Production build with real Supabase config
+        if: github.ref == 'refs/heads/main'
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'

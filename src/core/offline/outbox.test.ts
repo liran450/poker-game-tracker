@@ -306,3 +306,50 @@ describe('persistence across a simulated reload', () => {
     reopened.close();
   });
 });
+
+describe('airplane mode for the length of a game, then reconnect (PLAN.md step 12)', () => {
+  it('produces the identical final state once every queued event finally lands', async () => {
+    const server = new FakeSyncServer();
+    const offline = new StubSyncTransport({ failureRate: 1 }, server);
+
+    const events = [
+      playerAdded(),
+      playerAdded({ playerId: 'player-2' }),
+      buyIn(),
+      buyIn(),
+      buyIn({ playerId: 'player-2' }),
+    ];
+    for (const event of events) await appendEvent(event);
+
+    // "Airplane mode": every push attempt fails, and the outbox keeps every event
+    // queued rather than losing or duplicating any of them.
+    const offlineAttempt = await flushOutbox(offline, 'game-1');
+    expect(offlineAttempt).toEqual({ pushed: 0, failedCount: events.length });
+    expect(await getOutboxSummary('game-1')).toEqual({ pendingCount: 0, failedCount: events.length });
+
+    // A couple more events while still offline — an ordinary night's usage, not a
+    // special case the retry path needs to know about.
+    const moreEvents = [buyIn({ playerId: 'player-2' }), buyIn()];
+    for (const event of moreEvents) await appendEvent(event);
+    await flushOutbox(offline, 'game-1');
+    expect(await getOutboxSummary('game-1')).toEqual({
+      pendingCount: 0,
+      failedCount: events.length + moreEvents.length,
+    });
+
+    // "Reconnect": a fresh transport (a new device session, same idea as a real
+    // app reconnecting) pointed at the same server succeeds and drains the outbox.
+    const online = new StubSyncTransport({}, server);
+    const onlineAttempt = await flushOutbox(online, 'game-1');
+    expect(onlineAttempt).toEqual({ pushed: events.length + moreEvents.length, failedCount: 0 });
+    expect(await getOutboxSummary('game-1')).toEqual({ pendingCount: 0, failedCount: 0 });
+
+    // The server's own copy of the log folds to exactly the same state as what
+    // was built up locally the whole time it was offline.
+    const localState = fold(await loadGameEvents('game-1'));
+    const serverState = fold(server.pull('game-1').events);
+    expect(serverState).toEqual(localState);
+    expect(localState.players.get('player-1')?.buysCount).toBe(3);
+    expect(localState.players.get('player-2')?.buysCount).toBe(2);
+  });
+});

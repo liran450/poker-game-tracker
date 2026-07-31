@@ -3,7 +3,8 @@
     "name": "מעקב פוקר"
   },
   "nav": {
-    "home": "בית"
+    "home": "בית",
+    "account": "חשבון"
   },
   "home": {
     "title": "משחקים",
@@ -11,6 +12,34 @@
     "startFirstGame": "התחל משחק ראשון",
     "newGame": "+ משחק חדש",
     "playerCount": "{{count}} שחקנים"
+  },
+  "auth": {
+    "title": "כניסה לחשבון",
+    "subtitle": "כניסה מאפשרת לשתף משחקים ולשמור היסטוריה בענן, גם אם המכשיר מתחלף.",
+    "notConfigured": "סנכרון בענן לא הוגדר בגרסה הזאת.",
+    "google": "כניסה עם Google",
+    "or": "או",
+    "emailLabel": "אימייל",
+    "emailPlaceholder": "you@example.com",
+    "sendMagicLink": "שליחת קישור כניסה",
+    "magicLinkSent": "קישור כניסה נשלח ל{{email}}. בדקו את תיבת הדואר.",
+    "genericError": "משהו השתבש. נסו שוב."
+  },
+  "profileSetup": {
+    "title": "השלמת פרופיל",
+    "subtitle": "עוד רגע אחד לפני שממשיכים",
+    "usernameLabel": "שם משתמש",
+    "displayNameLabel": "שם לתצוגה",
+    "nicknameLabel": "כינוי ברירת מחדל (אופציונלי)",
+    "usernameTaken": "שם המשתמש \"{{username}}\" כבר תפוס",
+    "save": "שמירה והמשך"
+  },
+  "account": {
+    "title": "החשבון שלי",
+    "signedInAs": "מחובר/ת בתור {{name}}",
+    "usernameLine": "@{{username}}",
+    "signOut": "התנתקות",
+    "migratingGames": "מעלה משחקים מקומיים לענן…"
   },
   "newGame": {
     "title": "משחק חדש",

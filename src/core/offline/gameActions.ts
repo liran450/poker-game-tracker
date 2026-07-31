@@ -14,7 +14,7 @@ import {
 } from '../settlement';
 import { nextTimestamp } from './clock';
 import { db, type CachedGameRecord } from './db';
-import { getLocalActorId } from './localIdentity';
+import { getActorId } from './localIdentity';
 import { appendEvent, appendUndoEvent, loadGameEvents } from './outbox';
 import { recordPlayedNames } from './recentPlayers';
 
@@ -61,7 +61,7 @@ async function appendPlayerAdded(
  */
 export async function createGame(input: NewGameInput): Promise<CreatedGame> {
   const gameId = crypto.randomUUID();
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   const now = new Date().toISOString();
 
   const record: CachedGameRecord = {
@@ -115,7 +115,7 @@ export async function createGame(input: NewGameInput): Promise<CreatedGame> {
 export async function addPlayersToGame(gameId: string, names: readonly string[]): Promise<void> {
   if (names.length === 0) return;
 
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   const state = fold(await loadGameEvents(gameId));
   const seatOrders = [...state.players.values()].map((p) => p.seatOrder);
   let nextSeatOrder = seatOrders.length > 0 ? Math.max(...seatOrders) + 1 : 0;
@@ -130,7 +130,7 @@ export async function addPlayersToGame(gameId: string, names: readonly string[])
 
 /** Soft-delete: kept in the log, excluded from math and the roster (03-data-model.md#game_players). */
 export async function removePlayer(gameId: string, playerId: string): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -145,7 +145,7 @@ export async function removePlayer(gameId: string, playerId: string): Promise<vo
 
 /** A guest's free-text name (04-ux-spec.md#renaming-a-player). Nicknames arrive with accounts (step 12). */
 export async function renamePlayer(gameId: string, playerId: string, name: string): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -168,7 +168,7 @@ export async function addBuyIn(gameId: string, playerId: string): Promise<GameEv
     clientEventId: generateClientEventId(),
     gameId,
     playerId,
-    actorId: await getLocalActorId(),
+    actorId: await getActorId(),
     clientCreatedAt: nextTimestamp(),
     undoneBy: null,
     type: 'buy_in_added',
@@ -184,7 +184,7 @@ export async function removeBuyIn(gameId: string, playerId: string): Promise<Gam
     clientEventId: generateClientEventId(),
     gameId,
     playerId,
-    actorId: await getLocalActorId(),
+    actorId: await getActorId(),
     clientCreatedAt: nextTimestamp(),
     undoneBy: null,
     type: 'buy_in_removed',
@@ -196,7 +196,7 @@ export async function removeBuyIn(gameId: string, playerId: string): Promise<Gam
 
 /** Cash paid at the table, edited directly on the row (04-ux-spec.md#player-row-anatomy, #18). */
 export async function setCashPaid(gameId: string, playerId: string, amountMinor: Minor): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -211,7 +211,7 @@ export async function setCashPaid(gameId: string, playerId: string, amountMinor:
 
 /** Closes a player out with their counted chips (04-ux-spec.md#settling-a-player-15). */
 export async function settlePlayer(gameId: string, playerId: string, chipsFinal: number): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -226,7 +226,7 @@ export async function settlePlayer(gameId: string, playerId: string, chipsFinal:
 
 /** Reopens a settled row (04-ux-spec.md#row-action-sheet). */
 export async function reopenPlayer(gameId: string, playerId: string): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -245,7 +245,7 @@ export async function reopenPlayer(gameId: string, playerId: string): Promise<vo
  * reachable only once a row is settled.
  */
 export async function editSettledChips(gameId: string, playerId: string, chips: number): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -270,7 +270,7 @@ export interface SharedCostInput {
 
 /** Adds a shared cost (04-ux-spec.md#shared-costs). */
 export async function addSharedCost(gameId: string, input: SharedCostInput): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -289,7 +289,7 @@ export async function updateSharedCost(
   costId: string,
   input: SharedCostInput,
 ): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -308,7 +308,7 @@ export async function updateSharedCost(
  * `core/events.ts` for why that would corrupt the fold.
  */
 export async function removeSharedCost(gameId: string, costId: string): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -326,7 +326,7 @@ export async function removeSharedCost(gameId: string, costId: string): Promise<
  * `unaccounted_minor` absorbs the discrepancy so the pot banner reads balanced.
  */
 export async function setUnaccounted(gameId: string, amountMinor: Minor): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -346,7 +346,7 @@ export async function setUnaccounted(gameId: string, amountMinor: Minor): Promis
  * in one transaction — see `appendUndoEvent` in `core/offline/outbox.ts`.
  */
 export async function undoEvent(original: GameEvent): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   const { inverseEvent, undoneByEventId } = createUndoEvent(original, actorId, nextTimestamp());
   await appendUndoEvent(inverseEvent, original.clientEventId, undoneByEventId);
 }
@@ -420,7 +420,7 @@ async function appendTransferEdited(
 
 async function seedTransfers(gameId: string): Promise<void> {
   const transfers = await computeFreshTransfers(gameId);
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   for (const t of transfers) {
     await appendTransferEdited(gameId, actorId, crypto.randomUUID(), t.fromId, t.toId, t.amountMinor);
   }
@@ -438,7 +438,7 @@ async function seedTransfers(gameId: string): Promise<void> {
  * since `computeBalances` needs every player's final chip count.
  */
 export async function beginSettlement(gameId: string): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,
@@ -460,7 +460,7 @@ export async function editTransfer(
   toPlayerId: string,
   amountMinor: Minor,
 ): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendTransferEdited(gameId, actorId, transferId, fromPlayerId, toPlayerId, amountMinor);
 }
 
@@ -498,7 +498,7 @@ export async function recomputeTransfers(
   gameId: string,
   currentTransfers: readonly { id: string; fromPlayerId: string; toPlayerId: string }[],
 ): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   for (const t of currentTransfers) {
     await appendTransferEdited(gameId, actorId, t.id, t.fromPlayerId, t.toPlayerId, minor(0));
   }
@@ -520,7 +520,7 @@ export interface FinalizeGameMeta {
  * a game with no snapshot (docs/build/PLAN.md#step-8).
  */
 export async function finalizeGame(gameId: string, meta: FinalizeGameMeta): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   const { buyAmountMinor, chipsPerBuy, state } = await loadSettlementInputs(gameId);
   const finishedAt = new Date().toISOString();
 
@@ -597,7 +597,7 @@ export async function finalizeGame(gameId: string, meta: FinalizeGameMeta): Prom
  * `finalizeGame` rewrites it, so there is never a stale duplicate.
  */
 export async function reopenGame(gameId: string): Promise<void> {
-  const actorId = await getLocalActorId();
+  const actorId = await getActorId();
   await appendEvent({
     clientEventId: generateClientEventId(),
     gameId,

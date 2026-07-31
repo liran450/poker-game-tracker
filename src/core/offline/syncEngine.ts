@@ -1,4 +1,4 @@
-import { flushOutbox, type FlushResult } from './outbox';
+import { flushOutbox, pullGameEvents, type FlushResult, type PullResult } from './outbox';
 import type { SyncTransport } from './syncTransport';
 
 /**
@@ -38,4 +38,35 @@ export async function syncOutbox(transport: SyncTransport, gameId?: string): Pro
     inFlight.delete(k);
     notify();
   }
+}
+
+/** Wraps `pullGameEvents` the same way `syncOutbox` wraps `flushOutbox` — same indicator, both directions. */
+export async function syncPull(transport: SyncTransport, gameId: string): Promise<PullResult> {
+  const k = key(gameId);
+  inFlight.add(k);
+  notify();
+  try {
+    return await pullGameEvents(transport, gameId);
+  } finally {
+    inFlight.delete(k);
+    notify();
+  }
+}
+
+/**
+ * The 15s polling fallback (PLAN.md step 12) for networks that block
+ * WebSockets — realtime's own subscription (`src/data/realtime.ts`) is the
+ * fast path; this is what keeps an open game current if that channel never
+ * connects at all, not just a backstop for a dropped one. Callers combine
+ * both (`useLiveGameSync`); this function knows nothing about realtime.
+ */
+export function startPolling(
+  transport: SyncTransport,
+  gameId: string,
+  intervalMs = 15_000,
+): () => void {
+  const id = setInterval(() => {
+    void syncPull(transport, gameId);
+  }, intervalMs);
+  return () => clearInterval(id);
 }
