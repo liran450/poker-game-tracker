@@ -1318,3 +1318,71 @@ shape for exactly this reason (predating this step); `LiveGameView`'s viewer-nam
 run existing async logic, wrap the call site in an inline `void (async () => { ... })()`, don't
 call a named async function defined outside the effect** — even when that function is provably
 safe, the linter can't tell.
+
+### "This sandbox can't reach Supabase" and "the MCP tool just wrote to the real project" are both true
+**Step 13 (real deployment) · 2026-07-31 · decision**
+
+Raised by the repository owner, reasonably: if the Supabase MCP connection can reach the real
+project (it applied a migration this session), doesn't that mean the sandbox's own claimed
+inability to reach `*.supabase.co` — repeated in this file and `PROGRESS.md` since step 10 — was
+wrong all along? No; they're two unrelated network paths, confirmed empirically rather than
+asserted:
+
+- **This sandbox's own outbound HTTP** (what `curl`, the built app's `@supabase/supabase-js`
+  client, and Vitest/Playwright all use) goes through a pre-configured egress proxy. `curl -sS -m 8
+  https://axsftugpsysoxersudwr.supabase.co/rest/v1/` from inside this sandbox fails with `curl: (56)
+  CONNECT tunnel failed, response 403` — the *proxy* refuses the `CONNECT` to that host outright;
+  the request never reaches Supabase at all. This is why `SupabaseSyncTransport` and every other
+  `src/data/` module have only ever been tested against `fakePostgrestClient.ts`/`fakeAuthClient.ts`,
+  never the live project, since step 12.
+- **The Supabase MCP tools** (`mcp__Supabase__apply_migration`, `execute_sql`, `list_migrations`,
+  `get_advisors`, ...) are a completely separate integration, outside this sandbox's own network
+  stack and proxy, with their own pre-authorised credentials (a Supabase Management API token, not
+  the anon key). This is the path steps 10, 11 and 13 all actually used to apply real migrations —
+  it was always real, was always separate from the sandbox's blocked HTTP egress, and remains the
+  only way this environment can touch the live project's schema.
+- **The `SUPABASE_ANON_KEY` GitHub-secret `401`** (see the dedicated entry above) is a *third*,
+  still-separate thing: a GitHub Actions runner (full, unrestricted internet access, nothing to do
+  with this sandbox's proxy) successfully reaching Supabase's REST API and being rejected there
+  because the secret's *value* is wrong. Three paths, three different credentials, three different
+  failure/success stories — collapsing any two of them together is the trap.
+
+**Rule of thumb:** "can this environment reach Supabase" always needs to specify *which* path —
+this sandbox's own network (blocked), the MCP tool integration (works, used for all real schema
+changes so far), or a GitHub Actions runner using the real anon key (works, but the stored key is
+currently wrong). Don't assume a finding about one generalises to the others; test the specific
+path in question, as this entry did.
+
+### Applying a migration through the Supabase MCP tool stamps the wrong version — every time
+**Step 10 (latent), found in step 13 · 2026-07-31 · trap**
+
+`mcp__Supabase__apply_migration(project_id, name, query)` records the migration in
+`supabase_migrations.schema_migrations` with `version` set to *the timestamp the call happened at*,
+not the version encoded in `name` or in the local filename — even though `name` itself is stored
+correctly (e.g. `name: "20260729120000_enums"` next to `version: "20260730145446"`, applied a day
+later). Invisible for two full steps because nothing had ever diffed remote-vs-local migration
+*versions* specifically — `supabase/tests/` rebuilds schema from local files directly, never reads
+the remote ledger, and every session's own `list_migrations` check only ever confirmed "the right
+migrations exist," not "under the right version number." The Supabase GitHub integration's deploy
+check finally did that diff, on this PR's merge to `main`, and reported "remote migration versions
+not found in local migrations directory" — by then all 20 previously-applied migrations (steps
+10–11) carried mismatched versions, plus the new step-13 one hadn't been applied at all yet.
+
+**Fix, safe and mechanical because `name` was always right:**
+```sql
+update supabase_migrations.schema_migrations
+set version = left(name, 14)
+where name ~ '^[0-9]{14}_';
+```
+A pure metadata correction — no schema or data changed, only the bookkeeping table's own `version`
+column. Don't run this fix *through* `apply_migration` itself: that tool inserts its own tracking
+row for whatever `name` you give it, using the same "timestamp of the call" version — running the
+repair that way adds a 22nd row that itself doesn't match any local file, reproducing the exact bug
+being fixed. Use `execute_sql` (or equivalent direct SQL) for this kind of bookkeeping-only
+correction instead, and reserve `apply_migration` for real DDL that should show up in the repo as a
+migration file.
+
+**Going forward: any future migration applied through this tool needs an immediate follow-up**
+`update ... set version = '<filename's own version>' where name = '<filename stem>'`, via
+`execute_sql`, right after the `apply_migration` call — otherwise this exact drift reappears on the
+very next migration, silently, until something diffs the ledger again.
