@@ -45,6 +45,38 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### The `SUPABASE_URL`/`SUPABASE_ANON_KEY` repo secrets are set but wrong — `401`, not "missing"
+**Step 10 (checkpoint) · 2026-07-31 · trap**
+
+Asked to "verify GitHub secrets for Supabase are working." `maintenance.yml`'s early-exit branch (for
+when the secrets are absent) is no longer taking — both secrets exist — but the `curl` ping to
+`$SUPABASE_URL/rest/v1/` has returned `401` on every run since the owner first set them, at
+2026-07-30T23:44Z. Confirmed two independent ways: `get_job_logs` on runs `30591451651`,
+`30591661392`, `30617272103` and a manual `workflow_dispatch` (`30631281222`) all show
+`curl: (22) The requested URL returned error: 401`; the Supabase project's own `get_logs(service:
+"api")` shows the matching `GET | 401 | .../rest/v1/ | curl/8.5.0` entries at those exact
+timestamps, ruling out a proxy or runner artifact — the request really is reaching Supabase and
+being rejected there.
+
+This isn't a rotation: the project's legacy anon key's JWT `iat` claim (`1785406666`) equals the
+project's `created_at` to the second, so it has never been reissued. The most likely cause is that
+whatever value went into the `SUPABASE_ANON_KEY` secret isn't that key — e.g. the newer
+`sb_publishable_...`-format key was pasted instead of the legacy JWT one (Supabase's dashboard now
+surfaces "Publishable key" more prominently than "anon", and `maintenance.yml`'s `curl` sends it as
+a `Bearer` token, which PostgREST needs to be a JWT to decode a role from).
+
+**The fix needs the owner** — no tool available in this environment can read or write repo secrets.
+The current correct value (`anon`, legacy JWT, project `axsftugpsysoxersudwr`), pulled fresh via the
+Supabase MCP connection so there's no ambiguity about which key is right:
+
+```
+SUPABASE_URL=https://axsftugpsysoxersudwr.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4c2Z0dWdwc3lzb3hlcnN1ZHdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU0MDY2NjYsImV4cCI6MjEwMDk4MjY2Nn0.aHQyMk6r_vdkB6TXyDa_RCzhbl0eY9EI0U-Rth_TxvQ
+```
+
+Re-check by re-running `maintenance.yml` via `workflow_dispatch` after updating the secret — a clean
+run means `curl -sSf` exits 0 (no output at all on success is expected and correct).
+
 ### The pot banner's "chips" figure: money value vs. real chip count — the doc's own example is ambiguous
 **Step 7 (owner's first real play) · 2026-07-31 · decision**
 

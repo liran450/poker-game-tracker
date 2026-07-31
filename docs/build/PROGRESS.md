@@ -37,7 +37,7 @@ change — otherwise the history stops meaning anything.
 | 8 | Settlement core | done | 2026-07-29 | _(this commit)_ |
 | 9 | End game, edit mode, share text | in progress — code complete, blocked on a real WhatsApp paste test | | |
 | 10 | Database foundation and RLS | done | 2026-07-30 | _(this commit)_ |
-| 11 | Snapshots, statistics source, retention | not started | | |
+| 11 | Snapshots, statistics source, retention | in progress — code complete, not yet applied to the real Supabase project | | |
 | 12 | Auth and cloud sync | not started | | |
 | 13 | Sharing, viewers, join requests, takeover | not started | | |
 | 14 | Groups, roles, private games | not started | | |
@@ -52,12 +52,19 @@ real Supabase project and, in this session, all 14 `supabase/migrations/` files 
 directly (via the Supabase MCP connection, not the CLI — no `supabase link`/`db push` needed from
 here), plus two follow-up migrations fixing gaps the project's own security advisor surfaced (see
 this step's entry below and `NOTES.md`). One piece of the old checkpoint is still outstanding and
-still needs the owner: the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml`
-needs are not set yet (no tool here can set repo secrets) — see the checkpoint table. That does not
-block step 10 itself (none of its four `PLAN.md` exit criteria mention repo secrets), but it does
-block the keep-alive cron actually pinging anything, and step 12 will want it too. **Start step 11**
-next (snapshots, statistics source, retention functions) — pure SQL, testable against local
-Postgres, blocked on nothing above.
+still needs the owner: the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets are now **set**
+(verified 2026-07-31 by dispatching `maintenance.yml` manually) but the ping still fails with a
+`401` — the secret values are wrong, not missing; see the checkpoint table and `NOTES.md` for the
+diagnosis and the correct value to paste in. No tool here can read or write repo secrets, so this
+still needs the owner. That does not block step 10 itself (none of its four `PLAN.md` exit criteria
+mention repo secrets), but it does block the keep-alive cron actually pinging anything, and step 12
+will want it too. **Step 11 is code-complete this session** (`finalize_game`, `chips_to_money_minor`,
+`group_player_results`, `purge_expired_game_data` — all four `PLAN.md` exit criteria covered by
+`supabase/tests/`, `npm run test:db` and `npm run verify` both green) but not yet applied to the
+real Supabase project — the session paused before that write, awaiting the owner's go-ahead (see
+this step's entry below and its checkpoint row). **Next session:** apply the three new migrations
+to the live project the same way step 10's were (via the Supabase MCP connection), re-run
+`get_advisors`, flip step 11 to `done`, then start step 12 (auth and cloud sync).
 
 ### Checkpoints that are not steps
 
@@ -69,7 +76,8 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Play a real game on the step-7 build** | Step 7 `done` | in progress 2026-07-31 — owner started real play, reported two bugs, both fixed this session (see step 7 entry below and `NOTES.md`); not yet a full clean night |
 | **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached — needs the repository owner |
 | **Create the real Supabase project and apply `supabase/migrations/*.sql` to it** | Step 10 `done` | ✅ done 2026-07-30 — project created by the owner, migrations applied via the Supabase MCP connection this session |
-| **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; step 12 wants it too | not reached — needs the repository owner (no tool available here can set repo secrets) |
+| **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; step 12 wants it too | ⚠️ set but wrong 2026-07-31 — both secrets exist (the workflow no longer early-exits) but every real ping since has returned `401` from Supabase's REST gateway, confirmed against both the GitHub Actions run logs and the project's own API logs (see `NOTES.md`). Needs the repository owner to re-check the `SUPABASE_ANON_KEY` secret's value — no tool available here can read or set repo secrets. |
+| **Apply the three step-11 migrations to the real Supabase project** | Step 11 `done` | not reached 2026-07-31 — code complete and green against local Postgres, but writing to the live project is exactly the kind of hard-to-reverse action this repo's own norms say to confirm first; the session paused mid-turn awaiting the owner's go-ahead rather than proceeding on its own judgement |
 
 ---
 
@@ -995,3 +1003,89 @@ chat, not committed anywhere — matching `.env.local`'s own "never commit a fil
   partially applied — confirmed by re-running `list_migrations` after a reconnect before continuing.
   If a future session hits the same flapping, re-check state before resuming rather than assuming
   the last call landed.
+
+---
+
+### Step 11 — Snapshots, statistics source, retention functions
+**Status:** in progress — code complete, `npm run test:db` and `npm run verify` both green, not yet
+applied to the real Supabase project (awaiting the owner's go-ahead — see Watch out)
+**Sessions:** 1  **Commits:** 1
+
+**Built.** Three migrations, all tested against local Postgres (`supabase/tests/`, 35 tests across
+6 files, up from 18):
+
+- **`chips_to_money_minor(chips, buy_amount_minor, chips_per_buy)`** — a SQL re-derivation of
+  `core/money.ts`'s `chipsToMoney()`/`bankersRound()` (round-half-to-even), done with exact integer
+  arithmetic instead of the TS original's float-plus-epsilon approach. Both agree on every input —
+  proven by `finalizeGame.test.ts`'s `chips_to_money_minor` suite, including two genuine
+  exact-half ties (one rounding down to an even floor, one rounding up to one).
+- **`finalize_game(game_id)`** — reads only the live tables (`games`, `game_players`,
+  `shared_costs`/`shared_cost_shares`, `transfers`) and writes `game_summaries`, `player_results`,
+  `transfer_summaries`. Reproduces `core/players.ts`'s display-name composition and per-game dedup
+  (`nickname (account name)` for registered players, guest name for guests, `"(1)"`/`"(2)"` suffixes
+  for repeats, ranked by `seat_order` then `joined_at`) and `gameActions.ts#finalizeGame`'s
+  `settled_position` ranking (across *every* player in the game, not just active ones, matching a
+  subtlety in the TS original). Idempotent by delete-then-insert rather than piecemeal upsert, so a
+  reopen-then-re-end can never leave a stale duplicate row. Verified byte-for-byte against
+  `core/settlement.ts#buildGameSnapshot()` on a shared fixture (two guests deliberately both named
+  "Dana", to exercise the dedup path; a shared cost; a hand-edited transfer list touching every
+  `settlement_party` — player, pot, house — as both sender and receiver, plus one zeroed-out
+  "deleted" transfer that must not survive into `transfer_summaries`).
+- **`group_player_results`** — the one statistics-source view this step builds, over
+  `player_results`/`game_summaries`, `where not gs.is_private`. Personal statistics (which must
+  still count private games) read the base tables directly instead; only the group-scoped path
+  goes through this view. Baking the exclusion in now means step 14 has nothing to retrofit here.
+- **`purge_expired_game_data()`** — tier 3 (`game_events`) at 30 days past `ended_at`, tier 2
+  (`games` and everything that cascades from it — `game_players`, `shared_costs`/
+  `shared_cost_shares`, `transfers`, `game_viewers`, `share_links`, `join_requests`,
+  `player_claims`) at 90 days, both joined against `game_summaries` so a finished game with no
+  snapshot yet is silently skipped rather than purged or erroring. Returns `(table_name,
+  deleted_count)` rows, ready for step 16's cron log line. Not wired into `maintenance.yml` — that
+  stays step 16's job, per `PLAN.md`'s explicit "out of scope."
+
+**Deviated.**
+- **`finalize_game(game_id)` is a from-scratch SQL re-derivation of the settlement maths, not a
+  thin writer of a client-supplied snapshot.** The alternative — taking a pre-built `GameSnapshot`
+  payload as a parameter — doesn't fit `03-data-model.md`'s own signature (`finalize_game(game_id)`,
+  one argument), and would leave the function unable to run standalone against server state once
+  step 12 makes a signed-in host's live game state actually live in these tables. This is the same
+  trade `20260729121200_game_events_trigger.sql` already made for the `game_players` cache — SQL
+  can't import `core/settlement.ts`, so the two are kept in sync by hand and cross-checked by test,
+  not by sharing code.
+- **The "reopening within 24h deletes the snapshot" behaviour from `03-data-model.md` isn't built
+  as an automatic trigger here.** `finalize_game()`'s own delete-then-insert makes a *second* call
+  correct, but nothing yet proactively deletes a snapshot the moment a game reopens without being
+  re-ended — there's no server-side "reopen" write path yet for it to hook into (that's still the
+  local-only `reopenGame()` in `gameActions.ts`, step 9). Revisit once step 12 gives games a real
+  server-side reopen path.
+- **The "byte-identical after an explicit deletion" exit criterion is tested against a raw `delete
+  from games`, not a `delete_game()` RPC** — that RPC doesn't exist until step 16 ("Delete-a-game").
+  Every FK from `games` down is already `on delete cascade`, so the raw delete already exercises the
+  real mechanism the eventual RPC will wrap; `purgeExpiredGameData.test.ts` covers it under that
+  name.
+
+**Left undone.** Nothing from this step's `PLAN.md` build list. `purge_expired_game_data()` is
+built and tested but not cron-wired (step 16, explicitly out of scope here).
+
+**Watch out.**
+- **`game_summaries` must be inserted before `player_results`/`transfer_summaries`, not after.**
+  Both of the latter reference `game_summaries(game_id)`, *not* `games(id)` — easy to get backwards
+  (this session did, once) since it reads naturally the other way round. The FK exists so a
+  permanent snapshot survives its `games` row being purged.
+- **The temp table `finalize_game()` builds (`tmp_finalize_players`) is dropped explicitly at the
+  top of the function, not left to `on commit drop` alone** — a caller invoking `finalize_game()`
+  twice inside one still-open transaction (which `supabase/tests/` does constantly, since every
+  test wraps itself in a transaction it rolls back rather than commits) would otherwise collide
+  with the first call's temp table.
+- **This session verified the GitHub-secrets checkpoint from step 10 and found it further along,
+  but not fixed**: `SUPABASE_URL`/`SUPABASE_ANON_KEY` are now set as repo secrets, but the value is
+  wrong — every real `maintenance.yml` ping since the owner set them has returned `401`. See the
+  checkpoint table above and `NOTES.md`'s dedicated entry for the diagnosis and the exact correct
+  value to paste in.
+- **These three migrations are not yet applied to the real Supabase project.** Everything is
+  proven against local Postgres only so far; the session ended awaiting the owner's confirmation
+  before writing to the live database, per this repo's own risk-of-action norms around anything
+  hard to reverse. Apply via the Supabase MCP connection (`apply_migration`, one call per file, in
+  timestamp order) the same way step 10's were, then re-run `get_advisors(type: 'security')` — same
+  as step 10 turned up two real gaps `test:db` couldn't see, and this step adds a `SECURITY
+  DEFINER` function and a new view, exactly the shapes that advisor already knows to check.
