@@ -508,9 +508,12 @@ and a tested export path.
 - `games.host_last_synced_at` stamped on every successful push.
 - `finalize_game()` called on end-of-game; **local-only games from steps 6–9 upload their snapshots
   on first sign-in**.
-- Realtime subscription to `game_events` and `game_players`, with a 15s polling fallback for
-  networks that block WebSockets.
-- Account-level default nickname, offered optionally at signup.
+- Realtime subscription to `game_events` (built: `game_players` deliberately not subscribed to
+  separately — every write to it is derived, in the same transaction, from a `game_events` insert,
+  so a second channel would only ever fire alongside the first; see `docs/build/NOTES.md`), with a
+  15s polling fallback for networks that block WebSockets.
+- Account-level default nickname, offered optionally at signup (built as part of the one
+  profile-creation form — there's no separate "signup" moment distinct from it in this app).
 
 **Exit criteria.**
 - [ ] Two devices editing the same game concurrently converge, including `+1 buy-in` from both.

@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { db } from '@core/offline/db';
 import { createGame } from '@core/offline/gameActions';
 import { minor } from '@core/money';
+import { SessionProvider } from '../../hooks/useSession';
 import { HomePage } from './HomePage';
 
 beforeEach(async () => {
@@ -20,7 +21,9 @@ describe('<HomePage>', () => {
   it('shows the empty state with a working call to action when there are no games', () => {
     render(
       <MemoryRouter>
-        <HomePage />
+        <SessionProvider>
+          <HomePage />
+        </SessionProvider>
       </MemoryRouter>,
     );
     expect(screen.getByText('home.startFirstGame')).toBeDefined();
@@ -39,7 +42,9 @@ describe('<HomePage>', () => {
 
     render(
       <MemoryRouter>
-        <HomePage />
+        <SessionProvider>
+          <HomePage />
+        </SessionProvider>
       </MemoryRouter>,
     );
 
@@ -59,7 +64,9 @@ describe('<HomePage>', () => {
 
     render(
       <MemoryRouter>
-        <HomePage />
+        <SessionProvider>
+          <HomePage />
+        </SessionProvider>
       </MemoryRouter>,
     );
 

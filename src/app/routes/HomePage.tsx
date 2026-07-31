@@ -4,19 +4,27 @@ import { EmptyState } from '@components/EmptyState';
 import { AppShell } from '@components/AppShell';
 import { Button } from '@components/shared/Button';
 import { Card } from '@components/shared/Card';
+import { IconButton } from '@components/shared/IconButton';
 import { useGamesList } from '@core/offline/useGamesList';
+import { useSession } from '../../hooks/useSession';
 
 export function HomePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const games = useGamesList();
   const activeGames = games.filter((game) => game.status === 'active' || game.status === 'settling');
+  const session = useSession();
 
   return (
     <AppShell
       header={
         <div className="flex items-center justify-between px-5 py-3">
           <h1 className="text-heading font-bold">{t('home.title')}</h1>
+          {session.cloudConfigured && (
+            <IconButton label={t('nav.account')} onClick={() => void navigate('/account')}>
+              {'👤'}
+            </IconButton>
+          )}
         </div>
       }
       footer={

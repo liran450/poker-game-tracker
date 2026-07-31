@@ -45,6 +45,7 @@ import { useGame } from '@core/offline/useGame';
 import { useSyncState } from '@core/offline/useSyncState';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { useElapsedTime } from '../../hooks/useElapsedTime';
+import { useLiveGameSync } from '../../hooks/useLiveGameSync';
 import { useWakeLock } from '../../hooks/useWakeLock';
 import { dedupeDisplayNames, firstBuyInTimestamp, renderPlayerName } from '@core/players';
 import { add, formatChipValue, formatMoney, minor, sum, type Minor } from '@core/money';
@@ -88,6 +89,7 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
   const sync = useSyncState(gameId);
   useWakeLock(game?.state.status === 'active');
   useBeforeUnloadGuard(sync.pendingCount > 0);
+  useLiveGameSync(gameId);
   const elapsed = useElapsedTime(game?.state.startedAt ?? null);
 
   if (!game?.record) return null;

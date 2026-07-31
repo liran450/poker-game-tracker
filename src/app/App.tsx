@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react';
 import { HashRouter, Route, Routes } from 'react-router';
 
+import { SessionProvider } from '../hooks/useSession';
+import { AccountPage } from './routes/AccountPage';
 import { HomePage } from './routes/HomePage';
 import { NewGamePage } from './routes/NewGamePage';
 import { GamePage } from './routes/GamePage';
@@ -20,23 +22,26 @@ const GalleryPage = lazy(() =>
 export function App() {
   return (
     <HashRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/new" element={<NewGamePage />} />
-        <Route path="/game/:gameId" element={<GamePage />} />
-        {import.meta.env.DEV && (
-          <Route
-            path="/gallery"
-            element={
-              <Suspense>
-                <GalleryPage />
-              </Suspense>
-            }
-          />
-        )}
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-      {import.meta.env.DEV && <DevBar />}
+      <SessionProvider>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/new" element={<NewGamePage />} />
+          <Route path="/game/:gameId" element={<GamePage />} />
+          <Route path="/account" element={<AccountPage />} />
+          {import.meta.env.DEV && (
+            <Route
+              path="/gallery"
+              element={
+                <Suspense>
+                  <GalleryPage />
+                </Suspense>
+              }
+            />
+          )}
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+        {import.meta.env.DEV && <DevBar />}
+      </SessionProvider>
     </HashRouter>
   );
 }

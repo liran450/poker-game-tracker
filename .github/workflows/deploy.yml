@@ -29,7 +29,15 @@ jobs:
 
       # typecheck → lint → lint:css → test → audit:prod → build.
       # Nothing is marked done in docs/build/PROGRESS.md until this is green.
+      #
+      # The same repo secrets maintenance.yml pings, mapped to the VITE_ prefix Vite embeds at
+      # build time (docs/build/PROGRESS.md step 1's "connect-src is 'self' only until
+      # VITE_SUPABASE_URL is set" watch-out). Empty on a fork PR — supabaseClient.ts already
+      # treats that as "cloud unavailable", never throws, so the build stays green either way.
       - run: npm run verify
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: End-to-end smoke tests
         run: |

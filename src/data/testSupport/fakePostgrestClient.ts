@@ -20,6 +20,7 @@ export class FakePostgrestClient {
   readonly tables = new Map<string, Row[]>();
   private rpcHandlers = new Map<string, RpcHandler>();
   private pendingFailures = new Map<string, string>();
+  private uniqueColumns = new Map<string, string[]>();
 
   seed(table: string, rows: Row[]): void {
     this.tables.set(table, [...rows]);
@@ -38,11 +39,16 @@ export class FakePostgrestClient {
     this.pendingFailures.set(table, message);
   }
 
+  /** Simulates a real unique constraint: an insert colliding on any of these columns fails `23505`. */
+  setUniqueColumns(table: string, columns: string[]): void {
+    this.uniqueColumns.set(table, columns);
+  }
+
   from(table: string): FakeQueryBuilder {
     if (!this.tables.has(table)) this.tables.set(table, []);
     const failure = this.pendingFailures.get(table);
     this.pendingFailures.delete(table);
-    return new FakeQueryBuilder(this.tables.get(table)!, failure);
+    return new FakeQueryBuilder(this.tables.get(table)!, this.uniqueColumns.get(table) ?? [], failure);
   }
 
   rpc(name: string, args: Record<string, unknown> = {}): Promise<{ error: Error | null }> {
@@ -54,8 +60,15 @@ export class FakePostgrestClient {
 
 interface QueryResult {
   readonly data: Row | Row[] | null;
-  readonly error: Error | null;
+  readonly error: (Error & { code?: string }) | null;
   readonly count?: number | null;
+}
+
+function uniqueViolation(table: string, column: string): Error & { code: string } {
+  return Object.assign(
+    new Error(`duplicate key value violates unique constraint "${table}_${column}_key"`),
+    { code: '23505' },
+  );
 }
 
 /**
@@ -74,6 +87,7 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
 
   constructor(
     private readonly rows: Row[],
+    private readonly uniqueColumns: string[] = [],
     private readonly injectedFailure?: string,
   ) {}
 
@@ -149,7 +163,15 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
       }
       case 'insert': {
         const rows = Array.isArray(this.payload) ? this.payload : [this.payload!];
+        for (const row of rows) {
+          for (const column of this.uniqueColumns) {
+            if (this.rows.some((existing) => existing[column] === row[column])) {
+              return { data: null, error: uniqueViolation('table', column) };
+            }
+          }
+        }
         this.rows.push(...rows);
+        if (this.single) return { data: rows[0] ?? null, error: null };
         return { data: rows, error: null };
       }
       case 'upsert': {

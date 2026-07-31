@@ -45,6 +45,67 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### A cancellation flag captured across an `await` narrows to "always" its initial value — use a ref, and expect one more narrowing surprise even then
+**Step 12 · 2026-07-31 · trap**
+
+`useSession`'s effect needed the standard React "ignore this async result if the effect already
+cleaned up" guard — an `isMounted`/`cancelled`-style flag, set `true` in the effect's cleanup and
+checked before every `setState` after an `await`. The obvious `let cancelled = false;` inside the
+effect, mutated only in the returned cleanup closure, made **both** `if (cancelled) return;` and
+`if (!cancelled) setLoading(false)` report `@typescript-eslint/no-unnecessary-condition` — "always
+falsy" / "always truthy" respectively. Not a false alarm about the variable's *declared* type, but
+a real artifact of how TypeScript's control-flow narrowing treats a captured `let`: from inside
+*this* closure, the only assignment to `cancelled` anywhere in its static analysis is the
+initialiser, since the mutation lives in a sibling closure (the cleanup function) this one never
+calls — so it narrows `cancelled` to the literal `false` for every read inside this function, dead
+branch included, even though the variable is mutated for real by React on unmount.
+
+**Switching the flag to a plain mutable object (`const cancelledRef = { current: false };`, not
+even `useRef` — no reactivity needed) fixed the first two checks**, since property-access narrowing
+on `.current` isn't captured by the same literal-narrowing pass. But a *third* check, later in the
+same closure and **after an `await`** (`if (cancelledRef.current) return;` following
+`await syncProfile(...)`), still got flagged — TypeScript's aliased-condition analysis tracked that
+nothing textually reachable from this function's own call graph (the awaited `syncProfile`, which
+never touches `cancelledRef`) assigns to it, and again narrowed across the await. This one is a
+genuine, well-known gap between TypeScript's single-function flow analysis and real async/closure
+interleaving — the guard is correct at runtime (a fast unmount-remount can land exactly here after
+cleanup already ran), so it's suppressed with a targeted
+`// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition` and a comment explaining
+why, rather than restructured further. **Rule of thumb for any future "ignore stale async result"
+guard:** expect `no-unnecessary-condition` to flag at least one of these checks even with a ref-style
+flag, and don't "fix" it by removing the check — verify with the runtime behaviour (or a test that
+actually unmounts mid-flight) before assuming the linter is right.
+
+### Realtime only needs one channel, not the two tables the plan names
+**Step 12 · 2026-07-31 · decision**
+
+`PLAN.md` names a realtime subscription to both `game_events` and `game_players`. Built as a
+subscription to `game_events` INSERTs only: every write this app makes to `game_players` is itself
+derived, in the same transaction, from a `game_events` insert (`apply_game_event_to_player_cache`,
+the step-10 trigger) or from an RPC that also appends a matching event (`take_over_host`,
+`decide_join_request` both update their target table *and* append the event, per the step-10
+NOTES.md entry on that trigger's scope). There is no code path anywhere in this schema that touches
+`game_players` without a `game_events` row landing in the same instant — so a second subscription
+would only ever fire alongside the first, telling the client nothing it didn't already know. If a
+future step ever adds a write to `game_players` that *doesn't* go through one of those two paths,
+revisit this — until then, one channel is strictly sufficient, not just cheaper.
+
+### The local-game migration needs a ref-style actor id, not just a rewrite pass
+**Step 12 · 2026-07-31 · decision**
+
+Session 1's note framed local-game migration purely as "rewrite already-existing events' `actorId`
+once." Building it revealed a second, equally necessary half: `core/offline/gameActions.ts` was
+still calling `getLocalActorId()` unconditionally for every *new* event, so anything appended after
+sign-in — including in a game created after sign-in, not just a migrated one — would keep
+stamping the stale device id and hit the exact same `game_events.actor_id references profiles(id)`
+FK violation forever, not just for the one-time backlog. Fixed by introducing `getActorId()`
+(`core/offline/localIdentity.ts`): the real profile id once `setCurrentProfileId` has been called,
+falling back to the device id otherwise. `gameActions.ts` now calls this instead of
+`getLocalActorId()` everywhere; `getLocalActorId()` itself is unchanged and still used directly by
+the migration, which specifically needs the *old* id to know what to search-and-replace away from.
+**If a future mutation function is added to `gameActions.ts`, it must call `getActorId()`, not
+`getLocalActorId()`** — the latter would silently un-fix this for that one function.
+
 ### ESLint flat-config `no-restricted-imports` blocks don't merge — the last matching one wins, whole
 **Step 12 · 2026-07-31 · trap**
 
