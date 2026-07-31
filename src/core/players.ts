@@ -1,4 +1,4 @@
-import type { PlayerState } from './events';
+import type { GameEvent, PlayerState } from './events';
 
 /**
  * The name shown for a row is composed, not stored (03-data-model.md#naming-and-nicknames):
@@ -43,4 +43,24 @@ export function dedupeDisplayNames(
   }
 
   return result;
+}
+
+/**
+ * The event log's earliest `buy_in_added` timestamp, or `null` if no buy-in
+ * has happened yet. This is the yardstick for "late joiner" (see
+ * `PlayerRow`'s caption): a wall-clock threshold against `game_started`
+ * would flag every player seated via "+ שחקן" right after starting, before
+ * anyone has bought in, which is the ordinary way to seat a table, not a
+ * late arrival. Activity — whether money was already on the table when this
+ * player was added — is the signal that matches what "late" actually means,
+ * and it self-calibrates to how fast a given game moves instead of guessing
+ * a fixed number of minutes.
+ */
+export function firstBuyInTimestamp(events: readonly GameEvent[]): string | null {
+  let earliest: string | null = null;
+  for (const event of events) {
+    if (event.type !== 'buy_in_added') continue;
+    if (earliest === null || event.clientCreatedAt < earliest) earliest = event.clientCreatedAt;
+  }
+  return earliest;
 }

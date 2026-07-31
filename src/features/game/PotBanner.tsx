@@ -17,7 +17,7 @@ export interface PotBannerProps {
 export function PotBanner({ status, currency, locale, onOpenResolution }: PotBannerProps) {
   const { t } = useTranslation();
   const buyTotal = formatMoneyPlainText(status.totalBuyInsMinor, { locale, currency });
-  const chipTotal = formatMoneyPlainText(status.totalChipsMinor, { locale, currency });
+  const chipCount = t('pot.chipsCount', { count: status.totalChipsCount });
 
   if (status.isBalanced) {
     return (
@@ -27,7 +27,7 @@ export function PotBanner({ status, currency, locale, onOpenResolution }: PotBan
         className="flex items-center gap-2 rounded-lg bg-tint-positive px-3.5 py-2 text-body-sm font-semibold text-positive"
       >
         <span aria-hidden="true">{'🟢'}</span>
-        <span>{t('money.balanced', { buyTotal, chipTotal })}</span>
+        <span>{t('money.balanced', { buyTotal, chipCount })}</span>
       </div>
     );
   }
@@ -43,7 +43,7 @@ export function PotBanner({ status, currency, locale, onOpenResolution }: PotBan
       className="flex w-full items-center gap-2 rounded-lg bg-tint-negative px-3.5 py-2 text-start text-body-sm font-semibold text-negative"
     >
       <span aria-hidden="true">{'🔴'}</span>
-      <span className="flex-1">{t('money.discrepancy', { amount, buyTotal, chipTotal })}</span>
+      <span className="flex-1">{t('money.discrepancy', { amount, buyTotal, chipCount })}</span>
     </button>
   );
 }

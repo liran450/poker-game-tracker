@@ -66,7 +66,7 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | Checkpoint | Gates | Status |
 |---|---|---|
 | **Design assets committed to `docs/design/`, `docs/11` written from them** | Step 3 | ✅ done 2026-07-28 |
-| **Play a real game on the step-7 build** | Step 7 `done` | not reached — needs the repository owner |
+| **Play a real game on the step-7 build** | Step 7 `done` | in progress 2026-07-31 — owner started real play, reported two bugs, both fixed this session (see step 7 entry below and `NOTES.md`); not yet a full clean night |
 | **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached — needs the repository owner |
 | **Create the real Supabase project and apply `supabase/migrations/*.sql` to it** | Step 10 `done` | ✅ done 2026-07-30 — project created by the owner, migrations applied via the Supabase MCP connection this session |
 | **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; step 12 wants it too | not reached — needs the repository owner (no tool available here can set repo secrets) |
@@ -600,6 +600,37 @@ screenshotted per new sheet — see Left undone.
   keys and behaviour; the handful of modules whose actual *wording* matters
   (`buyInText.ts`, `auditLogText.ts`) import the real singleton from `@i18n/index` instead and
   assert on real Hebrew sentences.
+
+**Session 2 (2026-07-31) — two real bugs from the owner's first real play, both fixed.**
+
+1. **The pot banner's "chips" figure was the chips' *money value*, not their count.** Pre-settlement
+   it therefore always mirrored the buy-in total exactly (e.g. buy ₪50 for 100 chips read
+   "קניות ₪50 = ₪50", not "= 100 ז'יטונים") — matched `05-settlement.md`'s literal worked example
+   character for character, but that example happens to use a 1:1-looking chip ratio, so the doc
+   never actually disambiguates money-value from chip-count. Confirmed as a real, reproducible
+   problem (not a misunderstanding) by driving the app directly in a real browser, then fixed with
+   the owner's confirmation: `core/pot.ts#PotStatus` gained `totalChipsCount` (real chip units,
+   settled players' counted chips + unsettled players' assumed bought chips), and `PotBanner`/
+   `money.balanced`/`money.discrepancy` now show it via the existing `pot.chipsCount` phrase instead
+   of a second money figure. `totalChipsMinor` (money) is untouched and still drives the actual
+   safeguard math — this was a display-only fix. See `NOTES.md`.
+2. **The "joined HH:MM" late-joiner caption fired for every player seated via `+ שחקן` right after
+   starting** — a totally ordinary way to seat a table — because it compared a player's `joinedAt`
+   against `game_started`'s timestamp, and `nextTimestamp()`'s strict monotonicity means literally
+   any event appended after `game_started` reads as "later." Fixed by keying "late" off real game
+   activity instead of wall-clock proximity to `game_started`: `core/players.ts#firstBuyInTimestamp`
+   finds the game's first real `buy_in_added`, and a player only reads as late if they joined after
+   that. Verified directly: players seated before any buy-in show no badge; a player added after
+   another player already bought in still shows one correctly. Scheduled/planned games (invite ahead
+   of time, mark yourself as arriving later) came up in the same conversation but is out of scope —
+   already deferred post-v1 per `01-product-spec.md#10-planned-not-in-v1`/`PLAN.md`, not something
+   this session touched.
+
+Both fixes verified with `npm run verify` green (405/405 tests) and by driving the exact reported
+scenario in a real headless-Chromium browser against the dev server — screenshots before/after
+confirm the banner now reads real chip counts and the false-positive late badge is gone, plus a
+third scenario confirms a genuine latecomer (joining after another player already bought in) is
+still correctly flagged.
 
 ---
 
