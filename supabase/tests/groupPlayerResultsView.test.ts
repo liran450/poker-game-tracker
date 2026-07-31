@@ -66,6 +66,47 @@ describe('group_player_results view (docs/build/PLAN.md step 11)', () => {
     });
   });
 
+  it('is scoped to the caller\'s own group, not readable by every authenticated user', async () => {
+    // The real regression test for the security-advisor fix
+    // (20260731140000_step11_security_advisor_fixes.sql): a plain view defaults to running with
+    // its *owner's* privileges, bypassing the querying user's RLS on player_results/
+    // game_summaries entirely — group_player_results shipped that way at first, meaning any
+    // authenticated caller could read every group's statistics regardless of membership.
+    // security_invoker = true makes the view honour the caller's real RLS instead.
+    await withTransaction(async (client) => {
+      const groupAHost = await createProfile(client);
+      const groupBMember = await createProfile(client);
+
+      const { rows: groupRows } = await client.query<{ id: string }>(
+        'insert into groups (name, created_by) values ($1, $2) returning id',
+        ['Group A', groupAHost.id],
+      );
+      const groupAId = groupRows[0].id;
+      await client.query(
+        'insert into group_members (group_id, user_id, role) values ($1, $2, \'owner\')',
+        [groupAId, groupAHost.id],
+      );
+
+      const publicGame = await createGroupGameWithSnapshot(client, groupAHost.id, groupAId, false);
+
+      // A member of a *different* group, with no membership in Group A, must see nothing.
+      await actAs(client, 'authenticated', groupBMember.id);
+      const strangerResult = await client.query<{ game_id: string }>(
+        'select game_id from group_player_results where group_id = $1',
+        [groupAId],
+      );
+      expect(strangerResult.rows).toEqual([]);
+
+      // Group A's own host (a real group_members row, not just the game's host_id) sees it.
+      await actAs(client, 'authenticated', groupAHost.id);
+      const memberResult = await client.query<{ game_id: string }>(
+        'select game_id from group_player_results where group_id = $1',
+        [groupAId],
+      );
+      expect(memberResult.rows.map((r) => r.game_id)).toContain(publicGame);
+    });
+  });
+
   it('keeps excluding the private game after its live rows are purged', async () => {
     await withTransaction(async (client) => {
       const host = await createProfile(client);

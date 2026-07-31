@@ -37,7 +37,7 @@ change — otherwise the history stops meaning anything.
 | 8 | Settlement core | done | 2026-07-29 | _(this commit)_ |
 | 9 | End game, edit mode, share text | in progress — code complete, blocked on a real WhatsApp paste test | | |
 | 10 | Database foundation and RLS | done | 2026-07-30 | _(this commit)_ |
-| 11 | Snapshots, statistics source, retention | in progress — code complete, not yet applied to the real Supabase project | | |
+| 11 | Snapshots, statistics source, retention | done | 2026-07-31 | _(this commit)_ |
 | 12 | Auth and cloud sync | not started | | |
 | 13 | Sharing, viewers, join requests, takeover | not started | | |
 | 14 | Groups, roles, private games | not started | | |
@@ -58,13 +58,16 @@ still needs the owner: the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secret
 diagnosis and the correct value to paste in. No tool here can read or write repo secrets, so this
 still needs the owner. That does not block step 10 itself (none of its four `PLAN.md` exit criteria
 mention repo secrets), but it does block the keep-alive cron actually pinging anything, and step 12
-will want it too. **Step 11 is code-complete this session** (`finalize_game`, `chips_to_money_minor`,
+will want it too. **Step 11 is now genuinely `done`**: `finalize_game`, `chips_to_money_minor`,
 `group_player_results`, `purge_expired_game_data` — all four `PLAN.md` exit criteria covered by
-`supabase/tests/`, `npm run test:db` and `npm run verify` both green) but not yet applied to the
-real Supabase project — the session paused before that write, awaiting the owner's go-ahead (see
-this step's entry below and its checkpoint row). **Next session:** apply the three new migrations
-to the live project the same way step 10's were (via the Supabase MCP connection), re-run
-`get_advisors`, flip step 11 to `done`, then start step 12 (auth and cloud sync).
+`supabase/tests/`, `npm run test:db` and `npm run verify` both green — applied to the real
+Supabase project this session (with the owner's go-ahead, after the session first paused to
+confirm before writing to the live database). `get_advisors(type: 'security')` afterward
+surfaced one real, newly-introduced gap — `group_player_results` had no equivalent to
+`profiles_public`'s own narrowing, so any authenticated caller could have read every group's
+statistics — fixed by a fourth migration (`security_invoker = true` plus the missing view grant)
+and proven with a dedicated cross-group test, not just re-running the advisor. See this step's
+entry below and `NOTES.md`. **Start step 12** next (auth and cloud sync).
 
 ### Checkpoints that are not steps
 
@@ -77,7 +80,7 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Paste the share text into real WhatsApp on iOS and Android** | Step 9 `done` | not reached — needs the repository owner |
 | **Create the real Supabase project and apply `supabase/migrations/*.sql` to it** | Step 10 `done` | ✅ done 2026-07-30 — project created by the owner, migrations applied via the Supabase MCP connection this session |
 | **Set the `SUPABASE_URL`/`SUPABASE_ANON_KEY` GitHub repo secrets `maintenance.yml` needs** | The keep-alive cron actually pinging; step 12 wants it too | ⚠️ set but wrong 2026-07-31 — both secrets exist (the workflow no longer early-exits) but every real ping since has returned `401` from Supabase's REST gateway, confirmed against both the GitHub Actions run logs and the project's own API logs (see `NOTES.md`). Needs the repository owner to re-check the `SUPABASE_ANON_KEY` secret's value — no tool available here can read or set repo secrets. |
-| **Apply the three step-11 migrations to the real Supabase project** | Step 11 `done` | not reached 2026-07-31 — code complete and green against local Postgres, but writing to the live project is exactly the kind of hard-to-reverse action this repo's own norms say to confirm first; the session paused mid-turn awaiting the owner's go-ahead rather than proceeding on its own judgement |
+| **Apply the step-11 migrations to the real Supabase project** | Step 11 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner's go-ahead; a security-advisor follow-up migration was needed and applied too (see `NOTES.md`) |
 
 ---
 
@@ -1007,12 +1010,11 @@ chat, not committed anywhere — matching `.env.local`'s own "never commit a fil
 ---
 
 ### Step 11 — Snapshots, statistics source, retention functions
-**Status:** in progress — code complete, `npm run test:db` and `npm run verify` both green, not yet
-applied to the real Supabase project (awaiting the owner's go-ahead — see Watch out)
-**Sessions:** 1  **Commits:** 1
+**Status:** done  **Sessions:** 1  **Commits:** 2
 
-**Built.** Three migrations, all tested against local Postgres (`supabase/tests/`, 35 tests across
-6 files, up from 18):
+**Built.** Four migrations (three plus one security-advisor follow-up — see Deviated), all tested
+against local Postgres (`supabase/tests/`, 36 tests across 6 files, up from 18) and applied to the
+real Supabase project:
 
 - **`chips_to_money_minor(chips, buy_amount_minor, chips_per_buy)`** — a SQL re-derivation of
   `core/money.ts`'s `chipsToMoney()`/`bankersRound()` (round-half-to-even), done with exact integer
@@ -1063,6 +1065,22 @@ applied to the real Supabase project (awaiting the owner's go-ahead — see Watc
   Every FK from `games` down is already `on delete cascade`, so the raw delete already exercises the
   real mechanism the eventual RPC will wrap; `purgeExpiredGameData.test.ts` covers it under that
   name.
+- **A fourth migration** (`20260731140000_step11_security_advisor_fixes.sql`) **was needed after
+  applying to the real project**, matching step 10's own precedent of fixing advisor-surfaced gaps
+  as a follow-up rather than editing already-applied files. `get_advisors(type: 'security')` found
+  a real one this time, not just a warning: `group_player_results` had shipped without
+  `profiles_public`'s equivalent narrowing, so — because a plain view defaults to running with its
+  *owner's* privileges (`security_invoker = false`), bypassing the querying user's RLS on
+  `player_results`/`game_summaries` entirely — any authenticated caller could have read every
+  group's statistics, not just their own. Fixed with `alter view ... set (security_invoker =
+  true)` plus the view's own `grant select` (views need one even when the underlying tables
+  already grant `anon`/`authenticated` by default), and proven with a new test that queries the
+  view as a member of a *different* group and asserts zero rows come back — the first two tests in
+  `groupPlayerResultsView.test.ts` only ever queried as admin, which bypasses RLS regardless of
+  the view's security mode, so they would have passed either way and didn't actually catch this.
+  Also folded in the same fix `chips_to_money_minor` needed (a missing `set search_path = public`
+  — the exact class of gap `20260730150000_security_advisor_fixes.sql` fixed once already for
+  step 10).
 
 **Left undone.** Nothing from this step's `PLAN.md` build list. `purge_expired_game_data()` is
 built and tested but not cron-wired (step 16, explicitly out of scope here).
@@ -1077,15 +1095,16 @@ built and tested but not cron-wired (step 16, explicitly out of scope here).
   twice inside one still-open transaction (which `supabase/tests/` does constantly, since every
   test wraps itself in a transaction it rolls back rather than commits) would otherwise collide
   with the first call's temp table.
+- **A plain `create view` bypasses the querying user's RLS by default — this bit `group_player_
+  results` for real, see Deviated above.** Any new statistics view step 15 adds needs either
+  `security_invoker = true` (preferred, when the underlying tables' own RLS already expresses the
+  right scoping — the case here) or `profiles_public`'s pattern of an explicit narrowing `WHERE`
+  clause (when it doesn't). Forgetting either one is silent until `get_advisors` or a test that
+  actually queries as a non-privileged role catches it — querying as admin, like this step's first
+  two view tests did, proves nothing about RLS scoping.
 - **This session verified the GitHub-secrets checkpoint from step 10 and found it further along,
   but not fixed**: `SUPABASE_URL`/`SUPABASE_ANON_KEY` are now set as repo secrets, but the value is
   wrong — every real `maintenance.yml` ping since the owner set them has returned `401`. See the
   checkpoint table above and `NOTES.md`'s dedicated entry for the diagnosis and the exact correct
-  value to paste in.
-- **These three migrations are not yet applied to the real Supabase project.** Everything is
-  proven against local Postgres only so far; the session ended awaiting the owner's confirmation
-  before writing to the live database, per this repo's own risk-of-action norms around anything
-  hard to reverse. Apply via the Supabase MCP connection (`apply_migration`, one call per file, in
-  timestamp order) the same way step 10's were, then re-run `get_advisors(type: 'security')` — same
-  as step 10 turned up two real gaps `test:db` couldn't see, and this step adds a `SECURITY
-  DEFINER` function and a new view, exactly the shapes that advisor already knows to check.
+  value to paste in. This is still unresolved and still needs the owner — nothing in this step
+  touches it.

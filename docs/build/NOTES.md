@@ -45,6 +45,51 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### A new view defaults to bypassing the querying user's RLS — `group_player_results` shipped that way
+**Step 11 · 2026-07-31 · trap**
+
+`get_advisors(type: 'security')` flagged `group_player_results` as a `security_definer_view`
+**ERROR** right after it was applied to the real project — not a false positive. A plain
+`create view ... as select ...` defaults to `security_invoker = false` (the pre-PG15 behaviour):
+the view runs with its *owner's* privileges, not the calling role's, so it sees every row the
+underlying tables' RLS policies would otherwise hide from that caller. `profiles_public`
+(step 10) already relies on exactly this — it's *why* it can show a co-member's `display_name`
+that `profiles_select_self` alone would hide — but it compensates with its own narrowing `WHERE`
+clause (`p.id = auth.uid() or exists (... shared group membership ...)`). `group_player_results`
+had no equivalent: it only filtered `not gs.is_private`, so any authenticated caller — a member of
+any group, or none — could read every group's statistics, not just their own.
+
+**The fix, applied as a follow-up migration
+(`20260731140000_step11_security_advisor_fixes.sql`):** `alter view group_player_results set
+(security_invoker = true)`, plus `grant select on group_player_results to authenticated` (views
+need their own grant even when the underlying tables already grant `anon`/`authenticated` by
+default — see the step-10 entry below). With `security_invoker = true`, the view evaluates
+`player_results_select`/`game_summaries_select` (both already `is_group_member(group_id) or
+user_id = auth.uid()`) as the *actual* calling role — safe here specifically because PostgREST
+always executes as `anon`/`authenticated`, never as the table owner, so there's no owner-bypass
+loophole to worry about on that side.
+
+**Two views, two different fixes — pick based on whether the base tables' own RLS already says
+the right thing:**
+- `profiles_public` needs the *definer* behaviour (an explicit `WHERE`) because
+  `profiles_select_self` genuinely is too narrow for the view's purpose (self-only vs.
+  co-members-too) — inverting to `security_invoker` would just make the view as restrictive as
+  the table, defeating the point of having it.
+- `group_player_results` needs `security_invoker = true` because `player_results_select`/
+  `game_summaries_select` *already* express the exact right scoping — the view exists to
+  pre-join two tables and add `not is_private`, not to change who can see what.
+
+**What actually caught this, and what didn't:** the two tests written alongside the view
+(`groupPlayerResultsView.test.ts`) both queried as `admin` (`actAsAdmin`), which bypasses RLS
+regardless of the view's security mode — they would have passed identically before and after this
+bug, and did. Only `get_advisors` caught it initially; a third test added afterward actually
+proves the fix, by querying the view as a signed-in member of a *different* group and asserting
+zero rows come back. **A test that only ever exercises the admin/superuser path proves nothing
+about RLS** — any future view or policy test needs at least one assertion made `actAs` a real,
+non-privileged role. Same lesson `rlsEnabled.test.ts` already encodes for "RLS is enabled" (it
+doesn't just check the flag, it disables RLS on a live table mid-test and confirms the same query
+catches it) — this is that same discipline applied to view security instead of table security.
+
 ### The `SUPABASE_URL`/`SUPABASE_ANON_KEY` repo secrets are set but wrong — `401`, not "missing"
 **Step 10 (checkpoint) · 2026-07-31 · trap**
 
