@@ -100,6 +100,40 @@ export async function createGame(
   return gameId;
 }
 
+export interface GroupFixture {
+  id: string;
+}
+
+/** Creates a group with an owner as admin, optionally adding more members. */
+export async function createGroup(
+  client: PoolClient,
+  ownerId: string,
+  memberIds: string[] = [],
+): Promise<GroupFixture> {
+  const { rows } = await client.query<{ id: string }>(
+    'insert into groups (name, created_by) values ($1, $2) returning id',
+    [`Test Group ${randomUUID().slice(0, 8)}`, ownerId],
+  );
+  const groupId = rows[0]?.id;
+  if (!groupId) throw new Error('createGroup: insert returned no id');
+  await client.query(
+    "insert into group_members (group_id, user_id, role) values ($1, $2, 'owner')",
+    [groupId, ownerId],
+  );
+  for (const memberId of memberIds) {
+    await client.query(
+      "insert into group_members (group_id, user_id, role) values ($1, $2, 'member')",
+      [groupId, memberId],
+    );
+  }
+  return { id: groupId };
+}
+
+/** Points an existing game at a group — the group-member RLS paths key off games.group_id. */
+export async function setGameGroup(client: PoolClient, gameId: string, groupId: string): Promise<void> {
+  await client.query('update games set group_id = $2 where id = $1', [gameId, groupId]);
+}
+
 /** Appends a player_added event as admin — exercises the same trigger a real host insert would. */
 export async function addPlayer(
   client: PoolClient,

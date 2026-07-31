@@ -14,7 +14,7 @@
 
 type Row = Record<string, unknown>;
 
-export type RpcHandler = (args: Record<string, unknown>) => { error: Error | null };
+export type RpcHandler = (args: Record<string, unknown>) => { data?: unknown; error: Error | null };
 
 export class FakePostgrestClient {
   readonly tables = new Map<string, Row[]>();
@@ -51,10 +51,33 @@ export class FakePostgrestClient {
     return new FakeQueryBuilder(this.tables.get(table)!, this.uniqueColumns.get(table) ?? [], failure);
   }
 
-  rpc(name: string, args: Record<string, unknown> = {}): Promise<{ error: Error | null }> {
+  rpc(name: string, args: Record<string, unknown> = {}): FakeRpcBuilder {
     const handler = this.rpcHandlers.get(name);
     if (!handler) throw new Error(`FakePostgrestClient: no handler registered for rpc "${name}"`);
-    return Promise.resolve(handler(args));
+    const result = handler(args);
+    return new FakeRpcBuilder({ data: result.data ?? null, error: result.error });
+  }
+}
+
+/** `.rpc()`'s result, thenable like the real builder, with a no-op `.returns<T>()` for chaining. */
+class FakeRpcBuilder implements PromiseLike<{ data: unknown; error: Error | null }> {
+  constructor(private readonly result: { data: unknown; error: Error | null }) {}
+
+  returns(): this {
+    return this;
+  }
+
+  single(): this {
+    return this;
+  }
+
+  then<TResult1 = { data: unknown; error: Error | null }, TResult2 = never>(
+    onfulfilled?:
+      | ((value: { data: unknown; error: Error | null }) => TResult1 | PromiseLike<TResult1>)
+      | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return Promise.resolve(this.result).then(onfulfilled, onrejected);
   }
 }
 
@@ -126,6 +149,11 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
     return this;
   }
 
+  in(column: string, values: readonly unknown[]): this {
+    this.filters.push([`${column}[]`, values]);
+    return this;
+  }
+
   gt(column: string, value: unknown): this {
     this.filters.push([`${column}>`, value]);
     return this;
@@ -147,6 +175,7 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
   private matches(row: Row): boolean {
     return this.filters.every(([column, value]) => {
       if (column.endsWith('>')) return (row[column.slice(0, -1)] as number) > (value as number);
+      if (column.endsWith('[]')) return (value as unknown[]).includes(row[column.slice(0, -2)]);
       return row[column] === value;
     });
   }

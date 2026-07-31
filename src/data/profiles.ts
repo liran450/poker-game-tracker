@@ -76,6 +76,41 @@ export async function getProfile(
   return data ? toProfile(data) : null;
 }
 
+export interface PublicProfile {
+  readonly id: string;
+  readonly username: string;
+  readonly displayName: string;
+}
+
+interface PublicProfileRow {
+  readonly id: string;
+  readonly username: string;
+  readonly display_name: string;
+}
+
+/**
+ * `profiles_public` (co-members-only username/display_name/avatar_url — see the RLS migration's
+ * comment) — used to render viewer/player names the caller doesn't already know locally, e.g. the
+ * share sheet's viewer list (docs/build/PLAN.md step 13).
+ */
+export async function getProfilesPublic(
+  userIds: readonly string[],
+  client: SupabaseClient = requireClient(),
+): Promise<PublicProfile[]> {
+  if (userIds.length === 0) return [];
+  const { data, error } = await client
+    .from('profiles_public')
+    .select('id, username, display_name')
+    .in('id', userIds)
+    .returns<PublicProfileRow[]>();
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+  }));
+}
+
 export async function createProfile(
   input: CreateProfileInput,
   client: SupabaseClient = requireClient(),

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AppShell } from '@components/AppShell';
+import { AnnouncementBanner } from '@components/AnnouncementBanner';
 import { BottomSheet } from '@components/BottomSheet';
 import { Snackbar } from '@components/Snackbar';
 import { SyncIndicator } from '@components/SyncIndicator';
@@ -13,15 +14,18 @@ import { AuditLogDrawer } from './AuditLogDrawer';
 import { BuyInBatchBar } from './BuyInBatchBar';
 import { CashPaidSheet } from './CashPaidSheet';
 import { EndGameConfirmSheet } from './EndGameConfirmSheet';
+import { HandOverHostSheet, TakeOverHostConfirm } from './HostControlSheets';
+import { PendingRequestsSheet } from './PendingRequestsSheet';
 import { PlayerActionsSheet } from './PlayerActionsSheet';
 import { PlayerRow } from './PlayerRow';
 import { PotBanner } from './PotBanner';
 import { PotResolutionSheet } from './PotResolutionSheet';
 import { SettleSheet } from './SettleSheet';
 import { SharedCostsSheet } from './SharedCostsSheet';
+import { ShareSheet } from './ShareSheet';
 import { useBuyInBatchStore, type BuyInBatchEntry } from './buyInBatch';
 import { formatBuyInChange } from './buyInText';
-import { formatTimeOfDay } from './time';
+import { formatDateShort, formatTimeOfDay } from './time';
 import { buildAuditLog } from '@core/auditLog';
 import {
   addBuyIn,
@@ -35,6 +39,7 @@ import {
   renamePlayer,
   reopenPlayer,
   setCashPaid,
+  setPlayerNickname,
   settlePlayer,
   setUnaccounted,
   undoEvent,
@@ -46,10 +51,17 @@ import { useSyncState } from '@core/offline/useSyncState';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { useElapsedTime } from '../../hooks/useElapsedTime';
 import { useLiveGameSync } from '../../hooks/useLiveGameSync';
+import { useSession } from '../../hooks/useSession';
 import { useWakeLock } from '../../hooks/useWakeLock';
 import { dedupeDisplayNames, firstBuyInTimestamp, renderPlayerName } from '@core/players';
 import { add, formatChipValue, formatMoney, minor, sum, type Minor } from '@core/money';
 import { computePotStatus } from '@core/pot';
+import { getHostLastSyncedAt, handOverHost, takeOverHost } from '@data/hostControl';
+import { getProfilesPublic } from '@data/profiles';
+import { listPendingClaims } from '@data/claims';
+import { listPendingJoinRequests } from '@data/joinRequests';
+
+const PENDING_REQUESTS_POLL_MS = 20_000;
 
 type CashPaidTarget = { playerId: string; name: string; currentAmountMinor: Minor };
 type SettleTarget = { playerId: string; name: string; mode: 'settle' | 'edit'; initialChips: number };
@@ -71,6 +83,7 @@ export interface LiveGameViewProps {
 export function LiveGameView({ gameId }: LiveGameViewProps) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const session = useSession();
   const game = useGame(gameId);
   const recentNames =
     useLiveQuery(() => listRecentPlayers().then((players) => players.map((p) => p.name)), []) ?? [];
@@ -84,6 +97,14 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
   const [potResolutionOpen, setPotResolutionOpen] = useState(false);
   const [auditLogOpen, setAuditLogOpen] = useState(false);
   const [endGameOpen, setEndGameOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [pendingRequestsOpen, setPendingRequestsOpen] = useState(false);
+  const [handOverOpen, setHandOverOpen] = useState(false);
+  const [takeOverOpen, setTakeOverOpen] = useState(false);
+  const [hostLastSyncedAt, setHostLastSyncedAt] = useState<string | null>(null);
+  const [viewerNames, setViewerNames] = useState<ReadonlyMap<string, string>>(new Map());
+  const [pendingCount, setPendingCount] = useState(0);
+  const [takeoverAnnouncement, setTakeoverAnnouncement] = useState<string | null>(null);
 
   const batch = useBuyInBatchStore();
   const sync = useSyncState(gameId);
@@ -91,6 +112,68 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
   useBeforeUnloadGuard(sync.pendingCount > 0);
   useLiveGameSync(gameId);
   const elapsed = useElapsedTime(game?.state.startedAt ?? null);
+
+  const isHost = session.cloudConfigured && game?.state.hostId !== null && game?.state.hostId === session.user?.id;
+  const viewerIds = game ? [...game.state.viewers] : [];
+  const viewerIdsKey = viewerIds.join(',');
+  const seenHostTakeoverEventIds = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    // An empty viewer list needs no fetch — `viewerNames` staying stale here is harmless,
+    // nothing renders a lookup for an id that isn't in `viewerIds` in the first place.
+    if (!session.cloudConfigured || viewerIds.length === 0) return;
+    let cancelled = false;
+    void getProfilesPublic(viewerIds).then((profiles) => {
+      if (!cancelled) setViewerNames(new Map(profiles.map((p) => [p.id, p.displayName])));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.cloudConfigured, viewerIdsKey]);
+
+  useEffect(() => {
+    if (!isHost) return;
+    let cancelled = false;
+    const refresh = () => {
+      void Promise.all([listPendingJoinRequests(gameId), listPendingClaims(gameId)]).then(
+        ([requests, claims]) => {
+          if (!cancelled) setPendingCount(requests.length + claims.length);
+        },
+      );
+    };
+    refresh();
+    const interval = setInterval(refresh, PENDING_REQUESTS_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isHost, session.cloudConfigured, gameId, pendingRequestsOpen]);
+
+  useEffect(() => {
+    if (!game) return;
+    const takeoverIds = game.events.filter((e) => e.type === 'host_taken_over').map((e) => e.clientEventId);
+
+    // First render: remember every takeover that already happened before this view opened,
+    // without announcing any of them — the banner is for takeovers witnessed live, not history.
+    if (seenHostTakeoverEventIds.current === null) {
+      seenHostTakeoverEventIds.current = new Set(takeoverIds);
+      return;
+    }
+
+    const newEvent = game.events.find(
+      (e) => e.type === 'host_taken_over' && !seenHostTakeoverEventIds.current!.has(e.clientEventId),
+    );
+    if (!newEvent) return;
+    seenHostTakeoverEventIds.current = new Set(takeoverIds);
+
+    const newHostPlayer = [...game.state.players.values()].find((p) => p.userId === newEvent.actorId);
+    const newHostName = newHostPlayer ? renderPlayerName(newHostPlayer) : viewerNames.get(newEvent.actorId);
+    setTakeoverAnnouncement(
+      t('hostControl.announcement', { name: newHostName ?? t('share.unknownViewer') }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game?.events.length]);
 
   if (!game?.record) return null;
 
@@ -114,6 +197,23 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
   const sharedCostsTotal = sum(sharedCosts.map((c) => c.amountMinor));
   const totalCashPaid = sum(activePlayers.map((p) => p.cashPaidMinor));
   const unsettledPlayers = activePlayers.filter((p) => !p.isSettled);
+
+  const currentUserId = session.user?.id ?? null;
+  const isSignedInPlayerOrViewer =
+    currentUserId !== null &&
+    (activePlayers.some((p) => p.userId === currentUserId) || state.viewers.has(currentUserId));
+  const currentHostPlayer = activePlayers.find((p) => p.userId === state.hostId);
+  const currentHostName =
+    (state.hostId !== null ? viewerNames.get(state.hostId) : undefined) ??
+    (currentHostPlayer ? renderPlayerName(currentHostPlayer) : t('share.unknownViewer'));
+  const handOverTargets = [
+    ...activePlayers
+      .filter((p) => p.userId !== null && p.userId !== state.hostId)
+      .map((p) => ({ userId: p.userId!, name: displayNames.get(p.id) ?? renderPlayerName(p) })),
+    ...[...state.viewers]
+      .filter((id) => id !== state.hostId)
+      .map((id) => ({ userId: id, name: viewerNames.get(id) ?? t('share.unknownViewer') })),
+  ];
 
   // Chip units, not money — how many chips are still uncounted across the
   // table, used only for the settle sheet's soft "exceeds remaining" warning.
@@ -173,9 +273,16 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
                 {elapsed}
               </span>
               <SyncIndicator state={sync.state} pendingCount={sync.pendingCount} />
-              <IconButton label={t('game.menu')} onClick={() => setGameMenuOpen(true)}>
-                {'⋯'}
-              </IconButton>
+              <div className="relative">
+                <IconButton label={t('game.menu')} onClick={() => setGameMenuOpen(true)}>
+                  {'⋯'}
+                </IconButton>
+                {isHost && pendingCount > 0 && (
+                  <span className="pointer-events-none absolute -top-1 -end-1 flex size-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-on-accent">
+                    {pendingCount}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <p className="text-center text-body-sm text-fg-tertiary">
@@ -196,6 +303,11 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
               {t('sharedCosts.summaryLine', { amount: formatMoney(sharedCostsTotal, { locale, currency }) })}
             </p>
           )}
+          {takeoverAnnouncement && (
+            <AnnouncementBanner onDismiss={() => setTakeoverAnnouncement(null)}>
+              {takeoverAnnouncement}
+            </AnnouncementBanner>
+          )}
         </div>
       }
       footer={
@@ -203,6 +315,14 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
           <Button variant="primary" fullWidth onClick={() => setAddSheetOpen(true)}>
             {t('game.addPlayer')}
           </Button>
+          {/* share_links is is_host-only at the RLS layer for every game, private or not
+              (03-data-model.md#row-level-security's table; see docs/build/NOTES.md for the
+              tension with 04-ux-spec.md's private-game section, which the RLS layer wins). */}
+          {session.cloudConfigured && isHost && (
+            <Button variant="secondary" onClick={() => setShareOpen(true)}>
+              {t('ui.share')}
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => setAuditLogOpen(true)}>
             {t('auditLog.actionBarLabel')}
           </Button>
@@ -257,7 +377,10 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
           playerName={displayNames.get(actionsPlayer.id) ?? ''}
           hasBuyIns={actionsPlayer.buysCount > 0}
           isSettled={actionsPlayer.isSettled}
+          isRegistered={actionsPlayer.userId !== null}
+          currentNickname={actionsPlayer.nickname}
           onRename={(name) => void renamePlayer(gameId, actionsPlayer.id, name)}
+          onSetNickname={(nickname) => void setPlayerNickname(gameId, actionsPlayer.id, nickname)}
           onRemove={() => void removePlayer(gameId, actionsPlayer.id)}
           onSettle={() =>
             setSettleTarget({
@@ -348,16 +471,57 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
       )}
 
       <BottomSheet open={gameMenuOpen} onClose={() => setGameMenuOpen(false)} title={t('game.menu')}>
-        <Button
-          variant="secondary"
-          fullWidth
-          onClick={() => {
-            setGameMenuOpen(false);
-            setSharedCostsOpen(true);
-          }}
-        >
-          {t('sharedCosts.title')}
-        </Button>
+        <div className="flex flex-col gap-2.5">
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => {
+              setGameMenuOpen(false);
+              setSharedCostsOpen(true);
+            }}
+          >
+            {t('sharedCosts.title')}
+          </Button>
+          {isHost && (
+            <>
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => {
+                  setGameMenuOpen(false);
+                  setPendingRequestsOpen(true);
+                }}
+              >
+                {pendingCount > 0
+                  ? t('pendingRequests.title') + ` (${pendingCount})`
+                  : t('pendingRequests.title')}
+              </Button>
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => {
+                  setGameMenuOpen(false);
+                  setHandOverOpen(true);
+                }}
+              >
+                {t('hostControl.menuHandOver')}
+              </Button>
+            </>
+          )}
+          {session.cloudConfigured && !isHost && isSignedInPlayerOrViewer && (
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => {
+                setGameMenuOpen(false);
+                void getHostLastSyncedAt(gameId).then(setHostLastSyncedAt);
+                setTakeOverOpen(true);
+              }}
+            >
+              {t('hostControl.menuTakeOver')}
+            </Button>
+          )}
+        </div>
       </BottomSheet>
 
       <SharedCostsSheet
@@ -431,6 +595,64 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
           void beginSettlement(gameId);
         }}
       />
+
+      {session.cloudConfigured && isHost && currentUserId !== null && (
+        <ShareSheet
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          gameId={gameId}
+          hostUserId={currentUserId}
+          viewerUserIds={viewerIds}
+          viewerNames={viewerNames}
+          isFinished={false}
+          liveStatus={{
+            gameName: record.name ?? '',
+            date: formatDateShort(new Date()),
+            buyAmountMinor,
+            chipsPerBuy,
+            currency,
+            locale,
+            totalMinor: totalCashPaid,
+            players: activePlayers.map((p) => ({
+              name: displayNames.get(p.id) ?? '',
+              buysCount: p.buysCount,
+              owedMinor: minor(p.buysCount * buyAmountMinor),
+              cashPaidMinor: p.cashPaidMinor,
+              isSettled: p.isSettled,
+              chipsFinal: p.chipsFinal,
+            })),
+          }}
+        />
+      )}
+
+      {session.cloudConfigured && isHost && (
+        <PendingRequestsSheet
+          open={pendingRequestsOpen}
+          onClose={() => setPendingRequestsOpen(false)}
+          gameId={gameId}
+          playerNames={displayNames}
+        />
+      )}
+
+      {session.cloudConfigured && isHost && (
+        <HandOverHostSheet
+          open={handOverOpen}
+          onClose={() => setHandOverOpen(false)}
+          targets={handOverTargets}
+          onHandOver={(userId) => void handOverHost(gameId, userId)}
+        />
+      )}
+
+      {session.cloudConfigured && !isHost && isSignedInPlayerOrViewer && (
+        <TakeOverHostConfirm
+          open={takeOverOpen}
+          onClose={() => setTakeOverOpen(false)}
+          onConfirm={() => void takeOverHost(gameId)}
+          currentHostName={currentHostName}
+          hostLastSyncedAt={hostLastSyncedAt}
+          locale={locale}
+        />
+      )}
 
       {singleEntry && (
         <Snackbar

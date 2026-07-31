@@ -12,7 +12,12 @@ export interface PlayerActionsSheetProps {
   /** Removing a player with buy-ins needs confirmation. */
   hasBuyIns: boolean;
   isSettled: boolean;
+  /** A signed-in (non-guest) player — their base name comes from the account, so the host edits
+   * a per-game nickname instead of the name itself (core/players.ts#renderPlayerName). */
+  isRegistered: boolean;
+  currentNickname: string | null;
   onRename: (name: string) => void;
+  onSetNickname: (nickname: string) => void;
   onRemove: () => void;
   /** Opens the settle sheet (row is active). */
   onSettle: () => void;
@@ -41,7 +46,10 @@ export function PlayerActionsSheet({
   playerName,
   hasBuyIns,
   isSettled,
+  isRegistered,
+  currentNickname,
   onRename,
+  onSetNickname,
   onRemove,
   onSettle,
   onReopen,
@@ -51,11 +59,15 @@ export function PlayerActionsSheet({
   const { t } = useTranslation();
   const [renaming, setRenaming] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
-  const [draftName, setDraftName] = useState(playerName);
+  const [draftName, setDraftName] = useState(isRegistered ? (currentNickname ?? '') : playerName);
 
   function saveRename(): void {
     const trimmed = draftName.trim();
-    if (trimmed) onRename(trimmed);
+    if (isRegistered) {
+      onSetNickname(trimmed);
+    } else if (trimmed) {
+      onRename(trimmed);
+    }
     onClose();
   }
 
@@ -79,7 +91,7 @@ export function PlayerActionsSheet({
         {renaming ? (
           <div className="flex flex-col gap-3">
             <TextField
-              aria-label={t('players.renameLabel')}
+              aria-label={t(isRegistered ? 'players.nicknameLabel' : 'players.renameLabel')}
               value={draftName}
               autoFocus
               onChange={(event) => setDraftName(event.target.value)}
@@ -111,7 +123,7 @@ export function PlayerActionsSheet({
               {t('players.cashPaid')}
             </Button>
             <Button variant="secondary" fullWidth onClick={() => setRenaming(true)}>
-              {t('players.rename')}
+              {t(isRegistered ? 'players.setNickname' : 'players.rename')}
             </Button>
             <Button variant="destructive" fullWidth onClick={handleRemove}>
               {t('players.remove')}

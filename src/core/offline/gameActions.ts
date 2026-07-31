@@ -159,6 +159,29 @@ export async function renamePlayer(gameId: string, playerId: string, name: strin
 }
 
 /**
+ * A registered player's per-game nickname (docs/build/PLAN.md step 13, "Nicknames for
+ * registered players") — `core/players.ts#renderPlayerName` composes it as
+ * `nickname (account name)`. An empty string clears it back to the bare account name.
+ */
+export async function setPlayerNickname(
+  gameId: string,
+  playerId: string,
+  nickname: string,
+): Promise<void> {
+  const actorId = await getActorId();
+  await appendEvent({
+    clientEventId: generateClientEventId(),
+    gameId,
+    playerId,
+    actorId,
+    clientCreatedAt: nextTimestamp(),
+    undoneBy: null,
+    type: 'nickname_set',
+    payload: { nickname: nickname.trim() || null },
+  });
+}
+
+/**
  * One tap, one commutative increment (04-ux-spec.md#the-buy-in-counter--the-most-important-interaction-in-the-app).
  * Returns the appended event so the caller (the coalescing-undo batch state)
  * can hand it straight to `undoEvent` without a re-query.
