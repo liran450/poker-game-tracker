@@ -45,6 +45,45 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### `VITE_*` secrets on the same CI step that runs the test suite let a test reach the real network
+**Step 12 (CI, post-merge) · 2026-07-31 · trap**
+
+Wiring `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` into `deploy.yml`'s `npm run verify` step (so
+the deployed build embeds real Supabase config) broke CI: `npm run verify` runs `vitest run` as
+part of the same `run-s` chain, and Vitest — built on Vite — populates `import.meta.env` straight
+from `process.env` at the `VITE_` prefix exactly like a real build does. So the *test* process saw
+the real project's URL and anon key too, `src/data/supabaseClient.ts`'s `supabase` singleton
+constructed a real `SupabaseClient` instead of staying `null`, and two tests that specifically
+assert the *unconfigured* behaviour (`auth.test.ts`'s `isCloudConfigured` and `signInWithGoogle`
+"throws when no client is configured", both relying on the real singleton being `null` in a plain
+dev/CI environment) instead exercised the real client: `signInWithGoogle`'s default parameter
+resolved to the actual project, called `signInWithOAuth` against it for real, and the run crashed
+with an unrelated-looking `TypeError` from a stray WebSocket event deep in `undici` — Node's fetch
+implementation reacting to a real network response from Supabase's Auth/Realtime endpoint that
+nothing in the test was expecting to talk to. Reproduced locally in one command:
+`VITE_SUPABASE_URL=... VITE_SUPABASE_ANON_KEY=... npx vitest run src/data/auth.test.ts` fails
+identically outside CI too — this was never CI-specific, just never exercised locally with real
+values set.
+
+**The fix is structural, not patching the two assertions:** `deploy.yml`'s `npm run verify` step no
+longer carries the secrets at all — the whole point of `verify` is to prove the app builds and
+tests pass in a hermetic environment, and that already includes proving the *unconfigured* build
+works (which it does, matching every local run in this sandbox). A **separate** step,
+`Production build with real Supabase config` (`npm run build` again, gated `if: github.ref ==
+'refs/heads/main'`), runs only right before `upload-pages-artifact`, so the secrets exist for
+exactly one build invocation and are never visible to `vitest`, `eslint`, or anything else in the
+chain. Verified both directions locally: `vitest run` with the vars set reproduces the crash;
+`npm run build` alone with the vars set correctly embeds the real origin into the CSP
+(`connect-src ... axsftugpsysoxersudwr.supabase.co wss://...`) with nothing else in the pipeline
+touching them.
+
+**Rule for any future secret wired into a CI step that also runs tests:** check what *else* runs
+in that same step or script chain (`run-s`/`npm-run-all`/`&&` all count) before assuming a secret
+scoped to "the build" stays scoped to the build — a test runner built on the same tool the app uses
+(Vite/Vitest, but this generalises to anything reading `process.env` ambiently) will see it too. A
+test that exercises "the unconfigured/no-credentials path" is exactly the one a stray real secret
+breaks, and it can break by actually reaching the network, not just failing an assertion.
+
 ### A cancellation flag captured across an `await` narrows to "always" its initial value — use a ref, and expect one more narrowing surprise even then
 **Step 12 · 2026-07-31 · trap**
 

@@ -1264,12 +1264,24 @@ built and tested but not cron-wired (step 16, explicitly out of scope here).
   the device. `migrateAllLocalGames` runs the whole sweep across every cached game, one game failing
   (logged, not thrown) never stopping the rest, since every step it calls is independently retriable.
   `SessionProvider` calls it once whenever a profile is adopted (freshly created or found on sign-in).
-- **`.github/workflows/deploy.yml`** — the `verify` job's `npm run verify` step (which includes `vite
-  build`) now sets `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` from the same `SUPABASE_URL`/
-  `SUPABASE_ANON_KEY` repo secrets `maintenance.yml` already reads. `vite.config.ts`'s CSP plugin and
-  `src/data/supabaseClient.ts` were both already gated on these vars from session 1 — this was the one
-  remaining wire, closing session 1's "Left undone #5". Empty on a fork PR (no secrets), which
-  `supabaseClient.ts` already treats as "cloud unavailable" — the build stays green either way.
+- **`.github/workflows/deploy.yml`** — a dedicated `Production build with real Supabase config`
+  step (`npm run build`, gated `if: github.ref == 'refs/heads/main'`, run right before
+  `upload-pages-artifact`) sets `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` from the same
+  `SUPABASE_URL`/`SUPABASE_ANON_KEY` repo secrets `maintenance.yml` already reads — closing
+  session 1's "Left undone #5". **Not** set on the `npm run verify` step itself — see the CI-caught
+  bug below and `NOTES.md`'s dedicated entry: `vitest run` is part of that same chain and reads
+  `import.meta.env` from `process.env` exactly like a real build, so a secret scoped there isn't
+  scoped to "the build" at all, and two tests that specifically exercise the *unconfigured* path
+  ended up constructing a real `SupabaseClient` and calling out to the live project. `vite.config.ts`'s
+  CSP plugin and `src/data/supabaseClient.ts` were both already gated on these vars from session 1.
+  Empty on a fork PR (no secrets, and the step is `main`-only regardless) — `supabaseClient.ts`
+  already treats that as "cloud unavailable" either way.
+- **A real CI failure, found and fixed after this PR opened.** The first push of this step's `deploy.yml`
+  change put the two secrets directly on `npm run verify`'s step, which broke CI exactly as described
+  above — reproduced locally with the same env vars set, fixed by moving the secrets to the separate
+  main-only rebuild step instead of touching the two correct test assertions. See `NOTES.md`'s
+  dedicated entry for the full mechanism; this is the one thing in this step that shipped broken and
+  needed a second look before merge.
 - **A new test closing the "airplane mode, then reconnect" exit criterion** (`outbox.test.ts`): events
   appended while every push fails (a `StubSyncTransport` with `failureRate: 1`, simulating airplane
   mode) stay queued, not lost or duplicated; a fresh transport pointed at the same `FakeSyncServer`
