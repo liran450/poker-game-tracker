@@ -674,3 +674,22 @@ export async function reopenGame(gameId: string): Promise<void> {
   });
   await db.snapshots.delete(gameId);
 }
+
+/**
+ * `מחק משחק` (03-data-model.md#retention-and-archiving, docs/build/PLAN.md step 16): wipes this
+ * device's own copy of a game — cached record, event log, any still-queued outbox entries, and
+ * its snapshot. Deleting an unfinished game "deletes everything" exactly because there is no
+ * permanent-table snapshot to survive it; a finished game's snapshot lives server-side in
+ * game_summaries/player_results/transfer_summaries, which this function never touches — those
+ * are written only by finalize_game() and have no delete policy for any role at all
+ * (03-data-model.md). The remote games row (which cascades tiers 2/3 there) is a separate,
+ * host-gated call — `src/data/gameDeletion.ts`, since only `src/data/` may import `supabase-js`.
+ */
+export async function deleteGameLocally(gameId: string): Promise<void> {
+  await db.transaction('rw', db.games, db.events, db.outbox, db.snapshots, async () => {
+    await db.games.delete(gameId);
+    await db.events.where('gameId').equals(gameId).delete();
+    await db.outbox.where('gameId').equals(gameId).delete();
+    await db.snapshots.delete(gameId);
+  });
+}

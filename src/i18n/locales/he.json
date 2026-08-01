@@ -13,7 +13,8 @@
     "empty": "עוד לא שיחקת. נתחיל?",
     "startFirstGame": "התחל משחק ראשון",
     "newGame": "+ משחק חדש",
-    "playerCount": "{{count}} שחקנים"
+    "playerCount": "{{count}} שחקנים",
+    "recentGamesTitle": "משחקים אחרונים"
   },
   "auth": {
     "title": "כניסה לחשבון",
@@ -41,7 +42,9 @@
     "signedInAs": "מחובר/ת בתור {{name}}",
     "usernameLine": "@{{username}}",
     "signOut": "התנתקות",
-    "migratingGames": "מעלה משחקים מקומיים לענן…"
+    "migratingGames": "מעלה משחקים מקומיים לענן…",
+    "exportAllHistory": "ייצוא כל ההיסטוריה",
+    "exportAllHistoryEmpty": "עוד אין משחקים לייצוא"
   },
   "statistics": {
     "title": "סטטיסטיקה",
@@ -217,7 +220,9 @@
     "addPlayer": "+ שחקן",
     "menu": "אפשרויות משחק",
     "endGame": "סיום משחק",
-    "inviteFromGroup": "הזמן מהחבורה"
+    "inviteFromGroup": "הזמן מהחבורה",
+    "deleteGame": "מחק משחק",
+    "exportGame": "ייצוא משחק"
   },
   "inviteFromGroupSheet": {
     "title": "הזמנת חבר מהחבורה",
@@ -382,7 +387,23 @@
     "reopenExpired": "חלון הפתיחה מחדש נסגר",
     "reopenConfirmTitle": "פתיחת המשחק מחדש",
     "reopenConfirmDesc": "המשחק ייפתח מחדש לעריכה. הסיכום הנוכחי יימחק ויחושב שוב בסיום הבא.",
-    "reopenConfirmLabel": "פתח מחדש"
+    "reopenConfirmLabel": "פתח מחדש",
+    "exportGame": "ייצוא משחק",
+    "deleteGame": "מחק משחק"
+  },
+  "deleteGame": {
+    "title": "מחיקת משחק",
+    "descriptionFinished": "הנתונים המפורטים יימחקו. הסטטיסטיקה תישמר.",
+    "descriptionUnfinished": "המשחק טרם הסתיים. כל הנתונים יימחקו לצמיתות ולא ניתן יהיה לשחזר אותם.",
+    "exportFirst": "ייצוא לפני המחיקה",
+    "confirm": "מחק משחק"
+  },
+  "pastGame": {
+    "notFoundTitle": "המשחק לא נמצא",
+    "notFoundDescription": "המשחק נמחק, פג תוקפו, או שאין לך הרשאה לצפות בו",
+    "auditLogUnavailable": "יומן הפעילות של משחק זה כבר לא זמין",
+    "loading": "טוען…",
+    "exportGame": "ייצוא משחק"
   },
   "install": {
     "title": "התקנת האפליקציה",

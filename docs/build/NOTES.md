@@ -45,6 +45,57 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### `game_ended`'s push never called `finalize_game()` — every signed-in host's game was missing its permanent snapshot
+**Step 16 · 2026-08-02 · trap**
+
+`src/data/supabaseSyncTransport.ts`'s `game_ended` case (written in steps 12/13) only ever updated
+`games.status`/`ended_at`/`claim_deadline`/`reopen_deadline` directly. `finalize_game()` — the
+`SECURITY DEFINER` function that's the *only* way `game_summaries`/`player_results`/
+`transfer_summaries` ever get a row — was called from exactly one place in the whole client:
+`localGameMigration.ts`'s one-time "upload a pre-sign-in local game" path. That means every game
+played signed-in from the start, ended the normal way, silently never got a permanent snapshot at
+all — no error, nothing in any log, just an absent row forever. Every one of step 15's statistics
+queries reads *only* from those three tables, so this would have made group/personal statistics
+permanently empty for real usage, and would have made every real game permanently unpurgeable
+(`purge_expired_game_data()` refuses to touch a game with no snapshot, by design). Found while
+building step 16's delete/export/purge-adjacent work, which is exactly the point where "does a
+normal game actually get a permanent snapshot" stops being an abstract question.
+
+**Fixed** by calling `client.rpc('finalize_game', { p_game_id })` right after the `games` update in
+the same `game_ended` case. Safe for two reasons: the server-side `AFTER INSERT` trigger has
+already applied every event earlier in the same push's batch by the time this line runs (game_ended
+is processed after the bulk `game_events` upsert, not concurrently with it), and `finalize_game`
+itself is idempotent (deletes then rewrites its own three tables), so a retried push after a
+partial failure can never double-write or go stale. **`localGameMigration.ts`'s own explicit
+`finalize_game` call for an already-finished game is *not* now dead code** — a second migration run
+(a re-sign-in) finds an empty outbox, so the `game_ended` case never fires again on that run, and
+the explicit call is the only thing that still finalizes it. `localGameMigration.test.ts`'s
+assertion was updated to expect two calls, not one, with a comment explaining why — don't "fix" it
+back down to one.
+
+**Rule for any future change near this push path:** don't assume a lifecycle event's server-side
+effect is "just the direct table write you can see in the `switch` case" — check whether a
+permanent-table RPC needs to ride along too, the way `game_ended` now does.
+
+### Deleting a game needed no new RPC — the existing RLS-gated `delete from games` was already the right mechanism
+**Step 16 · 2026-08-02 · decision**
+
+Tempting to add a `delete_game()` RPC to match the shape of every other host action
+(`take_over_host`, `hand_over_host`, `decide_join_request`, …). Not needed: `games_delete`'s RLS
+(`host_id = auth.uid()`) already scopes a plain `client.from('games').delete().eq('id', gameId)`
+correctly — a non-host caller's delete simply matches zero rows rather than erroring (the same
+"no path, not an error" shape `group_members_delete` already relies on), and every tier-2/3 table
+already cascades from `games` (`on delete cascade`, present since `20260729120500_game_events.sql`).
+The permanent tier-1 snapshot survives automatically because `game_summaries` was deliberately given
+no foreign key back to `games` at all (`20260729120900_permanent_tables.sql`'s own comment: "the
+games row may no longer exist once purged"). A pre-existing step-11 SQL test
+(`purgeExpiredGameData.test.ts`'s "leaves statistics byte-identical after an explicit deletion of a
+finished game") already exercised this exact mechanism before step 16 built any client-facing
+delete feature — this step's `src/data/gameDeletion.ts#deleteGame` is a thin client wrapper around
+an already-proven, already-simplest path, not a new one. **Don't add a delete RPC "for symmetry"
+later** unless a real requirement (an audit log entry for deletions, say) actually needs
+server-side logic beyond a plain delete.
+
 ### `profiles_public` needs `security_invoker = false` on purpose — don't "fix" it the way `group_player_results` was fixed
 **Step 15 · 2026-08-02 · decision**
 

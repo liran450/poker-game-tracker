@@ -10,6 +10,7 @@ import {
   addSharedCost,
   beginSettlement,
   createGame,
+  deleteGameLocally,
   deleteTransfer,
   editSettledChips,
   editTransfer,
@@ -544,5 +545,39 @@ describe('reopenGame', () => {
 
     expect(fold(await loadGameEvents(gameId)).status).toBe('active');
     expect(await db.snapshots.get(gameId)).toBeUndefined();
+  });
+});
+
+describe('deleteGameLocally', () => {
+  it('wipes the cached record, the full event log, any queued outbox entries and the snapshot', async () => {
+    const { gameId } = await createBalancedFinishedGame();
+    await beginSettlement(gameId);
+    await finalizeGame(gameId, {
+      name: 'פוקר חמישי',
+      playedOn: '2026-07-29',
+      currency: 'ILS',
+      isPrivate: false,
+    });
+    expect(await db.games.get(gameId)).toBeDefined();
+    expect(await db.snapshots.get(gameId)).toBeDefined();
+    expect(await loadGameEvents(gameId)).not.toHaveLength(0);
+    expect(await db.outbox.where('gameId').equals(gameId).count()).toBeGreaterThan(0);
+
+    await deleteGameLocally(gameId);
+
+    expect(await db.games.get(gameId)).toBeUndefined();
+    expect(await db.snapshots.get(gameId)).toBeUndefined();
+    expect(await loadGameEvents(gameId)).toEqual([]);
+    expect(await db.outbox.where('gameId').equals(gameId).count()).toBe(0);
+  });
+
+  it('leaves an unrelated game untouched', async () => {
+    const { gameId: keep } = await createGame(baseInput);
+    const { gameId: gone } = await createGame(baseInput);
+
+    await deleteGameLocally(gone);
+
+    expect(await db.games.get(keep)).toBeDefined();
+    expect(await loadGameEvents(keep)).not.toHaveLength(0);
   });
 });

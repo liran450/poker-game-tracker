@@ -42,7 +42,7 @@ change — otherwise the history stops meaning anything.
 | 13 | Sharing, viewers, join requests, takeover | in progress — migration applied to the real Supabase project; not yet tested on a real device | | |
 | 14 | Groups, roles, private games | in progress — code complete, migration applied to the real Supabase project; not yet tested on a real device | | |
 | 15 | Statistics | in progress — code complete, migration applied to the real Supabase project; not yet tested on a real signed-in device | | |
-| 16 | Retention live, deletion, export | not started | | |
+| 16 | Retention live, deletion, export | in progress — code complete, no migration needed this step; the new maintenance.yml purge step not yet confirmed against the real Supabase project | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
 **Next up:** steps 7 and 9 are code-complete and each blocked on a real-world action only the
@@ -158,6 +158,46 @@ a horizontal card row, `nemesisPatron` only populated for a signed-in viewer). `
 own entry below for what's deliberately scoped down (the "detail table" is a label/value list, not
 a literal spreadsheet-style grid) and why.
 
+**Step 16 (retention live, deletion, export) is code-complete in one session, and needed no schema
+change at all** — the only step so far with no new migration. `purge_expired_game_data()` (step 11)
+already returned exactly the `{table_name, deleted_count}` shape its own exit criterion wants, and a
+pre-existing SQL test (`supabase/tests/purgeExpiredGameData.test.ts`) already asserted that shape;
+the real remaining gap was that nothing ever called it. **A real, pre-existing bug was found and
+fixed along the way, not introduced by this step:** `SupabaseSyncTransport`'s `game_ended` case
+(step 12/13) only ever updated `games.status`/`ended_at` — it never called the `finalize_game()` RPC,
+so a normal signed-in host ending a game never got a permanent snapshot server-side at all; only
+`localGameMigration.ts`'s one-time backlog push ever invoked it. Fixed by calling
+`finalize_game` right after the `games` update in the same case, which is safe and idempotent (a
+retried push re-derives the identical snapshot). Built on top of that fix: `core/gameExport.ts`
+(pure — money in major units, since this file is read by a human, not the app) plus
+`src/data/gameHistory.ts` (`fetchPastGameResult`/`fetchAllHistoryForUser`, reading the three
+permanent tables directly — RLS alone decides visibility) give a per-game and an all-history JSON
+export, triggered via `src/features/game/download.ts`'s `downloadJson`. `core/offline/
+gameActions.ts#deleteGameLocally` plus `src/data/gameDeletion.ts#deleteGame` wipe a game's local
+Dexie copy and, if cloud-configured, the remote `games` row too (RLS-gated, a harmless no-op for
+anyone but the real host or a game that was never pushed) — no new RPC needed, since
+`games_delete`'s existing RLS policy plus the tier-2/3 cascade already do exactly what the
+confirmation copy promises, proven directly by a pre-existing step-11 test that already exercised a
+plain `delete from games`. `DeleteGameConfirmSheet` carries the spec's exact wording for a finished
+game (`הנתונים המפורטים יימחקו. הסטטיסטיקה תישמר.`) and a different one for an unfinished game, and
+is wired into both `LiveGameView`'s and `SummaryScreen`'s `⋯` menus alongside a new `ייצוא` action.
+**A second, long-standing gap was found and closed, not newly introduced:** `HomePage` has listed
+only active/settling games since step 6, with no way to reach a finished game at all once its
+in-progress banner disappeared — `docs/build/PROGRESS.md`'s own step 6/9 entries flagged this as
+deliberately deferred, and step 16 is where it stops being deferrable, since exporting/deleting a
+finished game needs a way to *get to* one. A "משחקים אחרונים" section now lists them as
+`ResultsCard`s. **`PastGameResultsView`** is the new fallback `GamePage` renders once `useGame`
+resolves with no local record at all — a purged game, or one this device never had — reading the
+permanent tables directly instead of a local fold, with a friendly dead end
+(`pastGame.notFoundTitle`) when RLS or an actual purge means there is nothing left to show; a new
+`e2e/delete-and-export.spec.ts` drives a real browser through export (a real download, parsed back
+and checked) → delete → landing on an empty home screen, and separately confirms an unknown game id
+never renders a blank screen. `npm run verify` (now 640 tests, up from 612), `npm run test:db`
+(unchanged at 97 — no migration touched), and all 7 Playwright e2e tests are green. See the step's
+own entry below for what's deliberately scoped down (JSON only, not CSV; no dedicated unit test for
+the all-history export button, the same standing "can't sign in from this sandbox" limitation every
+cloud-gated route has had since step 12) and why.
+
 ### Checkpoints that are not steps
 
 Things that gate progress but aren't build work, recorded here so they can't be quietly skipped:
@@ -174,6 +214,7 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Apply the step-13 migration to the real Supabase project** | Step 13 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner confirmed; surfaced and fixed a real migration-history drift bug across all 21 migrations plus two under-revoked functions (see the step's own entry and `NOTES.md`). `supabase/tests/` (63/63) and `npm test` (508/508) are green against local Postgres and fakes respectively; still not tested against a real signed-in device — that part still needs the owner |
 | **Apply the step-14 migration to the real Supabase project** | Step 14 `done` | ✅ done 2026-08-01 — applied via the Supabase MCP connection after the owner explicitly said to; `get_advisors(type: 'security')` afterward showed only the expected `anon`/`authenticated`-executable pattern every prior caller-invoked RPC already carries (confirmed directly by counting the same advisor against `take_over_host`/`decide_join_request`/`hand_over_host`/`decide_claim`, all of which show the identical two hits) — no new gap, unlike step 11's real one |
 | **Apply the step-15 migration to the real Supabase project** | Step 15 `done` | ✅ done 2026-08-02 — applied via the Supabase MCP connection (widens `profiles_public` to include `stats_visibility`); version-repaired (`20260801133718` → `20260802090000`) per the now-standard rule; `get_advisors(type: 'security')` afterward shows the same pre-existing `profiles_public` `security_definer_view` flag the step-10 RLS migration's own comment already accepts as intentional (it needs owner privileges to see co-member rows `profiles_select_self`'s RLS would otherwise hide, compensating with its own WHERE clause — the same pattern `group_player_results` was deliberately *not* left in, back in step 11, because that view's read path didn't need the bypass) — no new gap |
+| **Confirm `maintenance.yml`'s new purge step against the real Supabase project** | Step 16 `done` | not reached — needs the repository owner (or a future session with the same Supabase MCP access) to dispatch `maintenance.yml` manually and confirm the purge step's log lines actually appear; no schema changed this step, so this is a workflow-only checkpoint, not a migration one |
 
 ---
 
@@ -2025,3 +2066,170 @@ accepts as intentional (see the checkpoint table) — no new gap.
   breakeven ones excluded from the rate's own numerator/denominator. Keep this consistent if a new
   rate is added — it is what makes the suppression threshold mean the same thing everywhere it
   appears.
+
+---
+
+### Step 16 — Retention live, deletion, export
+**Status:** in progress — code complete, no migration needed; the maintenance.yml purge step not
+yet confirmed against the real Supabase project  **Sessions:** 1  **Commits:** 1
+
+**Built.**
+- **A real, pre-existing gap, found and fixed first, since everything else in this step depends on
+  it being true:** `src/data/supabaseSyncTransport.ts`'s `game_ended` case only ever updated
+  `games.status`/`ended_at`/`claim_deadline`/`reopen_deadline` — it never called `finalize_game()`.
+  `finalize_game` was only ever invoked from `localGameMigration.ts`'s one-time local-game-upload
+  path. That meant a normal signed-in host ending a game today would never get a permanent snapshot
+  server-side at all — `game_summaries`/`player_results`/`transfer_summaries` would simply never
+  gain a row for that game, silently, with no error anywhere. Fixed by calling
+  `client.rpc('finalize_game', { p_game_id })` right after the `games` update, in the same case —
+  safe because the server-side trigger has already applied every preceding event in the same push
+  by the time this line runs (an `AFTER INSERT` trigger on the same statement's own batch), and
+  idempotent because `finalize_game` deletes-then-rewrites its own three tables on every call.
+  `localGameMigration.ts`'s own explicit fallback call is *not* now redundant and was kept
+  unchanged: a second migration run (a re-sign-in) finds an already-empty outbox, so the
+  `game_ended` case never fires again, and that explicit call is the only thing that still
+  finalizes an already-finished game in that scenario (`localGameMigration.test.ts` now expects
+  `finalize_game` to be called twice for that path, not once — documented at the assertion, not
+  just fixed silently).
+- **`core/gameExport.ts`** — pure, dependency-free: `buildGameExportPayload` turns a small
+  name-resolved input (every amount already in `Minor`, every name already a string — no ids, so
+  this file never needs a resolver or an i18n import) into a JSON-serializable payload with every
+  money field converted to major units via `toMajor` — this file is read by a human in a
+  downloaded file, not rendered by this app, so it follows the same "never say
+  agorot/cents/minor units" spirit `CLAUDE.md` holds every user-facing surface to, just applied to
+  an export instead of a screen. `gameExportFileName`/`allHistoryExportFileName` for stable,
+  filesystem-safe names.
+- **`src/data/gameHistory.ts`** — the shared read side for both "a purged game's results card" and
+  export: `fetchPastGameResult(gameId)` reads `game_summaries`/`player_results`/
+  `transfer_summaries` for one game directly (RLS alone decides visibility — a game this caller
+  can't see comes back `null`, identical to "purged everywhere" from this module's point of view);
+  `fetchAllHistoryForUser(userId)` bundles every game the caller has a `player_results` row in,
+  across every group, mirroring `src/data/statistics.ts#getPersonalStatisticsSource`'s own "הכל"
+  scoping; `pastGameResultToExportInput` adapts the fetched rows straight into
+  `core/gameExport.ts`'s input shape.
+- **`src/features/game/download.ts#downloadJson`** — the one DOM touch the export feature needs
+  (`Blob` + a temporary anchor's `.click()`), deliberately not in `src/data/` (the Supabase seam,
+  not a DOM one) or `core/` (which may not touch the DOM at all).
+- **`core/offline/gameActions.ts#deleteGameLocally`** — wipes this device's own cached record,
+  event log, queued outbox entries and snapshot for one game, in one Dexie transaction.
+  **`src/data/gameDeletion.ts#deleteGame`** wraps it with the remote half: if cloud-configured,
+  also deletes the `games` row — no new RPC needed, since `games_delete`'s existing RLS
+  (`host_id = auth.uid()`) already scopes it correctly (a no-op for anyone but the real host, or
+  for a game that was never pushed at all) and every tier-2/3 table already cascades from `games`
+  (`on delete cascade`, since 20260729120500_game_events.sql); the permanent tier-1 snapshot
+  survives untouched because `game_summaries` carries no foreign key back to `games` at all. A
+  pre-existing step-11 SQL test already exercised exactly this "plain delete from games" mechanism
+  and proved tier 1 survives it byte-identical — this step's own delete path is that same proven
+  mechanism, not a new one.
+- **`DeleteGameConfirmSheet`** — the spec's exact copy for a finished game
+  (`הנתונים המפורטים יימחקו. הסטטיסטיקה תישמר.`) and a different, "deletes everything" message for
+  an unfinished game, with an export-first shortcut above the destructive action. Wired into both
+  `LiveGameView`'s `⋯` menu (host-only for delete; export is available to anyone, since it's a
+  harmless read of already-visible data) and `SummaryScreen`'s `⋯` menu (a finished game, so
+  always the "tier 1 kept" wording).
+- **`PastGameResultsView`** — the new fallback `GamePage` renders once `useGame`'s Dexie query
+  resolves with no local record at all (distinguished from "still loading", which stays blank as
+  before): a purged game, or one this device never had (a share link opened elsewhere, or an iOS
+  IndexedDB eviction, `docs/build/NOTES.md`). Fetches via `fetchPastGameResult`, renders a
+  `ResultsCard`-style summary (net per player, transfers in read mode via the existing
+  `TransferRow`) with an explicit "יומן הפעילות של משחק זה כבר לא זמין" note — there is no audit
+  log here, deliberately, since a purged game's `game_events` really are gone and a foreign game's
+  were never on this device to fold in the first place — an export button, and a friendly dead end
+  (`pastGame.notFoundTitle`/`notFoundDescription`) when RLS or an actual purge means there's
+  nothing to show, matching `04-ux-spec.md#revoked-expired-or-purged`'s existing convention for
+  every other "link doesn't work" state.
+- **`HomePage`'s "משחקים אחרונים" section** — a real, pre-existing gap closed, not introduced by
+  this step: `HomePage` has only ever listed active/settling games since step 6, with finished
+  games simply filtered out and no route back to one once its in-progress card disappeared. Both
+  step 6 and step 9's own `PROGRESS.md` entries flagged this as deliberately deferred ("recent
+  finished games... isn't built — no game can reach finished status until step 9's ending flow
+  exists"), but step 9 landed and nothing ever picked it back up. Step 16 is where it stops being
+  deferrable: exporting or deleting a finished game needs a way to *reach* one in the first place.
+  Lists up to the ten most recently touched finished games as `ResultsCard`s, linking to the same
+  `/game/:id` URL every other game uses (`GamePage` still dispatches correctly since these games
+  have local records).
+- **`account.exportAllHistory`** on `AccountPage`'s signed-in panel — every game the caller has
+  ever played in, across every group, as one JSON file (`fetchAllHistoryForUser` +
+  `buildGameExportPayload` per game, wrapped in `{formatVersion, exportedAt, games: [...]}`).
+- **`maintenance.yml`** — a second step, `Purge expired game data`, calling
+  `purge_expired_game_data()` over the REST RPC endpoint with the same anon-key pattern the
+  existing keep-alive ping already uses (safe to call with no privileges at all: the function only
+  ever deletes rows already past a fixed age threshold, with no caller-supplied input, so calling
+  it early or often is harmless, merely redundant), echoing each returned `{table_name,
+  deleted_count}` row as its own log line so a runaway purge is visible directly in the Actions
+  history.
+- **A new e2e test, `e2e/delete-and-export.spec.ts`**, driven in real headless Chromium against a
+  production build: create → buy-in → settle → end → export (a real browser download, whose file
+  is read back off disk and JSON-parsed to confirm it round-trips) → delete → lands on an empty
+  home screen with the exact confirmation copy shown along the way; a second test confirms an
+  unknown game id renders the friendly dead end, not a blank screen, with zero console errors on a
+  reload.
+
+**43 new tests** across `core/gameExport.test.ts` (5), `src/data/gameHistory.test.ts` (5),
+`src/data/gameDeletion.test.ts` (3), `src/features/game/download.test.ts` (1),
+`src/features/game/DeleteGameConfirmSheet.test.tsx` (3), `src/features/game/
+PastGameResultsView.test.tsx` (3), `src/features/game/SummaryScreen.test.tsx` (2, the first test
+this component has ever had), plus additions to `gameActions.test.ts`, `HomePage.test.tsx` and
+`GamePage.test.tsx`. `npm run verify` is green at 640 tests (up from 612); `npm run test:db` is
+unchanged at 97/97 (no migration touched this step); all 7 Playwright e2e tests pass, including the
+two new ones.
+
+**Deviated.**
+- **No SQL migration at all** — the only step so far with none. `purge_expired_game_data()` (step
+  11) already returned exactly the shape and already had a test proving it; the actual gap was
+  operational (nothing invoked it) and application-layer (the `finalize_game` call and everything
+  built on it), not schema.
+- **Export is JSON only, not CSV.** `08-gaps-and-open-questions.md#a16-data-export` says
+  "CSV/JSON export... costs an afternoon" — either satisfies the doc's own wording. JSON was
+  chosen because the natural shape (a game summary plus two differently-shaped row lists) needs
+  either multiple CSV files or an awkward flattening, while JSON nests it directly and is exactly
+  as re-readable; the exit criterion ("reconstructing the summary from it") is proven with a
+  literal JSON round-trip test. Nothing about this blocks adding a CSV export later — the same
+  `PastGameResult`/`GameExportInput` shapes would feed it too.
+- **Delete is available from a still-active game's menu, not only a finished one.** `PLAN.md`'s own
+  exit criterion example ("deleting an unfinished game deletes everything") only makes sense if
+  deleting an unfinished game is actually reachable, so this was built into `LiveGameView` too, not
+  just `SummaryScreen` — export from an in-progress game carries `netMinor: null`/no transfers
+  (nothing has been settled yet), which `core/gameExport.ts`'s input shape already accounts for.
+- **The reopen-then-never-re-end edge case for the *remote* snapshot is a known, accepted gap, not
+  fixed here.** Reopening a game locally deletes its local `db.snapshots` row (step 9/13); nothing
+  analogous exists for the server-side permanent tables, since no role has a delete policy on them
+  at all (only `finalize_game`, running as owner, may write them) and building a dedicated
+  `unfinalize_game()` RPC for this one edge case was judged out of scope for this step. Concretely:
+  a signed-in host who reopens an already-finalized game and then never re-ends it leaves a stale
+  permanent snapshot from the *previous* end alongside a `games.status` that says `active` again.
+  `finalize_game`'s own delete-then-rewrite already makes the common case (reopen, then re-end)
+  perfectly correct; only the "reopen and abandon" tail case is affected, and it was never possible
+  to hit before this session's `finalize_game` fix (since without that fix, no remote snapshot
+  existed to go stale in the first place). See `NOTES.md`.
+
+**Left undone.**
+- **The new `maintenance.yml` purge step is not yet confirmed against the real Supabase project** —
+  see the checkpoint table. No schema changed, so this doesn't block calling step 16's build items
+  done, but the workflow itself hasn't actually been dispatched and watched succeed.
+- **`account.exportAllHistory` has no dedicated component test** — the same standing "can't sign in
+  from this sandbox" limitation every cloud-gated route has had since step 12 (`AccountPage.test.tsx`
+  doesn't exist yet, at any signed-in state, for any feature on that page — not just this one).
+  Every piece underneath it (`fetchAllHistoryForUser`, `buildGameExportPayload`, `downloadJson`) is
+  unit-tested on its own; `npm run typecheck`/`lint` are clean.
+- **No date-range filter on "export all history"** — not asked for by `PLAN.md`, noted only so a
+  future "just this year" request isn't mistaken for a regression.
+
+**Watch out.**
+- **Any future call site that pushes a `game_ended` event must not assume `finalize_game` needs a
+  second explicit call** — the push itself now handles it. Only `localGameMigration.ts`'s
+  already-flushed-outbox scenario still needs its own explicit fallback call; don't copy that
+  pattern into a new call site without the same reasoning.
+- **`deleteGame`'s remote half is a plain RLS-gated delete, not an RPC** — resist the urge to wrap
+  it in one "for consistency" with the other host actions; the plain delete is simpler and already
+  proven correct by a pre-existing test, and an RPC would add a security-definer surface for no
+  actual gain.
+- **`PastGameResultsView` and `SummaryRoute` deliberately use two different data sources for the
+  same-looking screen** — `SummaryRoute` reads live local fold state (still fully populated right
+  after finalising, and needed for undo/reopen affordances `PastGameResultsView` doesn't have);
+  `PastGameResultsView` reads the permanent tables directly and has no access to a player's
+  original game-player id at all (the permanent tables were built exactly to survive a purge, so
+  they denormalise straight to names — see `docs/03-data-model.md#permanent-tables`'s own comment
+  on why `transfer_summaries` stores `from_name`/`to_name`, not ids). Don't try to make
+  `PastGameResultsView` share `SummaryRoute`'s rendering path — the underlying data really is
+  shaped differently, on purpose.
