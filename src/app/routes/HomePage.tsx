@@ -50,6 +50,9 @@ export function HomePage() {
           <h1 className="text-heading font-bold">{t('home.title')}</h1>
           {session.cloudConfigured && (
             <div className="flex items-center gap-1">
+              <IconButton label={t('nav.statistics')} onClick={() => void navigate('/statistics')}>
+                {'📊'}
+              </IconButton>
               <IconButton label={t('nav.groups')} onClick={() => void navigate('/groups')}>
                 {'👥'}
               </IconButton>

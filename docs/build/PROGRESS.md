@@ -41,7 +41,7 @@ change — otherwise the history stops meaning anything.
 | 12 | Auth and cloud sync | done | 2026-07-31 | _(this commit)_ |
 | 13 | Sharing, viewers, join requests, takeover | in progress — migration applied to the real Supabase project; not yet tested on a real device | | |
 | 14 | Groups, roles, private games | in progress — code complete, migration applied to the real Supabase project; not yet tested on a real device | | |
-| 15 | Statistics | not started | | |
+| 15 | Statistics | in progress — code complete, migration applied to the real Supabase project; not yet tested on a real signed-in device | | |
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
 
@@ -133,6 +133,31 @@ have rendered with a blank name. Fixed by resolving every player's/viewer's acco
 (now 550 tests, up from 508) and the full Playwright e2e suite are both green. See the step's own
 entry below for what's deliberately scoped down and why.
 
+**Step 15 (statistics) is code-complete in one session.** All three `PLAN.md` exit criteria are
+covered by tests: `core/statistics.ts` (28 fixture/property-style tests, including the spec's own
+worked example verbatim — lost ₪100 five times, won once → −₪400 total, 17% win rate, −67% ROI —
+and a dedicated profit-per-hour-with-a-late-joiner fixture) is pure, dependency-free, and never
+touches a live table, so "statistics read only from the permanent tables" is true by construction,
+not just by convention; `src/data/statistics.ts` fetches from `player_results`/`game_summaries`
+(personal) and `group_player_results`/`game_summaries`/`transfer_summaries` (group, already
+`is_private`-excluded) and is tested against `fakePostgrestClient.ts` (15 tests); a new SQL test
+(`supabase/tests/statisticsViews.test.ts`) proves the group net total a statistics screen would
+read is byte-identical before and after `purge_expired_game_data()` runs, and before and after the
+game is explicitly deleted — the exit criterion asked for exactly this, not just the general
+snapshot-survives-purge property step 11 already covers. Sample-size suppression
+(`MIN_SAMPLE_SIZE_FOR_RATE = 5`, below which a rate reports `suppressed: true` rather than a
+misleading number) is
+asserted directly. The full client stack: `StatisticsPage` (`/statistics`, a nav icon added to
+`HomePage` alongside `👥`/`👤`) with a group-switcher chip row ("הכל" plus each of the caller's
+groups) feeding both `שלי`/`החבורה` tabs, `PersonalStatsView` (hero net, games-played/win-rate
+tiles, cumulative-net sparkline, the full personal detail list), `GroupLeaderboard` (sortable via
+chips — net/games/win-rate/ROI/attendance — hiding any player whose `stats_visibility` is
+`private`), `GroupTableStats` (the table-level figures), and `FunStatsRow` (all seven fun stats as
+a horizontal card row, `nemesisPatron` only populated for a signed-in viewer). `npm run verify`
+(now 612 tests, up from 550) and `npm run test:db` (97, up from 91) are both green. See the step's
+own entry below for what's deliberately scoped down (the "detail table" is a label/value list, not
+a literal spreadsheet-style grid) and why.
+
 ### Checkpoints that are not steps
 
 Things that gate progress but aren't build work, recorded here so they can't be quietly skipped:
@@ -148,6 +173,7 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Sign in on a real device against the real Supabase project** | Step 12's auth/sync behaviour confirmed end-to-end | not reached — needs the repository owner and the `SUPABASE_ANON_KEY` fix above; this sandbox cannot reach `*.supabase.co` at all (see `NOTES.md`), so every step-12 module is tested against an in-memory fake, never the live project |
 | **Apply the step-13 migration to the real Supabase project** | Step 13 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner confirmed; surfaced and fixed a real migration-history drift bug across all 21 migrations plus two under-revoked functions (see the step's own entry and `NOTES.md`). `supabase/tests/` (63/63) and `npm test` (508/508) are green against local Postgres and fakes respectively; still not tested against a real signed-in device — that part still needs the owner |
 | **Apply the step-14 migration to the real Supabase project** | Step 14 `done` | ✅ done 2026-08-01 — applied via the Supabase MCP connection after the owner explicitly said to; `get_advisors(type: 'security')` afterward showed only the expected `anon`/`authenticated`-executable pattern every prior caller-invoked RPC already carries (confirmed directly by counting the same advisor against `take_over_host`/`decide_join_request`/`hand_over_host`/`decide_claim`, all of which show the identical two hits) — no new gap, unlike step 11's real one |
+| **Apply the step-15 migration to the real Supabase project** | Step 15 `done` | ✅ done 2026-08-02 — applied via the Supabase MCP connection (widens `profiles_public` to include `stats_visibility`); version-repaired (`20260801133718` → `20260802090000`) per the now-standard rule; `get_advisors(type: 'security')` afterward shows the same pre-existing `profiles_public` `security_definer_view` flag the step-10 RLS migration's own comment already accepts as intentional (it needs owner privileges to see co-member rows `profiles_select_self`'s RLS would otherwise hide, compensating with its own WHERE clause — the same pattern `group_player_results` was deliberately *not* left in, back in step 11, because that view's read path didn't need the bypass) — no new gap |
 
 ---
 
@@ -1841,3 +1867,161 @@ two hits already), confirming this is the established "caller-invoked RPCs rely 
   awaited response to a known `{ data: T[] | null; error: Error | null }` shape in one expression,
   rather than destructuring first. If a future RPC wrapper needs a multi-row result, follow
   `findUserByUsername`'s shape, not the single-row `.single().returns<T>()` one.
+
+---
+
+### Step 15 — Statistics
+**Status:** in progress — code complete, migration applied to the real Supabase project, not yet
+tested on a real signed-in device  **Sessions:** 1  **Commits:** 1
+
+**Built.**
+- **`supabase/migrations/20260802090000_step15_statistics.sql`** — the only schema change this
+  step needed: `profiles_public` (03-data-model.md, `20260729121100_rls_policies.sql`) widened to
+  include `stats_visibility`, which its own original comment had deliberately left self-only since
+  nothing needed a co-member to read it before now. `06-statistics.md#scoping`'s "a
+  `stats_visibility = private` flag keeps someone off the group leaderboard while still counting
+  them, anonymously, in table-level aggregates" requires exactly that read. `security_invoker`
+  stays `false`, unchanged — this view still needs owner privileges to see co-member rows
+  `profiles_select_self`'s own restrictive RLS would otherwise hide, compensating with its own
+  WHERE clause, same as it always has. Two new SQL tests in `supabase/tests/statisticsViews.test.ts`
+  cover the widened view (self, co-member, stranger, and the `private` value actually round-tripping).
+- **`core/statistics.ts`** — pure, dependency-free (no React/Supabase/Dexie, matching
+  `core/settlement.ts`'s own contract even though `CLAUDE.md`'s Purity rule doesn't name this file
+  specifically): row shapes mirroring `player_results`/`game_summaries`/`transfer_summaries`
+  camelCased; `Rate`/`MIN_SAMPLE_SIZE_FOR_RATE` (06-statistics.md#presentation-rules: below 5 games
+  a rate reports `suppressed: true`, never a misleading number); `summarizeCurrency` (the app never
+  converts between currencies — amounts are summed as raw numbers regardless of label, and this
+  only decides which label to print and whether to flag the mix, per the spec's own literal
+  wording); `computeWinLossSummary` (breakeven games excluded from the rate's denominator, not just
+  from the numerator); `computeStreaks`/`cumulativeNetSeries` (a breakeven breaks both a win and a
+  lose streak); `computePersonalStatistics` (all thirteen `06-statistics.md#personal-statistics-12`
+  formulas, profit-per-hour on each player's own `minutesPlayed`, never the game's duration);
+  `computeGroupPlayerStatistics`/`computeGroupTableStatistics` (`06-statistics.md#group-level-
+  statistics-11`, guest rows — `userId === null` — never aggregate into a persistent "player",
+  matching the inclusion rule); the seven fun stats (`computeDonator`, `computeIronMan`,
+  `computeChipMagnet`, `computeTheMachine`, `computeComeback`, `computeGroupHotColdStreaks`,
+  `computeNemesisPatron`) plus `computeFunStatistics` bundling all seven, `nemesisPatron` only
+  populated for a signed-in viewer.
+- **28 tests in `core/statistics.test.ts`**, including the spec's own worked example verbatim
+  (lost ₪100 five times, won once → Σnet = −₪400, win rate 1/6 ≈ 17%, ROI −400/600 = −67%, all
+  three assertions matching `06-statistics.md#personal-statistics-12`'s own numbers exactly), a
+  dedicated profit-per-hour-with-a-late-joiner fixture (a player who joined for the last hour of a
+  4-hour game is measured against 1 hour, not 4), the win-rate zero-exclusion rule, sample-size
+  suppression at exactly the 4-vs-5-games boundary, streak/iron-man/hot-cold fixtures with a
+  breakeven deliberately breaking a run, and a hand-computed `computeGroupTableStatistics` fixture
+  (weekday, biggest night, avg pot, etc.) verified against real `Date.UTC` weekday output, not
+  assumed.
+- **`src/data/statistics.ts`** — `getPersonalStatisticsSource(userId, groupId?)` (plain
+  `player_results` filtered by `user_id`, optionally `group_id` — "שלי, within a group" and "הכל,
+  across every group" are the same query with or without that filter, per `06-statistics.md
+  #scoping`'s own framing) and `getGroupStatisticsSource(groupId)` (`group_player_results` — already
+  `is_private`-filtered since step 11 — plus `game_summaries`/`transfer_summaries` filtered the same
+  way, plus `profiles_public` for display names and `stats_visibility`). Never reads `games`/
+  `game_players`/`transfers` — this module's own hardcoded `.from(...)` calls are what makes
+  "statistics read only from the permanent tables" true of the whole app, not just of
+  `core/statistics.ts` in isolation. `src/data/profiles.ts#getProfilesPublic` gained
+  `statsVisibility` on its return shape, defaulting to `'group'` for any fixture seeded before this
+  column existed.
+- **~15 new tests in `src/data/statistics.test.ts`** against `fakePostgrestClient.ts`, matching the
+  established standard: the join between `player_results` and `game_summaries`, group-scoping,
+  dropping a result whose game is missing rather than throwing, no transfer/profile queries when a
+  group has no games or only guest rows.
+- **A new SQL test, `supabase/tests/statisticsViews.test.ts`** (10 tests, `npm run test:db` now
+  97/97, up from 91): the `profiles_public` widening (self/co-member/stranger), and — the step's
+  own "statistics unchanged" exit criterion, taken literally rather than assumed to follow from
+  step 11's general snapshot-survives-purge property — a group net total read through
+  `group_player_results` proven byte-identical before and after `purge_expired_game_data()` runs
+  (with the live `games` row actually confirmed gone, not a no-op purge) and before and after the
+  game is explicitly deleted.
+- **UI**, in the established visual language (no mockup covers a statistics screen — same situation
+  `AccountPage`/`GroupsListPage` were in for steps 12/14):
+  - `StatisticsPage` (`/statistics`) — one group-switcher chip row ("הכל" plus each of the caller's
+    groups) feeding both tabs; `החבורה` only appears once a real group is selected, since a group
+    leaderboard can't aggregate across group boundaries (`04-ux-spec.md#statistics`'s "two tabs...
+    with a group switcher" read as one control driving both, not two independent ones). A nav icon
+    (`📊`) added to `HomePage`'s header alongside the pre-existing `👥`/`👤`.
+  - `PersonalStatsView` — hero net (`StatHero`), games-played/win-rate tiles, the cumulative-net
+    sparkline (`Sparkline`, step 3's component, its first real caller), the full detail list via a
+    new small `StatRow` primitive local to the feature (label/value, not a shared component — see
+    Deviated).
+  - `GroupLeaderboard` — sortable via `SelectionChip` row (net/games/win-rate/ROI/attendance,
+    `04-ux-spec.md#statistics`'s "switch the sort metric via chips, rather than tiny column
+    headers"), hiding any player whose `stats_visible` is false while their numbers still feed
+    `GroupTableStats`'s aggregates untouched.
+  - `GroupTableStats` — the table-level figures via the same `StatRow` list.
+  - `FunStatsRow` — all seven fun stats as a horizontal, screenshot-friendly card row
+    (`04-ux-spec.md#statistics`: "these are the ones people screenshot into the group chat").
+  - `PercentValue`/`RateDisplay` — the percent twin of `<Money>` (LTR isolation, U+2212 minus,
+    explicit `+`/`−` when signed) and the `62% (13 משחקים)` / `נתונים חלקיים` presentation rule.
+- **~25 new component tests** across `PersonalStatsView`, `GroupLeaderboard`, `GroupTableStats`,
+  `FunStatsRow`, `RateDisplay`, `format.ts`, and a minimal `StatisticsPage` test (the not-configured
+  banner — the only state this sandbox's session can reach, same limitation every cloud-gated route
+  has had since step 12). `npm run verify` is green at 612 tests (up from 550). Driven in a real
+  headless-Chromium browser against both a production preview build (the not-configured banner,
+  RTL, zero console errors) and the dev server with `?lang=en-XA` (LTR flip, no clipping in the one
+  reachable state) — see Left undone for what a real Supabase connection would additionally cover.
+
+**Deviated.**
+- **The "detail table" (`04-ux-spec.md#statistics`: "horizontally scrollable inside its own
+  container") is a vertical label/value list (`StatRow`), not a literal scrollable grid.** Read
+  literally against a phone-sized viewport, a wide multi-column table of twelve personal stats
+  would need horizontal scrolling to be readable at all; a vertical list needs none and reads
+  better one-handed. `GroupLeaderboard`'s per-player rows (name + one sorted metric) *are* the
+  horizontally-compact form the spec describes — the "scrollable table" concern is really about the
+  leaderboard, which is exactly where `04-ux-spec.md` raises "switch the sort metric via chips" in
+  the same breath.
+- **Sample-size suppression's denominator is total games played, not the rate's own decisive
+  denominator.** `06-statistics.md#presentation-rules` gives one example (`62% (13 משחקים)`) without
+  disambiguating whether "13" is total games or wins+losses after zero-exclusion. Chose total games
+  played uniformly for every rate (win rate, ROI implicitly, attendance) — it is the more intuitive
+  "how much data backs this" signal, and it is what `04-ux-spec.md`'s own "every rate shows its
+  sample size" reads as applying to the screen's rates generically, not to win rate's specific
+  zero-exclusion mechanics.
+- **`GroupTableStats`' "biggest night" is keyed on `total_cash_pot_minor`, i.e. physical cash handed
+  to the pot (05-settlement.md#the-pot-as-a-settlement-node), not `total_buy_ins_minor`.** The
+  field is literally named `pot` in the schema, and 06's own "Average pot per game, biggest night"
+  groups the two together under one clearly pot-labelled figure.
+- **The percent-metric leaderboard rows (win rate/ROI/attendance) don't reuse the shared
+  `<LeaderboardRow>` primitive**, which only ever renders a `<Money>` value. A local row markup
+  (identical classes, different value slot) lives in `GroupLeaderboard.tsx` instead of widening a
+  step-3 shared primitive for a genuinely different value type.
+
+**Applied to the real Supabase project in a same-session follow-up.** Same MCP-`apply_migration`
+path steps 10/11/13/14 used; immediately followed by the now-standard version-repair step
+(`docs/build/NOTES.md`'s documented rule — the tool stamps `schema_migrations.version` with the
+apply timestamp, not the filename's own version) — `20260801133718` → `20260802090000`, confirmed
+via `list_migrations`. `get_advisors(type: 'security')` afterward shows only the pre-existing
+`profiles_public` `security_definer_view` flag the step-10 RLS migration's own comment already
+accepts as intentional (see the checkpoint table) — no new gap.
+
+**Left undone.**
+- **Not tested against a real signed-in device**, same standing gap as steps 12–14 (this sandbox
+  cannot reach `*.supabase.co` at all — see `NOTES.md`). Every formula is proven against hand-
+  computed fixtures, every query against `fakePostgrestClient.ts`, and every component against real
+  rendered DOM output — but nobody has yet opened `/statistics` signed in against the live project
+  and looked at real numbers for a real group.
+- **No date-range filter and no "only games I played in" filter** — `04-ux-spec.md#statistics`
+  names both under "Filters"; the group switcher and the שלי/החבורה split cover the scoping this
+  step's own `PLAN.md` exit criteria actually test, and both filters are straightforward additions
+  later (`core/statistics.ts`'s functions already take a plain row array, so a filter is just a
+  narrower array before it's handed in) rather than architecturally blocked.
+- **`invite_player_to_game`'s missing UI trigger (step 14's own "left undone")** is untouched —
+  not this step's concern, noted only so it isn't mistaken for newly introduced.
+
+**Watch out.**
+- **`profiles_public` is now read by two independent features for two different reasons** — step 13
+  (viewer/player name resolution) and step 15 (leaderboard suppression). Any future column added to
+  this view should ask "self or co-member" the same way `stats_visibility` did here: is this a
+  display preference safe to share at the same trust level as a username, or real account data that
+  belongs on `profiles` alone.
+- **`core/statistics.ts`'s group-level functions trust their caller for `is_private` exclusion —
+  they have no way to enforce it themselves.** `src/data/statistics.ts#getGroupStatisticsSource` is
+  the one place that actually filters (`group_player_results` server-side, `game_summaries` via an
+  explicit `.eq('is_private', false)`); a future caller that feeds `computeGroupPlayerStatistics`/
+  `computeGroupTableStatistics` rows from anywhere else must apply the same filter itself first.
+- **A rate's `sampleSize` is always "how many games underlie this population," not the rate's own
+  post-exclusion denominator** — `attendanceRate`'s sample size is the group's total game count, not
+  the player's own games-played; `winLoss.rate`'s sample size is every game played, including
+  breakeven ones excluded from the rate's own numerator/denominator. Keep this consistent if a new
+  rate is added — it is what makes the suppression threshold mean the same thing everywhere it
+  appears.

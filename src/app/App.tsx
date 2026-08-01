@@ -9,6 +9,7 @@ import { HomePage } from './routes/HomePage';
 import { NewGamePage } from './routes/NewGamePage';
 import { GamePage } from './routes/GamePage';
 import { SharedGamePage } from './routes/SharedGamePage';
+import { StatisticsPage } from './routes/StatisticsPage';
 import { NotFoundPage } from './routes/NotFoundPage';
 import { DevBar } from './DevBar';
 
@@ -34,6 +35,7 @@ export function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/groups" element={<GroupsListPage />} />
           <Route path="/groups/:groupId" element={<GroupPage />} />
+          <Route path="/statistics" element={<StatisticsPage />} />
           {import.meta.env.DEV && (
             <Route
               path="/gallery"

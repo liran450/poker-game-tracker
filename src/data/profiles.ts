@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { StatsVisibility } from '@core/statistics';
 import { supabase } from './supabaseClient';
 
 /**
@@ -80,18 +81,22 @@ export interface PublicProfile {
   readonly id: string;
   readonly username: string;
   readonly displayName: string;
+  /** `'private'` means: keep off the group leaderboard, still count anonymously (06-statistics.md#scoping). */
+  readonly statsVisibility: StatsVisibility;
 }
 
 interface PublicProfileRow {
   readonly id: string;
   readonly username: string;
   readonly display_name: string;
+  readonly stats_visibility?: StatsVisibility;
 }
 
 /**
- * `profiles_public` (co-members-only username/display_name/avatar_url — see the RLS migration's
- * comment) — used to render viewer/player names the caller doesn't already know locally, e.g. the
- * share sheet's viewer list (docs/build/PLAN.md step 13).
+ * `profiles_public` (co-members-only username/display_name/avatar_url/stats_visibility — see the
+ * RLS migration's comment and `20260802090000_step15_statistics.sql`) — used to render
+ * viewer/player names the caller doesn't already know locally, e.g. the share sheet's viewer list
+ * (docs/build/PLAN.md step 13) and the group leaderboard's suppression (step 15).
  */
 export async function getProfilesPublic(
   userIds: readonly string[],
@@ -100,7 +105,7 @@ export async function getProfilesPublic(
   if (userIds.length === 0) return [];
   const { data, error } = await client
     .from('profiles_public')
-    .select('id, username, display_name')
+    .select('id, username, display_name, stats_visibility')
     .in('id', userIds)
     .returns<PublicProfileRow[]>();
   if (error) throw error;
@@ -108,6 +113,9 @@ export async function getProfilesPublic(
     id: row.id,
     username: row.username,
     displayName: row.display_name,
+    // Defensive default for fixtures/fakes seeded before this column existed — the real column is
+    // `not null default 'group'`, so this only ever bites a test, never production.
+    statsVisibility: row.stats_visibility ?? 'group',
   }));
 }
 
