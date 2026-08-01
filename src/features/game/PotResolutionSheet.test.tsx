@@ -23,6 +23,7 @@ describe('<PotResolutionSheet>', () => {
     const mor = screen.getByRole('button', { name: /מור/ });
     // אורי settled later, so their row must come first (most-recent-first).
     expect(uri.compareDocumentPosition(mor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'gallery.infoExplainer' })).toBeInTheDocument();
   });
 
   it('selecting a settled player calls through with their id', () => {

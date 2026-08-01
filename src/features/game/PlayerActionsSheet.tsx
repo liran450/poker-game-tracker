@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@components/BottomSheet';
 import { DestructiveConfirm } from '@components/DestructiveConfirm';
+import { InfoExplainer } from '@components/InfoExplainer';
 import { Button } from '@components/shared/Button';
 import { TextField } from '@components/shared/TextField';
 
@@ -122,9 +123,18 @@ export function PlayerActionsSheet({
             <Button variant="secondary" fullWidth onClick={() => runThenClose(onOpenCashPaid)}>
               {t('players.cashPaid')}
             </Button>
-            <Button variant="secondary" fullWidth onClick={() => setRenaming(true)}>
-              {t(isRegistered ? 'players.setNickname' : 'players.rename')}
-            </Button>
+            {isRegistered ? (
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" className="flex-1" onClick={() => setRenaming(true)}>
+                  {t('players.setNickname')}
+                </Button>
+                <InfoExplainer content={t('players.nicknameExplainer')} />
+              </div>
+            ) : (
+              <Button variant="secondary" fullWidth onClick={() => setRenaming(true)}>
+                {t('players.rename')}
+              </Button>
+            )}
             <Button variant="destructive" fullWidth onClick={handleRemove}>
               {t('players.remove')}
             </Button>

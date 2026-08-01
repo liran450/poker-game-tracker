@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { AppShell } from '@components/AppShell';
 import { BottomSheet } from '@components/BottomSheet';
 import { DestructiveConfirm } from '@components/DestructiveConfirm';
+import { InfoExplainer } from '@components/InfoExplainer';
 import { InstallPrompt } from '@components/InstallPrompt';
 import { Money } from '@components/Money';
 import { Button } from '@components/shared/Button';
@@ -157,16 +158,19 @@ export function SummaryScreen({
         <div className="flex flex-col gap-2.5">
           {canReopen ? (
             <>
-              <Button
-                variant="secondary"
-                fullWidth
-                onClick={() => {
-                  setMenuOpen(false);
-                  setReopenConfirmOpen(true);
-                }}
-              >
-                {t('summary.reopen')}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setReopenConfirmOpen(true);
+                  }}
+                >
+                  {t('summary.reopen')}
+                </Button>
+                <InfoExplainer content={t('summary.reopenExplainer')} />
+              </div>
               {reopenHoursRemaining !== null && (
                 <p className="text-center text-caption text-fg-tertiary">
                   {t('summary.reopenCountdown', { hours: reopenHoursRemaining })}

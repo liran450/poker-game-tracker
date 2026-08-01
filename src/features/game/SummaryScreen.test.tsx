@@ -52,4 +52,15 @@ describe('<SummaryScreen>', () => {
 
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
+
+  it('the reopen row carries an ⓘ explaining the 24h window and the recompute consequence', () => {
+    render(<SummaryScreen {...baseProps()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'אפשרויות משחק' }));
+    fireEvent.click(screen.getByRole('button', { name: 'הסבר' }));
+
+    expect(
+      screen.getByText('אפשר לפתוח מחדש עד 24 שעות מסיום המשחק. חישוב מחדש של הסגירה מבטל כל עריכה ידנית של ההעברות.'),
+    ).toBeInTheDocument();
+  });
 });
