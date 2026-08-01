@@ -45,6 +45,68 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### `renderPlayerName` needs its resolver argument at every call site, or a registered player's name renders blank
+**Step 14 · 2026-08-01 · trap**
+
+`core/players.ts#renderPlayerName(player, getAccountDisplayName?)` has taken an optional resolver
+for a registered player's account name since step 4 — optional because nothing had accounts yet.
+Steps 12/13 gave `game_players.user_id` real values (a claim, an approved join request), but no
+screen ever supplied the resolver: `LiveGameView`, `SettlementRoute` and `SummaryRoute` all called
+`renderPlayerName(p)` bare, so any account-linked player rendered with an empty name. Silent and
+untested, because component tests never run with `session.cloudConfigured: true` (this sandbox
+can't reach a real Supabase project — see below), and no session had manually tested a real
+signed-in claim/join-approval end to end either. Found while wiring step 14's group-member
+add-players picks, which make this path the *normal* one, not an edge case.
+
+**Fixed uniformly, not per-screen:** `src/hooks/useAccountNames.ts` resolves every player-with-a-
+`userId` (not just viewers, which is all `LiveGameView` used to resolve) via `profiles_public`, and
+all three screens now pass `(userId) => accountNames.get(userId)`. **Rule for any future screen
+that renders a player row:** always pass a resolver. There's no lint rule catching a bare call —
+only convention, and this bug is exactly what skipping it costs.
+
+### `insert ... returning` on a table whose own SELECT policy requires membership that doesn't exist yet
+**Step 14 · 2026-08-01 · trap (recurrence)**
+
+The exact `games`/`RETURNING` trap documented below under "Postgres RLS + RETURNING can miss a row
+this same statement just inserted" recurs for `groups`: `groups_select` is `is_group_member(id)`,
+false for a brand-new group until its *own* `group_members` owner row exists, which is a second,
+later insert. `insert into groups (...) returning id` therefore fails RLS even though `groups_insert`
+itself (`created_by = auth.uid()`) is satisfied — confirmed directly in `supabase/tests/groups.test.ts`
+before fixing it. **Fix, matching `ensureGameRowExists`'s existing pattern:** generate the id
+client-side (`crypto.randomUUID()` in `src/data/groups.ts#createGroup`, `randomUUID()` in the SQL
+test) and insert without `RETURNING` at all, rather than trying to work around the policy. Rule of
+thumb restated for a third table now: any table whose own SELECT policy depends on a row this same
+transaction hasn't written yet should never rely on `RETURNING` for its own insert.
+
+### A genuinely multi-row `.rpc(...)` result can't chain `.returns<T[]>()` without a `Database` generic
+**Step 14 · 2026-08-01 · trap**
+
+Every existing RPC wrapper in `src/data/` calls a function that returns at most one row and chains
+`.single().returns<T>()`. `find_user_by_username` and `get_group_live_games` are the first
+table-returning (potentially multi-row) RPCs a client wrapper calls. `.rpc(...).returns<T[]>()`
+without `.single()` fails to compile — a real supabase-js type error ("Cannot cast single object to
+array type") — because this codebase has no `Database` generic in scope (a deliberate choice, not
+an oversight), so the builder can't confirm the function returns a set. Destructuring
+`const { data, error } = await client.rpc(...)` without any `.returns()` also fails, differently:
+`@typescript-eslint/no-unsafe-assignment` on an implicit `any`. **Fix:** cast the *whole* awaited
+response in one expression — `const result = (await client.rpc(...)) as { data: T[] | null; error:
+Error | null }` — then read `result.data`/`result.error`. See `src/data/groups.ts#findUserByUsername`
+for the pattern; use it for any future multi-row RPC wrapper instead of reaching for `.returns()`.
+
+### `group_members_delete`'s RLS matches zero rows instead of raising for a blocked delete
+**Step 14 · 2026-08-01 · trap**
+
+`group_members_delete`'s `using` clause is `role <> 'owner' and (is_group_admin_or_owner(group_id)
+or user_id = auth.uid())` — for a target row whose `role = 'owner'`, that's `false`, so Postgres
+RLS simply excludes the row from the delete's own row set. The statement still succeeds, deleting
+zero rows, rather than raising. A test written as `expectRejection(client, () => client.query(
+'delete from group_members ...'))` fails with "the query unexpectedly succeeded" — not a bug in
+the policy, a wrong assertion shape. **Fix:** assert `result.rowCount === 0` and that the row is
+unchanged afterward, not a thrown error. This is the general RLS-on-UPDATE/DELETE shape, not
+specific to this table — any future "no path can touch X" test needs the same assertion style
+unless the write goes through a `raise exception`-based RPC instead of a plain policy-gated
+statement.
+
 ### `VITE_*` secrets on the same CI step that runs the test suite let a test reach the real network
 **Step 12 (CI, post-merge) · 2026-07-31 · trap**
 

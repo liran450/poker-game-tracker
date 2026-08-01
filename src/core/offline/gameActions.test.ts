@@ -101,6 +101,36 @@ describe('createGame', () => {
     expect(state.players.size).toBe(0);
     expect(state.status).toBe('active');
   });
+
+  it('seats account-linked players (group members, docs/build/PLAN.md step 14) with userId set, not a guest name', async () => {
+    const { gameId } = await createGame({
+      ...baseInput,
+      playerNames: ['מור'],
+      accountPlayers: [{ userId: 'user-1', displayName: 'דנה לוי' }],
+    });
+    const state = fold(await loadGameEvents(gameId));
+    expect(state.players.size).toBe(2);
+    const accountPlayer = [...state.players.values()].find((p) => p.userId === 'user-1');
+    expect(accountPlayer).toBeDefined();
+    expect(accountPlayer?.guestName).toBeNull();
+    // Seated after every guest name, in seat order.
+    expect(accountPlayer?.seatOrder).toBe(1);
+    // Account picks don't pollute local guest-name play history.
+    const recent = await db.recentPlayers.toArray();
+    expect(recent.map((r) => r.name)).toEqual(['מור']);
+  });
+
+  it('stores the given groupId on the cached game record', async () => {
+    const { gameId } = await createGame({ ...baseInput, groupId: 'group-1' });
+    const cached = await db.games.get(gameId);
+    expect(cached?.groupId).toBe('group-1');
+  });
+
+  it('defaults groupId to null when not given', async () => {
+    const { gameId } = await createGame(baseInput);
+    const cached = await db.games.get(gameId);
+    expect(cached?.groupId).toBeNull();
+  });
 });
 
 describe('addPlayersToGame', () => {
@@ -119,6 +149,15 @@ describe('addPlayersToGame', () => {
     await addPlayersToGame(gameId, []);
     const state = fold(await loadGameEvents(gameId));
     expect(state.players.size).toBe(4);
+  });
+
+  it('seats an account-linked late joiner too', async () => {
+    const { gameId } = await createGame(baseInput);
+    await addPlayersToGame(gameId, [], [{ userId: 'user-1', displayName: 'דנה לוי' }]);
+    const state = fold(await loadGameEvents(gameId));
+    expect(state.players.size).toBe(5);
+    const accountPlayer = [...state.players.values()].find((p) => p.userId === 'user-1');
+    expect(accountPlayer?.seatOrder).toBe(4);
   });
 });
 

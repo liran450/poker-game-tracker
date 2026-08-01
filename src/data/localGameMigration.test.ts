@@ -109,6 +109,7 @@ describe('ensureGameRowExists', () => {
       buy_amount_minor: 5000,
       chips_per_buy: 100,
       is_private: false,
+      group_id: null,
       status: 'active',
       host_id: 'user-1',
       created_by: 'user-1',

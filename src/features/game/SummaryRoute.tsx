@@ -11,7 +11,9 @@ import { minor } from '@core/money';
 import { dedupeDisplayNames, renderPlayerName } from '@core/players';
 import { reopenGame } from '@core/offline/gameActions';
 import { useGame } from '@core/offline/useGame';
+import { useAccountNames } from '../../hooks/useAccountNames';
 import { useReopenWindow } from '../../hooks/useReopenWindow';
+import { useSession } from '../../hooks/useSession';
 import { formatFinalSettlementText, representativeShare } from './shareText';
 import { formatDateShort } from './time';
 import { SummaryScreen } from './SummaryScreen';
@@ -34,8 +36,13 @@ export interface SummaryRouteProps {
 export function SummaryRoute({ gameId }: SummaryRouteProps) {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
+  const session = useSession();
   const game = useGame(gameId);
   const reopenWindow = useReopenWindow(game?.state.endedAt ?? null);
+  const accountIds = game
+    ? [...new Set([...game.state.players.values()].flatMap((p) => (p.userId !== null ? [p.userId] : [])))]
+    : [];
+  const accountNames = useAccountNames(accountIds, session.cloudConfigured);
 
   if (!game?.record) return null;
   const { record, state } = game;
@@ -47,7 +54,11 @@ export function SummaryRoute({ gameId }: SummaryRouteProps) {
 
   const activePlayers = [...state.players.values()].filter((p) => !p.isRemoved);
   const displayNames = dedupeDisplayNames(
-    activePlayers.map((p) => ({ id: p.id, name: renderPlayerName(p), order: p.seatOrder })),
+    activePlayers.map((p) => ({
+      id: p.id,
+      name: renderPlayerName(p, (userId) => accountNames.get(userId)),
+      order: p.seatOrder,
+    })),
   );
 
   const settlementPlayers: SettlementPlayerInput[] = activePlayers.map((p) => ({

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { EmptyState } from '@components/EmptyState';
@@ -6,6 +7,8 @@ import { Button } from '@components/shared/Button';
 import { Card } from '@components/shared/Card';
 import { IconButton } from '@components/shared/IconButton';
 import { useGamesList } from '@core/offline/useGamesList';
+import { listMyPendingInvites, respondToGroupInvite, type PendingGroupInvite } from '@data/groups';
+import { PendingGroupInviteCard } from '@features/groups/PendingGroupInviteCard';
 import { useSession } from '../../hooks/useSession';
 
 export function HomePage() {
@@ -14,6 +17,31 @@ export function HomePage() {
   const games = useGamesList();
   const activeGames = games.filter((game) => game.status === 'active' || game.status === 'settling');
   const session = useSession();
+  const [pendingInvites, setPendingInvites] = useState<PendingGroupInvite[]>([]);
+  const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
+
+  async function refreshInvites(): Promise<void> {
+    if (!session.profile) return;
+    setPendingInvites(await listMyPendingInvites(session.profile.id));
+  }
+
+  useEffect(() => {
+    if (!session.cloudConfigured || !session.profile) return;
+    void (async () => {
+      await refreshInvites();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.cloudConfigured, session.profile]);
+
+  async function handleInviteDecision(invite: PendingGroupInvite, accept: boolean): Promise<void> {
+    setBusyInviteId(invite.id);
+    try {
+      await respondToGroupInvite(invite.id, accept);
+      await refreshInvites();
+    } finally {
+      setBusyInviteId(null);
+    }
+  }
 
   return (
     <AppShell
@@ -21,9 +49,14 @@ export function HomePage() {
         <div className="flex items-center justify-between px-5 py-3">
           <h1 className="text-heading font-bold">{t('home.title')}</h1>
           {session.cloudConfigured && (
-            <IconButton label={t('nav.account')} onClick={() => void navigate('/account')}>
-              {'👤'}
-            </IconButton>
+            <div className="flex items-center gap-1">
+              <IconButton label={t('nav.groups')} onClick={() => void navigate('/groups')}>
+                {'👥'}
+              </IconButton>
+              <IconButton label={t('nav.account')} onClick={() => void navigate('/account')}>
+                {'👤'}
+              </IconButton>
+            </div>
           )}
         </div>
       }
@@ -37,6 +70,18 @@ export function HomePage() {
         ) : undefined
       }
     >
+      {pendingInvites.length > 0 && (
+        <div className="flex flex-col gap-3 p-4 pb-0">
+          {pendingInvites.map((invite) => (
+            <PendingGroupInviteCard
+              key={invite.id}
+              invite={invite}
+              busy={busyInviteId === invite.id}
+              onDecide={(accept) => void handleInviteDecision(invite, accept)}
+            />
+          ))}
+        </div>
+      )}
       {games.length === 0 ? (
         <EmptyState
           title={t('home.startFirstGame')}

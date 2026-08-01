@@ -40,7 +40,7 @@ change — otherwise the history stops meaning anything.
 | 11 | Snapshots, statistics source, retention | done | 2026-07-31 | _(this commit)_ |
 | 12 | Auth and cloud sync | done | 2026-07-31 | _(this commit)_ |
 | 13 | Sharing, viewers, join requests, takeover | in progress — migration applied to the real Supabase project; not yet tested on a real device | | |
-| 14 | Groups, roles, private games | not started | | |
+| 14 | Groups, roles, private games | in progress — code complete, migration applied to the real Supabase project; not yet tested on a real device | | |
 | 15 | Statistics | not started | | |
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
@@ -119,6 +119,20 @@ game through the app (not a share link) still sees the full host-editing screen,
 token-based `/#/s/:token` route got the read-only treatment this session. See the step's own entry
 for the full account.
 
+**Step 14 (groups, roles, private games) is code-complete in one session.** All four `PLAN.md` exit
+criteria are covered by SQL tests (`supabase/tests/groups.test.ts`, 28 new tests — `npm run test:db`
+is 91/91, up from 63), plus a full client stack: `src/data/groups.ts`, two new hooks
+(`useAccountNames`, `useGroupMemberOptions`), the groups list/detail screens, an invite sheet, a
+home-screen pending-invite card, a new-game group picker, and the add-players sheet's real `◈`
+section. **A real, pre-existing bug was found and fixed along the way, not introduced by this
+step:** every screen that renders a registered player's name (`LiveGameView`, `SettlementRoute`,
+`SummaryRoute`) called `renderPlayerName(p)` with no resolver argument, so any player seated by
+account — via a claim, an approved join request, or (as of this step) a group-member pick — would
+have rendered with a blank name. Fixed by resolving every player's/viewer's account name through
+`profiles_public` uniformly (`useAccountNames`), not just viewers' names as before. `npm run verify`
+(now 550 tests, up from 508) and the full Playwright e2e suite are both green. See the step's own
+entry below for what's deliberately scoped down and why.
+
 ### Checkpoints that are not steps
 
 Things that gate progress but aren't build work, recorded here so they can't be quietly skipped:
@@ -133,6 +147,7 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Apply the step-11 migrations to the real Supabase project** | Step 11 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner's go-ahead; a security-advisor follow-up migration was needed and applied too (see `NOTES.md`) |
 | **Sign in on a real device against the real Supabase project** | Step 12's auth/sync behaviour confirmed end-to-end | not reached — needs the repository owner and the `SUPABASE_ANON_KEY` fix above; this sandbox cannot reach `*.supabase.co` at all (see `NOTES.md`), so every step-12 module is tested against an in-memory fake, never the live project |
 | **Apply the step-13 migration to the real Supabase project** | Step 13 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner confirmed; surfaced and fixed a real migration-history drift bug across all 21 migrations plus two under-revoked functions (see the step's own entry and `NOTES.md`). `supabase/tests/` (63/63) and `npm test` (508/508) are green against local Postgres and fakes respectively; still not tested against a real signed-in device — that part still needs the owner |
+| **Apply the step-14 migration to the real Supabase project** | Step 14 `done` | ✅ done 2026-08-01 — applied via the Supabase MCP connection after the owner explicitly said to; `get_advisors(type: 'security')` afterward showed only the expected `anon`/`authenticated`-executable pattern every prior caller-invoked RPC already carries (confirmed directly by counting the same advisor against `take_over_host`/`decide_join_request`/`hand_over_host`/`decide_claim`, all of which show the identical two hits) — no new gap, unlike step 11's real one |
 
 ---
 
@@ -1626,3 +1641,203 @@ tested on a real device  **Sessions:** 1  **Commits:** 2
   actually stopped flagging it. The advisor is the only reliable way to confirm a revoke actually
   landed — a revoke statement returning success proves nothing about whether the target role can
   still call the function some other way.
+
+---
+
+### Step 14 — Groups, roles, private games
+**Status:** in progress — code complete, migration not yet applied to the real Supabase project
+**Sessions:** 1  **Commits:** 1
+
+**Built.**
+- **`supabase/migrations/20260801120000_step14_groups.sql`** — the schema and RLS for
+  `groups`/`group_members`/`group_invites` already existed since step 10 (built in one pass with
+  every other table); what step 10's own comments named as still missing is what this migration
+  adds:
+  - `find_user_by_username(p_username)` — exact match only, three display columns only
+    (03-data-model.md#joining-a-group).
+  - `respond_to_group_invite(invite_id, accept)` — invitee-only, pending-only; on accept, the one
+    place a non-owner `group_members` row is ever written (the table has no general INSERT policy
+    on purpose).
+  - `revoke_group_invite(invite_id)` — owner/admin-only, pending-only.
+  - `promote_group_member`/`demote_group_admin` — member→admin is owner-or-admin, admin→member is
+    owner-only ("an admin ... cannot demote another admin"). Neither ever touches an `owner` row —
+    `group_members_update`'s RLS already refuses that unconditionally, so these two inherit "no
+    path demotes or removes the owner" from the table itself.
+  - `transfer_group_ownership(group_id, new_owner_id)` — owner-only, target must already be a
+    member; the outgoing owner becomes an admin (demoted before the new owner is promoted, keeping
+    `one_owner_per_group`'s partial unique index satisfied at every statement boundary).
+  - `invite_player_to_game(game_id, user_id)` — the private-game half of
+    03-data-model.md#private-games ("Host or any current player"): `game_events` is
+    host-only-insert, so a non-host seated player needs this narrow RPC to append a `player_invited`
+    log event for a fellow group member. Target must already share the game's group.
+  - Leaving a group and being removed from one are **not** new RPCs — both are the same plain
+    `group_members` delete, already RLS-gated (`role <> 'owner'` and self-or-admin/owner) since
+    step 10; this step's SQL tests exercise that path directly rather than wrapping it.
+- **28 new SQL tests** (`supabase/tests/groups.test.ts`, `npm run test:db` now 91/91, up from 63):
+  `find_user_by_username`'s exact-match-only behaviour, the full invite lifecycle (send/accept/
+  decline/revoke, only-the-invitee-accepts, one-open-invite-per-person), promotion/demotion/
+  transfer with every actor/role combination the roles table names, "no path demotes or removes
+  the owner" asserted against a raw delete/update as well as the RPCs, leaving (member vs.
+  owner-must-transfer-first), "adding someone to a game never adds them to the group" (a join
+  request approval leaves `group_members` untouched), `share_links` insert rejecting a non-host on
+  a private game (this step's other explicit `PLAN.md` exit criterion), and `invite_player_to_game`
+  end to end.
+- **`src/data/groups.ts`** — the first client caller of any of this: `createGroup` (two plain
+  inserts — group row, then the owner's `group_members` row — deliberately not `insert ...
+  returning`, since `groups_select` is `is_group_member(id)` and that's false for the just-created
+  row until the owner insert lands; the id is generated client-side instead, avoiding the exact
+  RLS+RETURNING gap `docs/build/NOTES.md` already documents for `games`), `listMyGroups`/`getGroup`/
+  `updateGroup`/`deleteGroup`, `listGroupMembers`, `findUserByUsername`, the invite lifecycle
+  (`inviteToGroup`/`listPendingInvitesForGroup`/`listMyPendingInvites`/`respondToGroupInvite`/
+  `revokeGroupInvite`), `promoteGroupMember`/`demoteGroupAdmin`/`transferGroupOwnership`/
+  `removeGroupMember`, `getGroupLiveGames`, `invitePlayerToGame`. 15 new tests against
+  `fakePostgrestClient.ts`, same standard as every other `src/data/` module.
+- **A real, pre-existing bug found and fixed, not introduced by this step.** `core/players.ts#
+  renderPlayerName`'s account-name path has needed a real lookup since step 12 (`getAccountDisplayName`),
+  but nothing outside the viewer list ever supplied one — `LiveGameView`, `SettlementRoute` and
+  `SummaryRoute` all called `renderPlayerName(p)` bare. Harmless while every registered player
+  arrived only through step 13's claim/join-approval paths (never manually tested against a real
+  signed-in device — see that step's own "left undone"), but this step's whole point is *adding*
+  registered players deliberately (group-member picks), which would have shipped broken names
+  immediately. Fixed uniformly: **`src/hooks/useAccountNames.ts`**, a small shared hook wrapping
+  `getProfilesPublic`, now resolves every player-with-a-`userId` the same way viewers already were,
+  in all three screens — `LiveGameView`'s pre-existing per-screen effect was replaced with a call
+  to the shared hook rather than kept as a second implementation. No test previously caught this
+  because component tests never run with `session.cloudConfigured: true` (this sandbox can't reach
+  a real Supabase project — see `NOTES.md`); a dedicated `useAccountNames.test.ts` mocks
+  `@data/profiles` directly instead.
+- **`src/hooks/useGroupMemberOptions.ts`** — resolves a game's group's members to display names
+  (`listGroupMembers` + `getProfilesPublic`) for the add-players sheet's `◈` section; shared by
+  `NewGamePage` and `LiveGameView` rather than duplicated.
+- **`src/core/offline/lastUsedGroup.ts`** — "Group | חבורה | last used"
+  (01-product-spec.md#61-game-setup-13): a `db.meta`-backed local preference, same shape as
+  `localIdentity.ts`'s other entries.
+- **`AddPlayersSheet` gained a real `◈ חברי החבורה` section and account-linked picks.** The
+  selection model now tracks guest-name picks and account picks together in one tray (spec: "one
+  footer button commits the whole batch"); `onCommit` now takes `(names, accountPlayers)` instead
+  of just `names`. `core/offline/gameActions.ts#createGame`/`addPlayersToGame` gained
+  `accountPlayers`/`AccountPlayerPick`, appending `player_added` with `userId` set (`guestName:
+  null`) instead of the guest shape — the payload already supported this since step 4, nothing
+  server-side needed to change.
+- **`NewGamePage` gained the "Group" field** (01-product-spec.md#61's own field list, present in
+  the doc but not built until now): a chip row (`ללא חבורה` + each of the caller's groups),
+  defaulting to the last one used (`lastUsedGroup.ts`), threaded through to `createGame`'s new
+  `groupId` and stamped onto the new game's `CachedGameRecord`/server-side `games.group_id` row
+  (`ensureGameRowExists`, which previously always wrote `group_id: null`).
+- **UI**, all in the established visual language (no mockup covers a groups screen —
+  `docs/11`'s "what the design does not cover" list doesn't name one either, same situation
+  `AccountPage` was in for step 12):
+  - `GroupsListPage` (`/groups`) — my groups, pending invites (accept/decline inline), create.
+  - `GroupPage` (`/groups/:groupId`) — member list with role badges, per-member `⋯` action sheet
+    (`GroupMemberActionsSheet`, gating promote/demote/remove/transfer exactly per the roles table),
+    the invite sheet, a header menu (invite/leave/delete), and a live-games lobby
+    (`getGroupLiveGames` finally gets a caller — `בקש להצטרף` calls the same `requestToJoinInApp`
+    step 13 already built for the share-link path's in-app twin).
+  - `InviteMemberSheet` — the exact mockup from 04-ux-spec.md#adding-a-group-member--invite-and-accept:
+    username search, a result card, pending invites listed below with revoke.
+  - `PendingGroupInviteCard` — the invitee-side "דנה הזמינה אותך לחבורה" card, shared by `HomePage`
+    and `GroupsListPage` rather than duplicated.
+  - `HomePage` gained a `👥` header button (next to the pre-existing `👤`) and the pending-invite
+    card at the top of the list.
+- **~65 new tests total** across the SQL suite, `src/data/groups.test.ts`, the two new hooks, the
+  new UI components, and updates to `AddPlayersSheet`/`gameActions`/`localGameMigration`'s existing
+  tests for the new `onCommit`/`groupId` shapes. `npm run verify` is green (550 tests, up from
+  508), `npm run test:db` is green (91 tests, up from 63), and the full Playwright e2e suite
+  (offline create → buy-ins → shared cost → settle → end → transfers → share text, twice — online
+  and with the network cut) passes with zero console errors, confirming none of this broke the
+  no-account offline path step 9 already proved.
+
+**Deviated.**
+- **The invited-caller nuance on `get_group_live_games` (03-data-model.md#private-games: "Appear
+  in `get_group_live_games()` | Only for people already invited or in the game") was deliberately
+  not built.** `PLAN.md`'s own step-14 exit criterion — "a private game is absent from every
+  group-scoped figure and list" — is stricter than the data-model prose and is fully satisfied by
+  the existing step-13 behaviour (excludes every private game, unconditionally) without loosening
+  anything. Loosening it specifically for an invited caller would be real, security-sensitive
+  surface (a function the client already calls with no confirmation of who's "already invited"
+  beyond a raw `player_invited` event scan) and isn't covered by any exit criterion here — left as
+  a scoped, named follow-up rather than folded in unreviewed. Concretely: `invite_player_to_game`
+  is built, tested, and reachable from `03-data-model.md`'s spec, but nothing in the UI calls it
+  yet (see Left undone) — a real gap, recorded rather than hidden by shipping a half-loop.
+- **`transfer_group_ownership` demotes the outgoing owner to `admin`, not `member`.** Not specified
+  either way by `03-data-model.md#group-roles` ("Ownership moves only if the owner themselves
+  transfers it" says nothing about the outgoing owner's new role). Chose `admin` — the outgoing
+  owner presumably still wants full management rights over a group they just built, and it costs
+  nothing extra to grant (`group_members_update`'s RLS already lets an owner promote anyone to
+  admin regardless). Revisit if a real user's expectation differs.
+- **`AddPlayersSheet`'s footer count and tray treat guest picks and account picks identically** —
+  one combined count, one combined tray, matching the spec's "one footer button commits the whole
+  batch" literally rather than distinguishing the two visually beyond the `◈` glyph on the roster
+  chip itself (which the tray doesn't repeat, matching the existing recent-names tray's own
+  plainness).
+- **A registered player's nickname isn't pre-filled when added via a group-member pick** — nickname
+  stays `null`, same as every other `player_added` path; "Nickname pre-fill from the player's most
+  recent nickname in the group" is explicitly `PLAN.md` step 17's own item, not this step's.
+
+**Applied to the real Supabase project in a same-session follow-up, after the owner explicitly said
+to.** Same MCP-`apply_migration` path steps 10/11/13 used; immediately followed by the
+now-standard version-repair step (`docs/build/NOTES.md`'s own documented rule: the tool stamps
+`supabase_migrations.schema_migrations.version` with the apply timestamp, not the filename's own
+version) — `version`/`name` rewritten to `20260801120000`/`20260801120000_step14_groups` to match
+`supabase/migrations/20260801120000_step14_groups.sql` exactly, so no repeat of step 13's
+migration-history-drift bug. `get_advisors(type: 'security')` afterward flagged every new RPC as
+`anon`/`authenticated`-executable — checked directly against the same advisor for
+`take_over_host`/`decide_join_request`/`hand_over_host`/`decide_claim` (each shows the identical
+two hits already), confirming this is the established "caller-invoked RPCs rely on an internal
+`auth.uid()` check, not a execute-grant restriction" pattern, not a new gap the way step 11's
+`group_player_results` narrowing miss genuinely was.
+
+**Left undone.**
+- **`invite_player_to_game` has no UI trigger.** The RPC and its tests exist (see Deviated); no
+  screen offers "invite a group member into this private game" yet, since doing so usefully needs
+  the `get_group_live_games` nuance above to actually close the loop for the invited person. Both
+  are left together as one follow-up rather than shipping a button that calls a working RPC into a
+  dead end.
+- **Not tested against a real signed-in device**, even though the migration is now live — same
+  standing gap as steps 12/13 (this sandbox cannot reach `*.supabase.co` at all, see `NOTES.md`).
+  `npm test`'s coverage of the `session.cloudConfigured: true` branch is limited to what mocking
+  `@data/*` modules directly can prove (see the `useAccountNames`/`useGroupMemberOptions` entries
+  above) — no component test actually renders `GroupPage`/`GroupsListPage` end-to-end with a live
+  session, matching the same gap this step's own bugfix exists because of.
+- **No group-settings edit UI** (rename, change default buy amount/chips-per-buy) — `updateGroup`
+  exists in the data layer and is tested, but `GroupPage` has no form calling it. `PLAN.md`'s
+  step-14 exit criteria don't name this; left for whenever it's actually needed.
+- **Quick-add ordering within the `◈` section isn't "how often you've played together" (#13)** —
+  `listGroupMembers` returns members in whatever order the query does, not frequency-sorted, since
+  local `recentPlayers` tracks guest names by string, not account ids, and building a real
+  per-account play-frequency signal is out of scope for wiring up the section's basic existence.
+  The `חברים נוספים`/recent-names section (unaffected) still sorts by frequency as before.
+
+**Watch out.**
+- **`renderPlayerName`'s resolver argument is not optional to skip in practice, even though the
+  type allows it.** Any future screen that renders a player row with a real account behind it must
+  pass a resolver — `(userId) => accountNames.get(userId)` via `useAccountNames` — or a registered
+  player's name silently renders blank. This is exactly the bug this step found and fixed; there is
+  no lint rule catching it, only convention.
+- **`createGroup` never uses `insert ... returning` on `groups`.** `groups_select` is
+  `is_group_member(id)`, false for a brand-new group until its owner `group_members` row exists —
+  the identical RLS+RETURNING trap `docs/build/NOTES.md` already documents for `games`. Any future
+  write to `groups` that wants the row back should generate the id client-side first, the same way
+  `createGroup`/`ensureGameRowExists` both already do, rather than relying on `RETURNING`.
+- **The `react-hooks/set-state-in-effect` rule** (already documented in step 13's entry) came up
+  repeatedly again this step — `GroupPage`, `GroupsListPage`, `HomePage`, `InviteMemberSheet` and
+  `useGroupMemberOptions` all needed the same `void (async () => { ... })()` IIFE wrapper around an
+  effect body that calls a named async helper or sets state synchronously before any `await`.
+  Wrapping the *entire* effect body — sync resets included — in one IIFE, rather than only the
+  async tail, is what actually satisfies the rule; a partial wrap (sync statements left bare above
+  an inner `void (async () => {...})()`) still gets flagged.
+- **`group_members_delete`'s RLS silently deletes zero rows rather than raising** when the target
+  row's `role = 'owner'` (its own `using` clause excludes it outright) — a test expecting a
+  rejection there will fail with "the query unexpectedly succeeded"; assert `rowCount === 0` and
+  the row's untouched state instead, not `expectRejection`. Hit twice writing
+  `supabase/tests/groups.test.ts`'s "no path demotes or removes the owner" and "the owner cannot
+  leave" tests.
+- **`.rpc(...)` for a genuinely multi-row Postgres function (`find_user_by_username`,
+  `get_group_live_games`) can't chain `.returns<T[]>()` the way every existing single-object RPC
+  wrapper in `src/data/` chains `.single().returns<T>()`** — without a `Database` generic in scope
+  (this codebase has none, by design), supabase-js's typed builder rejects the array cast with a
+  real compile error, and destructuring `{ data, error }` straight off the un-narrowed `await`
+  result trips `@typescript-eslint/no-unsafe-assignment`. The fix used here: cast the *whole*
+  awaited response to a known `{ data: T[] | null; error: Error | null }` shape in one expression,
+  rather than destructuring first. If a future RPC wrapper needs a multi-row result, follow
+  `findUserByUsername`'s shape, not the single-row `.single().returns<T>()` one.

@@ -19,6 +19,9 @@ export interface CachedGameRecord {
   readonly currencyCode?: string;
   readonly isPrivate?: boolean;
   readonly createdAt?: string;
+  /** The חבורה this game is scoped to, if any (docs/build/PLAN.md step 14) — never event-sourced,
+   * same as every other field here; `null`/`undefined` both mean "no group". */
+  readonly groupId?: string | null;
 }
 
 export type OutboxStatus = 'pending' | 'failed';

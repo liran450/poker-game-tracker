@@ -54,7 +54,7 @@ describe('<AddPlayersSheet>', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /addPlayers\.commit/ }));
 
-    expect(onCommit).toHaveBeenCalledWith(['מור', 'שי']);
+    expect(onCommit).toHaveBeenCalledWith(['מור', 'שי'], []);
   });
 
   it('resets its selection after committing', async () => {
@@ -81,5 +81,51 @@ describe('<AddPlayersSheet>', () => {
   it('shows an empty-history message rather than an empty roster area', () => {
     render(<AddPlayersSheet open onClose={() => {}} onCommit={() => {}} recentNames={[]} />);
     expect(screen.getByText('addPlayers.noRecentNames')).toBeDefined();
+  });
+
+  it('omits the group section entirely when there are no group members', () => {
+    render(<AddPlayersSheet open onClose={() => {}} onCommit={() => {}} recentNames={[]} />);
+    expect(screen.queryByText('addPlayers.groupSection')).toBeNull();
+  });
+
+  it('shows the ◈ group section, and commits account picks separately from guest names', async () => {
+    const onCommit = vi.fn();
+    render(
+      <AddPlayersSheet
+        open
+        onClose={() => {}}
+        onCommit={onCommit}
+        recentNames={['שי']}
+        groupMembers={[{ userId: 'u1', displayName: 'מור לוי' }]}
+      />,
+    );
+
+    expect(screen.getByText('addPlayers.groupSection')).toBeDefined();
+    await userEvent.click(screen.getByRole('option', { name: /מור לוי/ }));
+    await userEvent.click(screen.getByRole('option', { name: 'שי' }));
+    await userEvent.click(screen.getByRole('button', { name: /addPlayers\.commit/ }));
+
+    expect(onCommit).toHaveBeenCalledWith(['שי'], [{ userId: 'u1', displayName: 'מור לוי' }]);
+  });
+
+  it('tapping a selected group-member chip in the tray deselects it', async () => {
+    render(
+      <AddPlayersSheet
+        open
+        onClose={() => {}}
+        onCommit={() => {}}
+        recentNames={[]}
+        groupMembers={[{ userId: 'u1', displayName: 'מור לוי' }]}
+      />,
+    );
+    const chip = screen.getByRole('option', { name: /מור לוי/ });
+    await userEvent.click(chip);
+    expect(chip.getAttribute('aria-selected')).toBe('true');
+
+    // The tray chip is a plain button showing the same label — deselect via it.
+    const trayChips = screen.getAllByText('מור לוי');
+    expect(trayChips).toHaveLength(2);
+    await userEvent.click(trayChips[1]!.closest('button')!);
+    expect(chip.getAttribute('aria-selected')).toBe('false');
   });
 });
