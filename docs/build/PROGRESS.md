@@ -40,7 +40,7 @@ change — otherwise the history stops meaning anything.
 | 11 | Snapshots, statistics source, retention | done | 2026-07-31 | _(this commit)_ |
 | 12 | Auth and cloud sync | done | 2026-07-31 | _(this commit)_ |
 | 13 | Sharing, viewers, join requests, takeover | in progress — migration applied to the real Supabase project; not yet tested on a real device | | |
-| 14 | Groups, roles, private games | in progress — code complete, migration not yet applied to the real Supabase project | | |
+| 14 | Groups, roles, private games | in progress — code complete, migration applied to the real Supabase project; not yet tested on a real device | | |
 | 15 | Statistics | not started | | |
 | 16 | Retention live, deletion, export | not started | | |
 | 17 | Polish and v1 sign-off | not started | | |
@@ -147,7 +147,7 @@ Things that gate progress but aren't build work, recorded here so they can't be 
 | **Apply the step-11 migrations to the real Supabase project** | Step 11 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner's go-ahead; a security-advisor follow-up migration was needed and applied too (see `NOTES.md`) |
 | **Sign in on a real device against the real Supabase project** | Step 12's auth/sync behaviour confirmed end-to-end | not reached — needs the repository owner and the `SUPABASE_ANON_KEY` fix above; this sandbox cannot reach `*.supabase.co` at all (see `NOTES.md`), so every step-12 module is tested against an in-memory fake, never the live project |
 | **Apply the step-13 migration to the real Supabase project** | Step 13 `done` | ✅ done 2026-07-31 — applied via the Supabase MCP connection after the owner confirmed; surfaced and fixed a real migration-history drift bug across all 21 migrations plus two under-revoked functions (see the step's own entry and `NOTES.md`). `supabase/tests/` (63/63) and `npm test` (508/508) are green against local Postgres and fakes respectively; still not tested against a real signed-in device — that part still needs the owner |
-| **Apply the step-14 migration to the real Supabase project** | Step 14 `done` | not reached this session — see the step's own entry. Every prior step applied its migration via the Supabase MCP connection in the same session; this one is deliberately left for the owner (or a future session with explicit go-ahead) instead |
+| **Apply the step-14 migration to the real Supabase project** | Step 14 `done` | ✅ done 2026-08-01 — applied via the Supabase MCP connection after the owner explicitly said to; `get_advisors(type: 'security')` afterward showed only the expected `anon`/`authenticated`-executable pattern every prior caller-invoked RPC already carries (confirmed directly by counting the same advisor against `take_over_host`/`decide_join_request`/`hand_over_host`/`decide_claim`, all of which show the identical two hits) — no new gap, unlike step 11's real one |
 
 ---
 
@@ -1774,28 +1774,31 @@ tested on a real device  **Sessions:** 1  **Commits:** 2
   stays `null`, same as every other `player_added` path; "Nickname pre-fill from the player's most
   recent nickname in the group" is explicitly `PLAN.md` step 17's own item, not this step's.
 
+**Applied to the real Supabase project in a same-session follow-up, after the owner explicitly said
+to.** Same MCP-`apply_migration` path steps 10/11/13 used; immediately followed by the
+now-standard version-repair step (`docs/build/NOTES.md`'s own documented rule: the tool stamps
+`supabase_migrations.schema_migrations.version` with the apply timestamp, not the filename's own
+version) — `version`/`name` rewritten to `20260801120000`/`20260801120000_step14_groups` to match
+`supabase/migrations/20260801120000_step14_groups.sql` exactly, so no repeat of step 13's
+migration-history-drift bug. `get_advisors(type: 'security')` afterward flagged every new RPC as
+`anon`/`authenticated`-executable — checked directly against the same advisor for
+`take_over_host`/`decide_join_request`/`hand_over_host`/`decide_claim` (each shows the identical
+two hits already), confirming this is the established "caller-invoked RPCs rely on an internal
+`auth.uid()` check, not a execute-grant restriction" pattern, not a new gap the way step 11's
+`group_player_results` narrowing miss genuinely was.
+
 **Left undone.**
-- **Not applied to the real Supabase project this session** — every prior step (10, 11, 13) applied
-  its migration via the Supabase MCP connection in the same session it was built, but this one is
-  deliberately left for the owner (or a future session with explicit confirmation) instead. The
-  migration is purely additive (new functions only, nothing dropped or altered), and every RPC it
-  adds is proven against local Postgres (91/91 `supabase/tests/`), but writing to the live project
-  is exactly the kind of action this codebase's own sessions have consistently paused on before
-  (see step 11's and step 13's entries above, both of which record "after the owner's go-ahead" or
-  "after the PR merged" rather than doing it unprompted). Nothing in this step's own exit criteria
-  requires the live project — `PLAN.md`'s four are all SQL-test-shaped and are met.
 - **`invite_player_to_game` has no UI trigger.** The RPC and its tests exist (see Deviated); no
   screen offers "invite a group member into this private game" yet, since doing so usefully needs
   the `get_group_live_games` nuance above to actually close the loop for the invited person. Both
   are left together as one follow-up rather than shipping a button that calls a working RPC into a
   dead end.
-- **Not tested against a real signed-in device or the real Supabase project** — same standing gap
-  as steps 12/13 (this sandbox cannot reach `*.supabase.co` at all, see `NOTES.md`), now also true
-  for every new group-management screen. `npm test`'s coverage of the `session.cloudConfigured:
-  true` branch is limited to what mocking `@data/*` modules directly can prove (see the
-  `useAccountNames`/`useGroupMemberOptions` entries above) — no component test actually renders
-  `GroupPage`/`GroupsListPage` end-to-end with a live session, matching the same gap this step's
-  own bugfix exists because of.
+- **Not tested against a real signed-in device**, even though the migration is now live — same
+  standing gap as steps 12/13 (this sandbox cannot reach `*.supabase.co` at all, see `NOTES.md`).
+  `npm test`'s coverage of the `session.cloudConfigured: true` branch is limited to what mocking
+  `@data/*` modules directly can prove (see the `useAccountNames`/`useGroupMemberOptions` entries
+  above) — no component test actually renders `GroupPage`/`GroupsListPage` end-to-end with a live
+  session, matching the same gap this step's own bugfix exists because of.
 - **No group-settings edit UI** (rename, change default buy amount/chips-per-buy) — `updateGroup`
   exists in the data layer and is tested, but `GroupPage` has no form calling it. `PLAN.md`'s
   step-14 exit criteria don't name this; left for whenever it's actually needed.
