@@ -153,7 +153,12 @@ describe('uploadLocalGame', () => {
     expect(fake.rows('games')).toHaveLength(1);
     expect(fake.rows('game_events').length).toBeGreaterThan(0);
     expect(await db.outbox.where('gameId').equals(gameId).toArray()).toHaveLength(0);
-    expect(finalizeCalls).toEqual([{ p_game_id: gameId }]);
+    // Called twice, harmlessly: once by the outbox push itself (the game_ended event's own
+    // push now calls finalize_game — see supabaseSyncTransport.ts and docs/build/NOTES.md), and
+    // once by this function's own explicit fallback below, which still matters for a *second*
+    // migration run where the outbox is already empty (nothing left to push, so the game_ended
+    // case never fires again) — finalize_game is idempotent, so calling it twice here is fine.
+    expect(finalizeCalls).toEqual([{ p_game_id: gameId }, { p_game_id: gameId }]);
   });
 
   it('does not call finalize_game for a game that is still active', async () => {

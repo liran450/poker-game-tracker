@@ -7,13 +7,16 @@ import {
   type SettlementPlayerInput,
   type SettlementSharedCostInput,
 } from '@core/settlement';
-import { minor } from '@core/money';
+import { buildGameExportPayload, gameExportFileName } from '@core/gameExport';
+import { minor, owed } from '@core/money';
 import { dedupeDisplayNames, renderPlayerName } from '@core/players';
 import { reopenGame } from '@core/offline/gameActions';
 import { useGame } from '@core/offline/useGame';
+import { deleteGame } from '@data/gameDeletion';
 import { useAccountNames } from '../../hooks/useAccountNames';
 import { useReopenWindow } from '../../hooks/useReopenWindow';
 import { useSession } from '../../hooks/useSession';
+import { downloadJson } from './download';
 import { formatFinalSettlementText, representativeShare } from './shareText';
 import { formatDateShort } from './time';
 import { SummaryScreen } from './SummaryScreen';
@@ -101,6 +104,40 @@ export function SummaryRoute({ gameId }: SummaryRouteProps) {
       amountMinor: t.amountMinor,
     }));
 
+  function handleExport(): void {
+    const netByPlayerId = new Map(results.map((r) => [r.id, r]));
+    const payload = buildGameExportPayload({
+      gameId,
+      name: record.name ?? '',
+      status: 'finished',
+      playedOn: (state.startedAt ?? record.createdAt ?? '').slice(0, 10),
+      currency,
+      finishedAt: state.endedAt,
+      players: activePlayers.map((p) => {
+        const result = netByPlayerId.get(p.id);
+        return {
+          displayName: displayNames.get(p.id) ?? '',
+          buysCount: p.buysCount,
+          buyInsMinor: owed(p.buysCount, buyAmountMinor),
+          cashPaidMinor: p.cashPaidMinor,
+          chipsFinal: p.chipsFinal,
+          netMinor: result?.netMinor ?? null,
+          sharedCostsShareMinor: result?.sharedMinor ?? minor(0),
+        };
+      }),
+      transfers: transfers.map((t) => ({
+        fromName: t.fromName,
+        toName: t.toName,
+        amountMinor: t.amountMinor,
+      })),
+    });
+    downloadJson(gameExportFileName(gameId, payload.game.playedOn), payload);
+  }
+
+  function handleDelete(): void {
+    void deleteGame(gameId).then(() => navigate('/'));
+  }
+
   function handleShareOrCopy(action: 'share' | 'copy'): void {
     const text = formatFinalSettlementText(i18n.t.bind(i18n), {
       gameName: record.name ?? '',
@@ -139,6 +176,8 @@ export function SummaryRoute({ gameId }: SummaryRouteProps) {
       onCopyTransfers={() => handleShareOrCopy('copy')}
       onReopen={() => void reopenGame(gameId)}
       onBack={() => void navigate('/')}
+      onExport={handleExport}
+      onDelete={handleDelete}
     />
   );
 }

@@ -9,6 +9,7 @@ import { Button } from '@components/shared/Button';
 import { IconButton } from '@components/shared/IconButton';
 import { type Minor } from '@core/money';
 import { useInstallPrompt } from '../../hooks/useInstallPrompt';
+import { DeleteGameConfirmSheet } from './DeleteGameConfirmSheet';
 import { TransferRow } from './TransferRow';
 
 export interface SummaryScreenPlayerResult {
@@ -38,6 +39,8 @@ export interface SummaryScreenProps {
   onCopyTransfers: () => void;
   onReopen: () => void;
   onBack: () => void;
+  onExport: () => void;
+  onDelete: () => void;
 }
 
 /**
@@ -60,10 +63,13 @@ export function SummaryScreen({
   onCopyTransfers,
   onReopen,
   onBack,
+  onExport,
+  onDelete,
 }: SummaryScreenProps) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [installDismissed, setInstallDismissed] = useState(false);
   const install = useInstallPrompt();
 
@@ -170,6 +176,26 @@ export function SummaryScreen({
           ) : (
             <p className="text-center text-body-sm text-fg-disabled">{t('summary.reopenExpired')}</p>
           )}
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => {
+              setMenuOpen(false);
+              onExport();
+            }}
+          >
+            {t('summary.exportGame')}
+          </Button>
+          <Button
+            variant="destructive"
+            fullWidth
+            onClick={() => {
+              setMenuOpen(false);
+              setDeleteConfirmOpen(true);
+            }}
+          >
+            {t('summary.deleteGame')}
+          </Button>
         </div>
       </BottomSheet>
 
@@ -180,6 +206,14 @@ export function SummaryScreen({
         title={t('summary.reopenConfirmTitle')}
         description={t('summary.reopenConfirmDesc')}
         confirmLabel={t('summary.reopenConfirmLabel')}
+      />
+
+      <DeleteGameConfirmSheet
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        isFinished
+        onExport={onExport}
+        onConfirmDelete={onDelete}
       />
     </AppShell>
   );

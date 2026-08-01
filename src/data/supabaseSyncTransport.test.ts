@@ -262,6 +262,53 @@ describe('SupabaseSyncTransport#push', () => {
 
     await expect(transport.push([buyIn()])).rejects.toThrow('simulated insert failure');
   });
+
+  it('a game_ended event updates games.status/ended_at and calls finalize_game so the permanent snapshot exists', async () => {
+    const fake = new FakePostgrestClient();
+    fake.seed('games', [{ id: 'game-1' }]);
+    let finalizeArgs: Record<string, unknown> | undefined;
+    fake.onRpc('finalize_game', (args) => {
+      finalizeArgs = args;
+      return { error: null };
+    });
+    const transport = new SupabaseSyncTransport(client(fake));
+
+    const event: GameEvent = {
+      clientEventId: 'evt-end',
+      gameId: 'game-1',
+      playerId: null,
+      actorId: 'host-1',
+      clientCreatedAt: ts(1),
+      undoneBy: null,
+      type: 'game_ended',
+      payload: {},
+    };
+    await transport.push([event]);
+
+    const game = fake.rows('games').find((g) => g.id === 'game-1')!;
+    expect(game.status).toBe('finished');
+    expect(game.ended_at).toBe(event.clientCreatedAt);
+    expect(finalizeArgs).toEqual({ p_game_id: 'game-1' });
+  });
+
+  it('propagates a thrown error from finalize_game', async () => {
+    const fake = new FakePostgrestClient();
+    fake.seed('games', [{ id: 'game-1' }]);
+    fake.onRpc('finalize_game', () => ({ error: new Error('not available') }));
+    const transport = new SupabaseSyncTransport(client(fake));
+
+    const event: GameEvent = {
+      clientEventId: 'evt-end',
+      gameId: 'game-1',
+      playerId: null,
+      actorId: 'host-1',
+      clientCreatedAt: ts(1),
+      undoneBy: null,
+      type: 'game_ended',
+      payload: {},
+    };
+    await expect(transport.push([event])).rejects.toThrow('not available');
+  });
 });
 
 describe('SupabaseSyncTransport#pull', () => {

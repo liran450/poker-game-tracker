@@ -115,4 +115,12 @@ describe('<GamePage>', () => {
     await waitFor(() => expect(screen.queryByText('מור (1)')).toBeNull());
     expect(screen.getByText('מור')).toBeDefined();
   });
+
+  it('falls back to a friendly dead end for a game this device has no local record of at all', async () => {
+    renderGame('00000000-0000-0000-0000-000000000000');
+
+    // No VITE_SUPABASE_* in this test env, so the remote fetch resolves to null immediately
+    // (docs/build/PLAN.md step 16) — the same "not visible" dead end as a purged/foreign game.
+    await waitFor(() => expect(screen.getByText('pastGame.notFoundTitle')).toBeDefined());
+  });
 });

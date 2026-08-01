@@ -174,6 +174,18 @@ export class SupabaseSyncTransport implements SyncTransport {
           })
           .eq('id', event.gameId);
         if (error) throw error;
+
+        // The permanent snapshot (03-data-model.md#permanent-tables) — statistics (step 15) and
+        // a purged game's results card (step 16) both read only from game_summaries/
+        // player_results/transfer_summaries, never from the live tables above. Before this fix,
+        // finalize_game() was only ever called from localGameMigration.ts's one-time backlog
+        // push, so a normal signed-in host ending a game never got a permanent snapshot at all —
+        // see docs/build/NOTES.md. Idempotent (finalize_game wipes and rewrites its own three
+        // tables), so a retried push after a partial failure is safe.
+        const { error: finalizeError } = await this.client.rpc('finalize_game', {
+          p_game_id: event.gameId,
+        });
+        if (finalizeError) throw finalizeError;
         return;
       }
 

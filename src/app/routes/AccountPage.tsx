@@ -7,7 +7,10 @@ import { Button } from '@components/shared/Button';
 import { Card } from '@components/shared/Card';
 import { IconButton } from '@components/shared/IconButton';
 import { TextField } from '@components/shared/TextField';
+import { allHistoryExportFileName, buildGameExportPayload } from '@core/gameExport';
+import { fetchAllHistoryForUser, pastGameResultToExportInput } from '@data/gameHistory';
 import { UsernameTakenError } from '@data/profiles';
+import { downloadJson } from '@features/game/download';
 import { useSession, type SessionContextValue } from '../../hooks/useSession';
 
 /**
@@ -187,7 +190,29 @@ function ProfileSetupForm({ session }: { session: SessionContextValue }) {
 function SignedInPanel({ session }: { session: SessionContextValue }) {
   const { t } = useTranslation();
   const profile = session.profile;
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   if (!profile) return null;
+
+  async function handleExportAllHistory(): Promise<void> {
+    setExportError(null);
+    setExporting(true);
+    try {
+      const results = await fetchAllHistoryForUser(profile!.id);
+      if (results.length === 0) {
+        setExportError(t('account.exportAllHistoryEmpty'));
+        return;
+      }
+      const payload = {
+        formatVersion: 1 as const,
+        exportedAt: new Date().toISOString(),
+        games: results.map((r) => buildGameExportPayload(pastGameResultToExportInput(r))),
+      };
+      downloadJson(allHistoryExportFileName(), payload);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <Card className="flex flex-col gap-3 p-5">
@@ -197,6 +222,10 @@ function SignedInPanel({ session }: { session: SessionContextValue }) {
           {t('account.usernameLine', { username: profile.username })}
         </p>
       </div>
+      {exportError && <Banner variant="info">{exportError}</Banner>}
+      <Button variant="secondary" disabled={exporting} onClick={() => void handleExportAllHistory()}>
+        {t('account.exportAllHistory')}
+      </Button>
       <Button variant="secondary" onClick={() => void session.signOut()}>
         {t('account.signOut')}
       </Button>

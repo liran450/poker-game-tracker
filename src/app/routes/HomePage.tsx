@@ -8,14 +8,24 @@ import { Card } from '@components/shared/Card';
 import { IconButton } from '@components/shared/IconButton';
 import { useGamesList } from '@core/offline/useGamesList';
 import { listMyPendingInvites, respondToGroupInvite, type PendingGroupInvite } from '@data/groups';
+import { ResultsCard } from '@components/ResultsCard';
+import { formatDateShort } from '@features/game/time';
 import { PendingGroupInviteCard } from '@features/groups/PendingGroupInviteCard';
 import { useSession } from '../../hooks/useSession';
+
+/** Recent finished games worth pinning to the home screen — older ones are still reachable via
+ * statistics or a direct link; this is a recency list, not a full archive
+ * (docs/build/PROGRESS.md step 6/9's "Left undone", finally closed in step 16). */
+const RECENT_FINISHED_GAMES_LIMIT = 10;
 
 export function HomePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const games = useGamesList();
   const activeGames = games.filter((game) => game.status === 'active' || game.status === 'settling');
+  const recentFinishedGames = games
+    .filter((game) => game.status === 'finished')
+    .slice(0, RECENT_FINISHED_GAMES_LIMIT);
   const session = useSession();
   const [pendingInvites, setPendingInvites] = useState<PendingGroupInvite[]>([]);
   const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
@@ -121,6 +131,30 @@ export function HomePage() {
                 {t('home.playerCount', { count: game.playerCount })}
               </span>
             </Card>
+          ))}
+        </div>
+      )}
+
+      {recentFinishedGames.length > 0 && (
+        <div className="flex flex-col gap-3 p-4 pt-0">
+          <h2 className="text-body-sm font-semibold text-fg-tertiary">{t('home.recentGamesTitle')}</h2>
+          {recentFinishedGames.map((game) => (
+            <div
+              key={game.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => void navigate(`/game/${game.id}`)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') void navigate(`/game/${game.id}`);
+              }}
+            >
+              <ResultsCard
+                gameName={game.name}
+                date={formatDateShort(new Date(game.updatedAt))}
+                playerCount={t('home.playerCount', { count: game.playerCount })}
+                className="cursor-pointer text-start"
+              />
+            </div>
           ))}
         </div>
       )}

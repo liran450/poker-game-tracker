@@ -3,8 +3,9 @@ name: Maintenance
 # Keeps the Supabase free-tier project from pausing after 7 days of inactivity
 # (docs/02-architecture.md#database-choice). Set up in step 10, ahead of any game depending on
 # the network, per docs/09-roadmap.md#m0--foundations — "do not discover it the night of a
-# game." The retention purge (purge_expired_game_data()) joins this cron in step 16, once it
-# exists; for now this job only pings.
+# game." Step 16 adds the retention purge (purge_expired_game_data(), docs/build/PLAN.md step 16)
+# to the same cron — no separate schedule, since both are cheap, idempotent maintenance sweeps
+# and a game only ever needs the network for real play, never for either of these.
 on:
   schedule:
     - cron: '0 6 */3 * *'
@@ -33,3 +34,29 @@ jobs:
             -H "apikey: $SUPABASE_ANON_KEY" \
             -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
             "$SUPABASE_URL/rest/v1/"
+
+      # purge_expired_game_data() (docs/03-data-model.md#retention-and-archiving): tier 3
+      # (game_events) at 30 days past finished_at, tier 2 (games and everything that cascades
+      # from it) at 90 days. Callable with the anon key like the ping above — no service role
+      # needed (docs/02-architecture.md#security-model) — because the function only ever deletes
+      # rows already past a fixed age threshold with no caller-supplied input, so calling it early
+      # or often is harmless, merely redundant. Its own row-per-table result is echoed as a log
+      # line each, so a runaway purge (PLAN.md step 16's exit criterion) is visible directly in
+      # the Actions history rather than needing a database query to notice.
+      - name: Purge expired game data
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::warning::SUPABASE_URL/SUPABASE_ANON_KEY repo secrets aren't set yet — \
+          skipping the purge along with the ping above."
+            exit 0
+          fi
+          response=$(curl -sSf \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -X POST -d '{}' \
+            "$SUPABASE_URL/rest/v1/rpc/purge_expired_game_data")
+          echo "$response" | jq -r '.[] | "purge: \(.table_name): \(.deleted_count) row(s) deleted"'

@@ -13,6 +13,8 @@ import { AddPlayersSheet } from './AddPlayersSheet';
 import { AuditLogDrawer } from './AuditLogDrawer';
 import { BuyInBatchBar } from './BuyInBatchBar';
 import { CashPaidSheet } from './CashPaidSheet';
+import { DeleteGameConfirmSheet } from './DeleteGameConfirmSheet';
+import { downloadJson } from './download';
 import { EndGameConfirmSheet } from './EndGameConfirmSheet';
 import { HandOverHostSheet, TakeOverHostConfirm } from './HostControlSheets';
 import { PendingRequestsSheet } from './PendingRequestsSheet';
@@ -56,7 +58,9 @@ import { useLiveGameSync } from '../../hooks/useLiveGameSync';
 import { useSession } from '../../hooks/useSession';
 import { useWakeLock } from '../../hooks/useWakeLock';
 import { dedupeDisplayNames, firstBuyInTimestamp, renderPlayerName } from '@core/players';
-import { add, formatChipValue, formatMoney, minor, sum, type Minor } from '@core/money';
+import { add, formatChipValue, formatMoney, minor, owed, sum, type Minor } from '@core/money';
+import { buildGameExportPayload, gameExportFileName } from '@core/gameExport';
+import { deleteGame } from '@data/gameDeletion';
 import { computePotStatus } from '@core/pot';
 import { getHostLastSyncedAt, handOverHost, takeOverHost } from '@data/hostControl';
 import { listPendingClaims } from '@data/claims';
@@ -103,6 +107,7 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
   const [pendingRequestsOpen, setPendingRequestsOpen] = useState(false);
   const [handOverOpen, setHandOverOpen] = useState(false);
   const [takeOverOpen, setTakeOverOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [hostLastSyncedAt, setHostLastSyncedAt] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [takeoverAnnouncement, setTakeoverAnnouncement] = useState<string | null>(null);
@@ -246,6 +251,32 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
     }
     batch.clear();
   };
+
+  function handleExport(): void {
+    const payload = buildGameExportPayload({
+      gameId,
+      name: record.name ?? '',
+      status: state.status,
+      playedOn: (state.startedAt ?? record.createdAt ?? '').slice(0, 10),
+      currency,
+      finishedAt: null,
+      players: sortedPlayers.map((p) => ({
+        displayName: displayNames.get(p.id) ?? '',
+        buysCount: p.buysCount,
+        buyInsMinor: owed(p.buysCount, buyAmountMinor),
+        cashPaidMinor: p.cashPaidMinor,
+        chipsFinal: p.isSettled ? p.chipsFinal : null,
+        netMinor: null,
+        sharedCostsShareMinor: minor(0),
+      })),
+      transfers: [],
+    });
+    downloadJson(gameExportFileName(gameId, payload.game.playedOn), payload);
+  }
+
+  function handleDelete(): void {
+    void deleteGame(gameId).then(() => navigate('/'));
+  }
 
   const singleEntry = batch.entries.length === 1 ? (batch.entries[0] ?? null) : null;
   const showResultingCount = singleEntry !== null && singleEntry.events.length === 1;
@@ -520,8 +551,38 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
               {t('hostControl.menuTakeOver')}
             </Button>
           )}
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => {
+              setGameMenuOpen(false);
+              handleExport();
+            }}
+          >
+            {t('game.exportGame')}
+          </Button>
+          {isHost && (
+            <Button
+              variant="destructive"
+              fullWidth
+              onClick={() => {
+                setGameMenuOpen(false);
+                setDeleteConfirmOpen(true);
+              }}
+            >
+              {t('game.deleteGame')}
+            </Button>
+          )}
         </div>
       </BottomSheet>
+
+      <DeleteGameConfirmSheet
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        isFinished={false}
+        onExport={handleExport}
+        onConfirmDelete={handleDelete}
+      />
 
       <SharedCostsSheet
         open={sharedCostsOpen}
