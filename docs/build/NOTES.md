@@ -45,6 +45,42 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### `profiles_public` needs `security_invoker = false` on purpose — don't "fix" it the way `group_player_results` was fixed
+**Step 15 · 2026-08-02 · decision**
+
+Step 11's own entry below (`A new view defaults to bypassing the querying user's RLS —
+group_player_results shipped that way`) fixed a real security gap by setting
+`security_invoker = true` on that view. `profiles_public` looks like the same shape — a view over
+an RLS-protected table — and it is tempting to "fix" it the same way. Don't: it is `false` on
+purpose, and its own comment has said so since step 10. `profiles_select_self`'s RLS is
+`id = auth.uid()` only; a co-member lookup (which is this view's entire reason to exist) needs to
+see rows that policy would otherwise hide, so the view runs as its owner and enforces "self or
+co-member" itself, in its own `where` clause. Setting `security_invoker = true` here wouldn't close
+a gap — it would break every existing co-member lookup (the share sheet's viewer list, the group
+member list, and now the statistics leaderboard's `stats_visibility` check), since the view would
+start deferring to `profiles_select_self` and return nothing for anyone but the caller themselves.
+`get_advisors(type: 'security')` will keep flagging this view as a `security_definer_view` forever;
+that specific flag on this specific view is expected, not a regression to chase.
+
+### The `06-statistics.md` spec is silent on two things a real implementation needs a number for — the sample-size denominator, and "biggest night"
+**Step 15 · 2026-08-02 · decision**
+
+Two judgment calls made while building `core/statistics.ts`, both documented in `PROGRESS.md`'s
+step-15 entry too, recorded here because they're the kind of thing a future session could silently
+contradict without realizing it was already decided:
+
+1. **A rate's displayed sample size is always the total games underlying that population, not the
+   rate's own post-exclusion denominator.** `06-statistics.md`'s one example (`62% (13 משחקים)`)
+   doesn't say whether 13 is "games played" or "wins + losses after zero-exclusion" — the doc's own
+   worked win-rate example uses 6 games with no ties, where the two numbers happen to coincide, so
+   it never actually disambiguates. Every rate in this codebase (`Rate.sampleSize` in
+   `core/statistics.ts`) now uses the former uniformly.
+2. **"Biggest night" (06's own per-table stat) is keyed on `game_summaries.total_cash_pot_minor` —
+   physical cash handed to the table (05-settlement.md#the-pot-as-a-settlement-node) — not
+   `total_buy_ins_minor`.** The column is literally named for the pot, and 06 groups "average pot
+   per game, biggest night" under one heading, which reads as one pot-denominated figure rather
+   than two different money quantities sharing a table cell.
+
 ### `renderPlayerName` needs its resolver argument at every call site, or a registered player's name renders blank
 **Step 14 · 2026-08-01 · trap**
 
