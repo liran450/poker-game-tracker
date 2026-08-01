@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router';
 import { AppShell } from '@components/AppShell';
 import { Banner } from '@components/Banner';
+import { InfoExplainer } from '@components/InfoExplainer';
 import { Money } from '@components/Money';
 import { Button } from '@components/shared/Button';
 import { TextField } from '@components/shared/TextField';
@@ -201,9 +202,12 @@ export function SharedGamePage() {
                 <div className="flex items-center gap-2">
                   <Money value={minor(p.buysCount * projection.game.buyAmountMinor)} currency={currency} size="sm" />
                   {canClaim && (
-                    <Button variant="ghost" onClick={() => void handleClaim(p.id)}>
-                      {t('sharedLink.claimRow')}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" onClick={() => void handleClaim(p.id)}>
+                        {t('sharedLink.claimRow')}
+                      </Button>
+                      <InfoExplainer content={t('sharedLink.claimExplainer')} />
+                    </div>
                   )}
                   {claimedPlayerId === p.id && (
                     <span className="text-caption text-positive">{t('sharedLink.claimSent')}</span>

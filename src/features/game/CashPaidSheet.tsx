@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@components/BottomSheet';
+import { InfoExplainer } from '@components/InfoExplainer';
 import { SelectionChip } from '@components/SelectionChip';
 import { Button } from '@components/shared/Button';
 import { TextField } from '@components/shared/TextField';
@@ -46,6 +47,10 @@ export function CashPaidSheet({
   return (
     <BottomSheet open={open} onClose={onClose} title={t('cashPaid.title', { name: playerName })}>
       <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-1">
+          <span className="text-body-sm font-semibold text-fg-tertiary">{t('players.cashPaid')}</span>
+          <InfoExplainer content={t('cashPaid.explainer')} />
+        </div>
         <TextField
           aria-label={t('cashPaid.title', { name: playerName })}
           type="text"

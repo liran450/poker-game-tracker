@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import { db } from '@core/offline/db';
 import { fold } from '@core/events';
+import { minor } from '@core/money';
+import { createGame } from '@core/offline/gameActions';
 import { loadGameEvents } from '@core/offline/outbox';
 import { NewGamePage } from './NewGamePage';
 import { SessionProvider } from '../../hooks/useSession';
@@ -87,5 +89,29 @@ describe('<NewGamePage>', () => {
     const state = fold(await loadGameEvents(gameId));
     expect(state.status).toBe('active');
     expect([...state.players.values()].map((p) => p.guestName).sort()).toEqual(['אורי', 'מור']);
+  });
+
+  it('has no שכפל משחק אחרון button with no local games to copy from', () => {
+    renderPage();
+    expect(screen.queryByRole('button', { name: 'newGame.duplicateLastGame' })).toBeNull();
+  });
+
+  it('שכפל משחק אחרון copies the last game\'s stakes, privacy and guest roster', async () => {
+    await createGame({
+      name: 'משחק קודם',
+      buyAmountMinor: minor(10000),
+      chipsPerBuy: 200,
+      currencyCode: 'ILS',
+      isPrivate: true,
+      playerNames: ['גיל', 'נועה'],
+    });
+
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'newGame.duplicateLastGame' }));
+
+    await waitFor(() => expect(screen.getByLabelText('money.buyAmount')).toHaveValue('100'));
+    expect(screen.getByLabelText('money.chipsPerBuy')).toHaveValue('200');
+    expect(screen.getByLabelText('newGame.privateGame')).toBeChecked();
+    expect(screen.getByText('home.playerCount')).toBeDefined();
   });
 });

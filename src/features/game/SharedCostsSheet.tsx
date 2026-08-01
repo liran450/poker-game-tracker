@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@components/BottomSheet';
 import { DestructiveConfirm } from '@components/DestructiveConfirm';
+import { InfoExplainer } from '@components/InfoExplainer';
 import { Money } from '@components/Money';
 import { SelectionChip } from '@components/SelectionChip';
 import { Button } from '@components/shared/Button';
@@ -115,9 +116,16 @@ export function SharedCostsSheet({
           </div>
         )}
 
-        <Button variant="secondary" fullWidth onClick={() => setView({ mode: 'form', editingCostId: null })}>
-          {t('sharedCosts.add')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            className="flex-1"
+            onClick={() => setView({ mode: 'form', editingCostId: null })}
+          >
+            {t('sharedCosts.add')}
+          </Button>
+          <InfoExplainer content={t('sharedCosts.addExplainer')} />
+        </div>
       </div>
     </BottomSheet>
   );

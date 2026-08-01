@@ -25,6 +25,7 @@ describe('<SharedCostsSheet>', () => {
       />,
     );
     expect(screen.getByText('sharedCosts.empty')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'gallery.infoExplainer' })).toBeInTheDocument();
   });
 
   it('lists existing costs with their payer', () => {

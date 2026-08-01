@@ -45,6 +45,58 @@ _(none open — see the settled entry below on session storage.)_
 
 ## Entries
 
+### `db.games` only indexes `updatedAt` — "most recently created" needs an in-memory sort, not `orderBy`
+**Step 17 · 2026-08-02 · trap-shaped decision**
+
+`core/offline/db.ts`'s `games` store is `'id, updatedAt'` — no `createdAt` index — and
+`appendEvent`'s recency bump (step 6) touches `updatedAt` on *every* event a game gets, not just at
+creation. So "the game I started most recently" and "the game I most recently did anything to" are
+genuinely different queries, and only the second one is indexed. Hit this building `שכפל משחק אחרון`
+(step 17): a naive `db.games.orderBy('updatedAt').last()` would have picked whichever game the host
+happened to poke last — including reopening an old one to fix a typo — not the last game actually
+played. `getMostRecentGameSetup()` (`core/offline/gameActions.ts`) instead reads the whole table
+(`db.games.toArray()`) and sorts by `createdAt` in memory. Fine at this scale — the table is one
+user's own local games, never more than a few hundred — but don't reach for
+`db.games.orderBy('createdAt')` anywhere; it isn't indexed and Dexie's `orderBy` silently degrades
+to a full scan without one, so the *type* looks fine while the query stops meaning what it says.
+Proven with a dedicated test (`gameActions.test.ts`) that creates an older game, touches it after a
+newer game exists, and asserts the pick still follows `createdAt`.
+
+### `קח ניהול` gets no dedicated ⓘ — the take-over confirm sheet already shows the consequence unconditionally
+**Step 17 · 2026-08-02 · decision**
+
+`04-ux-spec.md`'s ⓘ table lists `קח ניהול` among the ten controls needing an explainer, but
+`HostControlSheets.tsx#TakeOverHostConfirm` (built in step 13) already renders the exact
+consequence — "the current host loses control immediately, and their unsynced changes can be lost
+if their phone never reconnects" — as plain, always-visible text in the confirm sheet, not behind
+any tap. `04-ux-spec.md#the-invitees-side`'s own pending-invite card sets the precedent for
+preferring this: "the consequence line is not optional and not hidden behind the ⓘ — the popover
+expands on it, but the card itself says the thing that matters." Adding a redundant ⓘ next to the
+`⋯` menu's `קח ניהול` button, on top of a sheet that says the same thing unconditionally one tap
+later, would be exactly what `04`'s own ⓘ rules warn against ("never a patch for a label that
+should have been clearer", "muted, not decorative" — worth reading literally: a ⓘ whose content the
+very next screen already shows without a tap is decoration, not information). Treated as already
+satisfied by a stronger mechanism, not skipped — don't add one here without revisiting this
+reasoning first.
+
+### `wa.me` payment shortcuts need a real privacy decision before they can be built, not just code
+**Step 17 · 2026-08-02 · decision**
+
+`05-settlement.md#payment-links--reality-check-23` wants a `wa.me` link built from *the other
+player's* phone number. `profiles.phone` already exists as a column
+(`supabase/migrations/20260729120100_profiles.sql`) but is self-only under the current RLS — by
+design, per the same migration's own comment, mirroring step 10's `NOTES.md` entry on why
+`profiles_public` only ever widens username/display_name/avatar_url. Making `wa.me` links work for
+real means widening visibility of a phone number to co-players, which is a materially different
+kind of exposure than a username or a stats-visibility flag (step 15's precedent) — a group member
+could then look up another member's real phone number through the app, not just their poker
+results. That is a call worth the repository owner making explicitly, not one to default into via
+a migration written to unblock a checklist item. Nothing was built this session beyond confirming
+the gap: there is no phone-number field anywhere in the UI yet either (checked — `AccountPage` has
+no such field), so this is a three-part feature (profile UI + a deliberate RLS widening + the
+settlement-screen link itself), not a small addition. Copy-to-clipboard, the other half of the same
+`Build` bullet, was already done in step 9 (`TransferRow`'s tap-to-copy) and needed nothing further.
+
 ### `game_ended`'s push never called `finalize_game()` — every signed-in host's game was missing its permanent snapshot
 **Step 16 · 2026-08-02 · trap**
 

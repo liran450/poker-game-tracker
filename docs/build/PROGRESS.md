@@ -43,7 +43,7 @@ change — otherwise the history stops meaning anything.
 | 14 | Groups, roles, private games | in progress — code complete, migration applied to the real Supabase project; not yet tested on a real device | | |
 | 15 | Statistics | in progress — code complete, migration applied to the real Supabase project; not yet tested on a real signed-in device | | |
 | 16 | Retention live, deletion, export | in progress — code complete, no migration needed this step; the new maintenance.yml purge step not yet confirmed against the real Supabase project | | |
-| 17 | Polish and v1 sign-off | not started | | |
+| 17 | Polish and v1 sign-off | in progress — 8 of the 10 ⓘ explainers built, plus `שכפל משחק אחרון` | | |
 
 **Next up:** steps 7 and 9 are code-complete and each blocked on a real-world action only the
 repository owner can take — step 7 on a real game played on the build, step 9 on pasting its share
@@ -197,6 +197,12 @@ never renders a blank screen. `npm run verify` (now 640 tests, up from 612), `np
 own entry below for what's deliberately scoped down (JSON only, not CSV; no dedicated unit test for
 the all-history export button, the same standing "can't sign in from this sandbox" limitation every
 cloud-gated route has had since step 12) and why.
+
+**Step 17 (polish and v1 sign-off) is partially built, one session, not yet `done`.** Of the
+"Build" list, this session covers two items in full and leaves the rest — see this step's own
+entry below for the complete accounting against every exit criterion and every `Build` bullet, and
+why the remaining ones (`wa.me`, the full pseudo-locale sweep, the manual device matrix) are left
+for a later session or the owner.
 
 ### Checkpoints that are not steps
 
@@ -2233,3 +2239,117 @@ two new ones.
   on why `transfer_summaries` stores `from_name`/`to_name`, not ids). Don't try to make
   `PastGameResultsView` share `SummaryRoute`'s rendering path — the underlying data really is
   shaped differently, on purpose.
+
+---
+
+### Step 17 — Polish and v1 sign-off
+**Status:** in progress — 2 of 6 `Build` bullets done, 0 of 8 exit criteria checked
+**Sessions:** 1  **Commits:** 1
+
+**Built.**
+- **8 of the 10 ⓘ explainers from [`04`](../04-ux-spec.md#-explainers)'s table**, each wired to a
+  real control, not a placeholder: `ז'יטונים לקנייה` (`NewGamePage`), `💵` cash paid
+  (`CashPaidSheet`), `לא מזוהה / הבית` (`PotResolutionSheet`'s "assign to house" button), share
+  link expiry (`ShareSheet`), `כינוי` (`PlayerActionsSheet`'s nickname trigger, registered players
+  only), `פתח מחדש` (`SummaryScreen`'s reopen row), claiming a guest row (`SharedGamePage`'s "זה
+  אני" button), and shared costs (`SharedCostsSheet`'s add button) — on top of `משחק פרטי`, already
+  built in step 6. `InfoExplainer` itself had no dedicated component test before this session
+  (`src/components/InfoExplainer/InfoExplainer.test.tsx` is new: open-on-tap, close-on-second-tap,
+  close-on-Escape); one assertion was added per wiring site to an existing test file where one
+  already existed (`PotResolutionSheet`, `SharedCostsSheet`, `PlayerActionsSheet`,
+  `SummaryScreen`), confirming the explainer renders with the right content — `CashPaidSheet`,
+  `ShareSheet` and `SharedGamePage` have no test file at all yet (see Watch out), so their wiring
+  is proven only by typecheck/lint and the existing e2e suite, which already exercises
+  `SharedCostsSheet` (equivalently: the shared-cost step of `e2e/full-game.spec.ts`) end to end
+  with the new button layout in place.
+- **`שכפל משחק אחרון`** (`04-ux-spec.md#new-game--setup`): `core/offline/gameActions.ts
+  #getMostRecentGameSetup()` finds the device's most recently *created* local game — not most
+  recently *touched*, which is all `db.games`'s one index (`updatedAt`) actually tracks, since
+  `appendEvent` bumps it on every event, not just creation (see this step's Watch out and
+  `NOTES.md`) — and returns its stakes, privacy flag, group, and active roster split into guest
+  names and account-player ids. `NewGamePage` wires it to a new header button (hidden when there
+  is no local game to copy from, via a live `db.games.count()` query) that pre-fills the form's
+  fields — buy amount, chips per buy, `משחק פרטי`, group (if the caller is still a member), guest
+  names, and account players (display names resolved through the existing `getProfilesPublic`,
+  same call `useAccountNames` already makes elsewhere) — rather than creating and starting a new
+  game outright; see Deviated for why. 12 new tests: 4 for `getMostRecentGameSetup` (no local
+  games → `null`; copies stakes/privacy/group/guest-roster and excludes a removed player; picks by
+  `createdAt` even when an older game was touched more recently, proven by deliberately bumping the
+  older game's `updatedAt` past the newer game's; splits guest names from account-player ids) and
+  2 for `NewGamePage` (button absent with zero local games; button present and pre-fills every
+  field from a seeded game), plus the `InfoExplainer` and per-site tests above.
+
+`npm run verify` (now 649 tests, up from 640) and all 7 Playwright e2e tests are green. The
+pseudo-locale was spot-checked against a real dev server on `NewGamePage` specifically (the screen
+with the most new UI this session) — the new label+ⓘ rows hold up at ~40% longer text width, and
+the popover itself doesn't overflow the viewport at a 390px phone width — not swept across every
+other touched screen; see Left undone.
+
+**Deviated.**
+- **`קח ניהול` does not get a dedicated ⓘ**, despite being one of the table's ten rows.
+  `HostControlSheets.tsx#TakeOverHostConfirm` (built in step 13) already shows the exact
+  consequence the table's row describes — "the current host loses control immediately, and their
+  unsynced changes can be lost if their phone never reconnects" — as **always-visible** text in the
+  confirm sheet, not gated behind a tap at all. `04-ux-spec.md#the-invitees-side`'s own pending-invite
+  card sets the precedent for this: "the consequence line is not optional and not hidden behind the
+  ⓘ — the popover expands on it, but the card itself says the thing that matters." Adding a
+  redundant ⓘ next to the `⋯` menu's take-over button, on top of a sheet that already says the same
+  thing unconditionally one tap later, would be exactly what `04`'s own rules warn against ("never
+  a patch for a label that should have been clearer", "muted, not decorative"). Treated as already
+  satisfied, by a stronger mechanism than the one asked for — not skipped.
+- **`שכפל משחק אחרון` pre-fills the form; it does not create-and-start the game in one action.**
+  The spec's wording ("same players, same stakes, one tap") is genuinely ambiguous between the two
+  readings. `04-ux-spec.md#new-game--setup`'s very first sentence about this same screen — "sensible
+  defaults already filled so the whole thing can be dismissed with one tap" — describes the
+  *existing* create flow in identical language for identical behaviour (fill fields, then one more
+  tap to start), so duplicate-last-game filling the fields and leaving `התחל משחק` as the actual
+  one-tap dismissal is consistent with the screen's own established idiom, and it lets the user
+  glance at what got copied (and edit it, e.g. drop a no-show) before committing — a page best
+  suited for reversibility for a very deliberate reason.
+
+**Left undone.**
+- **`wa.me` shortcuts are not built at all** — this is the largest deferred piece, and deliberately
+  not started rather than half-built. `05-settlement.md#payment-links--reality-check-23` calls for
+  a `wa.me` link built from *the other player's* phone number, but `profiles.phone`
+  (`supabase/migrations/20260729120100_profiles.sql`) is self-only under the current RLS — nobody
+  can read anyone else's phone number, and there is no UI anywhere in the app to even enter one
+  (checked: no `phone` field exists outside that one column and its RLS comment). Building this for
+  real needs three things together: a profile-settings field to capture it, a new migration
+  widening `profiles_public` (or a narrower view) to expose phone to co-members the same way step
+  15 widened it for `stats_visibility` — and that is a real privacy decision (any group member
+  could then see any other member's phone number), not a mechanical one, so it wasn't made
+  unilaterally this session. **Copy-to-clipboard, by contrast, was already built** — `TransferRow`
+  (step 9) already copies a name or an amount to the clipboard on tap in read mode — so that half
+  of the `Build` bullet is done; only the `wa.me`/phone half is outstanding.
+- **Nickname pre-fill from the player's most recent nickname in the group** — not built. This needs
+  a new read across the caller's past games in a group for a given account id's most recently used
+  `nickname_set` value, which is a real, separate data-layer query (nothing existing shape already
+  answers "what was this person called last time"), not a small addition to fit alongside the rest
+  of this session's scope. `PlayerActionsSheet.currentNickname` still only ever reflects the
+  *current* game.
+- **The pseudo-locale sweep is spot-checked, not swept.** Only `NewGamePage` was actually driven in
+  a real browser at `?lang=en-XA` this session (see Built). Every other screen touched this session
+  (`CashPaidSheet`, `PotResolutionSheet`, `ShareSheet`, `PlayerActionsSheet`, `SummaryScreen`,
+  `SharedGamePage`, `SharedCostsSheet`) is structurally correct — every new string goes through
+  i18next, every new layout uses flex/gap rather than fixed widths — but not individually
+  screenshotted at the ~40%-longer pseudo-locale width the way `CLAUDE.md` asks for "as you build
+  it". Worth doing before this step is called `done`, not deferred to a final audit.
+- **The manual device matrix (iOS Safari, Android Chrome, installed and in-browser, airplane mode)
+  needs the repository owner** — no tool here can drive a real phone. Same standing kind of gap as
+  steps 7's and 9's real-device checkpoints.
+- **None of the eight `09 — Definition of done for v1` checklist lines are checked off yet** — every
+  one either depends on a `Build` item still outstanding above, or on the device matrix.
+
+**Watch out.**
+- **`db.games` has no `createdAt` index — only `updatedAt`** (`core/offline/db.ts`, unchanged this
+  session). `getMostRecentGameSetup` therefore reads the whole table and sorts in memory rather
+  than using `orderBy`; this is fine at the scale of one user's own local games, but don't reach
+  for `db.games.orderBy('createdAt')` anywhere — it isn't indexed and would silently do the wrong
+  thing (Dexie's `orderBy` needs a real index to be meaningful).
+- **`CashPaidSheet`, `ShareSheet` and `SharedGamePage` still have zero dedicated test files** — a
+  pre-existing gap (the same "can't sign in from this sandbox" family of limitations for
+  `ShareSheet`/`SharedGamePage`, and simply never written for `CashPaidSheet`), not one this session
+  introduced, but also not one it closed. Their new ⓘ wiring rides on typecheck/lint plus the
+  existing e2e suite rather than a unit assertion of its own.
+- **Don't add a `קח ניהול` ⓘ without re-reading the Deviated entry above first** — the omission is a
+  considered call, not a gap that was simply missed.

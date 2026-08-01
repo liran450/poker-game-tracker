@@ -15,6 +15,7 @@ import {
   editSettledChips,
   editTransfer,
   finalizeGame,
+  getMostRecentGameSetup,
   recomputeTransfers,
   removeBuyIn,
   removePlayer,
@@ -579,5 +580,58 @@ describe('deleteGameLocally', () => {
 
     expect(await db.games.get(keep)).toBeDefined();
     expect(await loadGameEvents(keep)).not.toHaveLength(0);
+  });
+});
+
+describe('getMostRecentGameSetup', () => {
+  it('returns null with no local games', async () => {
+    expect(await getMostRecentGameSetup()).toBeNull();
+  });
+
+  it('copies stakes, privacy, group and the active guest roster of the most recently created game', async () => {
+    const { gameId } = await createGame({ ...baseInput, isPrivate: true, groupId: 'group-1' });
+    await removePlayer(gameId, [...fold(await loadGameEvents(gameId)).players.values()][0]!.id);
+
+    const setup = await getMostRecentGameSetup();
+
+    expect(setup).toEqual({
+      buyAmountMinor: baseInput.buyAmountMinor,
+      chipsPerBuy: baseInput.chipsPerBuy,
+      isPrivate: true,
+      groupId: 'group-1',
+      playerNames: ['אורי', 'רני', 'דנה'],
+      accountPlayerIds: [],
+    });
+  });
+
+  it('picks the most recently created game, not the most recently touched one', async () => {
+    const { gameId: older } = await createGame(baseInput);
+    const { gameId: newer } = await createGame({ ...baseInput, playerNames: ['גיל'] });
+    await db.games.update(older, { createdAt: '2020-01-01T00:00:00.000Z' });
+    await db.games.update(newer, { createdAt: '2020-01-02T00:00:00.000Z' });
+    // Touching the older game bumps its `updatedAt` past the newer game's — the pick must still
+    // follow `createdAt`, not the `updatedAt` index (docs/build/NOTES.md).
+    await addBuyIn(older, [...fold(await loadGameEvents(older)).players.values()][0]!.id);
+
+    const setup = await getMostRecentGameSetup();
+
+    expect(setup?.playerNames).toEqual(['גיל']);
+  });
+
+  it('splits guest and account players and excludes removed players', async () => {
+    const { gameId } = await createGame({
+      ...baseInput,
+      playerNames: ['מור'],
+      accountPlayers: [{ userId: 'user-1', displayName: 'דנה' }],
+    });
+    const morId = [...fold(await loadGameEvents(gameId)).players.values()].find(
+      (p) => p.guestName === 'מור',
+    )!.id;
+    await removePlayer(gameId, morId);
+
+    const setup = await getMostRecentGameSetup();
+
+    expect(setup?.playerNames).toEqual([]);
+    expect(setup?.accountPlayerIds).toEqual(['user-1']);
   });
 });

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@components/BottomSheet';
+import { InfoExplainer } from '@components/InfoExplainer';
 import { Money } from '@components/Money';
 import { Button } from '@components/shared/Button';
 import { abs, type Minor } from '@core/money';
@@ -73,9 +74,12 @@ export function PotResolutionSheet({
           )}
         </div>
 
-        <Button variant="secondary" fullWidth onClick={onAssignToHouse}>
-          {t('pot.assignToHouse')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" className="flex-1" onClick={onAssignToHouse}>
+            {t('pot.assignToHouse')}
+          </Button>
+          <InfoExplainer content={t('pot.assignToHouseExplainer')} />
+        </div>
       </div>
     </BottomSheet>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@components/BottomSheet';
+import { InfoExplainer } from '@components/InfoExplainer';
 import { Button } from '@components/shared/Button';
 import {
   createShareLink,
@@ -124,10 +125,13 @@ export function ShareSheet({
               <p className="text-body-sm text-fg-secondary">
                 {isFinished ? t('share.linkGrantsFinished') : t('share.linkGrantsLive')}
               </p>
-              <p className="text-caption text-fg-tertiary">
-                {t('share.linkExpiry')}
-                {activeLink.viewCount > 0 && ` · ${t('share.viewerCount', { count: activeLink.viewCount })}`}
-              </p>
+              <div className="flex items-center gap-1">
+                <p className="text-caption text-fg-tertiary">
+                  {t('share.linkExpiry')}
+                  {activeLink.viewCount > 0 && ` · ${t('share.viewerCount', { count: activeLink.viewCount })}`}
+                </p>
+                <InfoExplainer content={t('share.linkExpiryExplainer')} />
+              </div>
               {freshUrl && (
                 <div className="flex gap-2">
                   <Button

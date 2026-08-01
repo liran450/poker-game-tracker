@@ -94,6 +94,7 @@ describe('<PlayerActionsSheet>', () => {
     );
 
     expect(screen.queryByText('players.rename')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'gallery.infoExplainer' })).toBeInTheDocument();
     await userEvent.click(screen.getByText('players.setNickname'));
     const field = screen.getByLabelText('players.nicknameLabel');
     expect(field).toHaveValue('דני');

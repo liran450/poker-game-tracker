@@ -9,11 +9,13 @@ import { SelectionChip } from '@components/SelectionChip';
 import { InfoExplainer } from '@components/InfoExplainer';
 import { AddPlayersSheet } from '@features/game/AddPlayersSheet';
 import { formatDateShort } from '@features/game/time';
-import { createGame, type AccountPlayerPick } from '@core/offline/gameActions';
+import { db } from '@core/offline/db';
+import { createGame, getMostRecentGameSetup, type AccountPlayerPick } from '@core/offline/gameActions';
 import { getLastUsedGroupId, setLastUsedGroupId } from '@core/offline/lastUsedGroup';
 import { listRecentPlayers } from '@core/offline/recentPlayers';
-import { formatChipValue, formatMoney, fromMajor } from '@core/money';
+import { formatChipValue, formatMoney, fromMajor, toMajor } from '@core/money';
 import { listMyGroups, type Group } from '@data/groups';
+import { getProfilesPublic } from '@data/profiles';
 import { useGroupMemberOptions } from '../../hooks/useGroupMemberOptions';
 import { useSession } from '../../hooks/useSession';
 
@@ -41,6 +43,7 @@ export function NewGamePage() {
 
   const recentNames = useLiveQuery(() => listRecentPlayers().then((r) => r.map((p) => p.name)), []) ?? [];
   const groupMembers = useGroupMemberOptions(groupId, session.cloudConfigured);
+  const hasLastGame = (useLiveQuery(() => db.games.count(), []) ?? 0) > 0;
 
   useEffect(() => {
     if (!session.cloudConfigured || !session.profile) return;
@@ -84,11 +87,34 @@ export function NewGamePage() {
     void navigate(`/game/${gameId}`);
   }
 
+  async function handleDuplicateLastGame(): Promise<void> {
+    const setup = await getMostRecentGameSetup();
+    if (!setup) return;
+    setBuyAmountMajor(toMajor(setup.buyAmountMinor));
+    setChipsPerBuy(setup.chipsPerBuy);
+    setIsPrivate(setup.isPrivate);
+    if (setup.groupId !== null && myGroups.some((g) => g.id === setup.groupId)) {
+      setGroupId(setup.groupId);
+    }
+    setPlayerNames([...setup.playerNames]);
+    if (setup.accountPlayerIds.length > 0 && session.cloudConfigured) {
+      const profiles = await getProfilesPublic(setup.accountPlayerIds);
+      setAccountPlayers(profiles.map((p) => ({ userId: p.id, displayName: p.displayName })));
+    } else {
+      setAccountPlayers([]);
+    }
+  }
+
   return (
     <AppShell
       header={
-        <div className="flex items-center px-5 py-3">
+        <div className="flex items-center justify-between px-5 py-3">
           <h1 className="text-heading font-bold">{t('newGame.title')}</h1>
+          {hasLastGame && (
+            <Button variant="ghost" size="sm" onClick={() => void handleDuplicateLastGame()}>
+              {t('newGame.duplicateLastGame')}
+            </Button>
+          )}
         </div>
       }
       footer={
@@ -121,9 +147,12 @@ export function NewGamePage() {
             />
           </div>
           <div className="flex flex-1 flex-col gap-2">
-            <label htmlFor="new-game-chips-per-buy" className="text-body-sm font-semibold text-fg-tertiary">
-              {t('money.chipsPerBuy')}
-            </label>
+            <div className="flex items-center gap-1">
+              <label htmlFor="new-game-chips-per-buy" className="text-body-sm font-semibold text-fg-tertiary">
+                {t('money.chipsPerBuy')}
+              </label>
+              <InfoExplainer content={t('newGame.chipsPerBuyExplainer')} />
+            </div>
             <TextField
               id="new-game-chips-per-buy"
               type="text"

@@ -169,6 +169,47 @@ export async function addPlayersToGame(
   if (names.length > 0) await recordPlayedNames(names);
 }
 
+export interface LastGameSetup {
+  readonly buyAmountMinor: Minor;
+  readonly chipsPerBuy: number;
+  readonly isPrivate: boolean;
+  readonly groupId: string | null;
+  /** Guest names, in seat order. */
+  readonly playerNames: readonly string[];
+  /** Group members seated by account, in seat order — `userId` only; the caller resolves
+   * display names (a `src/data/` concern, `core/offline` doesn't touch profiles). */
+  readonly accountPlayerIds: readonly string[];
+}
+
+/**
+ * `שכפל משחק אחרון` (04-ux-spec.md#new-game--setup): the device's most recently *created* local
+ * game — not most recently touched, which `db.games`'s only index (`updatedAt`) tracks instead,
+ * since `appendEvent` bumps it on every event, not just creation (docs/build/NOTES.md). The table
+ * is small (one user's own games), so sorting the whole thing in memory by `createdAt` is simpler
+ * and more correct than trying to express "most recent start" through an index that doesn't track
+ * it. Returns `null` when there is no local game to copy from at all.
+ */
+export async function getMostRecentGameSetup(): Promise<LastGameSetup | null> {
+  const games = await db.games.toArray();
+  const withCreatedAt = games.filter((g): g is CachedGameRecord & { createdAt: string } => !!g.createdAt);
+  if (withCreatedAt.length === 0) return null;
+
+  const latest = withCreatedAt.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
+  const state = fold(await loadGameEvents(latest.id));
+  const activePlayers = [...state.players.values()]
+    .filter((p) => !p.isRemoved)
+    .sort((a, b) => a.seatOrder - b.seatOrder);
+
+  return {
+    buyAmountMinor: minor(latest.buyAmountMinor ?? 0),
+    chipsPerBuy: latest.chipsPerBuy ?? 0,
+    isPrivate: latest.isPrivate ?? false,
+    groupId: latest.groupId ?? null,
+    playerNames: activePlayers.filter((p) => p.userId === null).map((p) => p.guestName ?? ''),
+    accountPlayerIds: activePlayers.filter((p) => p.userId !== null).map((p) => p.userId!),
+  };
+}
+
 /** Soft-delete: kept in the log, excluded from math and the roster (03-data-model.md#game_players). */
 export async function removePlayer(gameId: string, playerId: string): Promise<void> {
   const actorId = await getActorId();
