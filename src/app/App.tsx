@@ -3,6 +3,8 @@ import { HashRouter, Route, Routes } from 'react-router';
 
 import { SessionProvider } from '../hooks/useSession';
 import { AccountPage } from './routes/AccountPage';
+import { GroupPage } from './routes/GroupPage';
+import { GroupsListPage } from './routes/GroupsListPage';
 import { HomePage } from './routes/HomePage';
 import { NewGamePage } from './routes/NewGamePage';
 import { GamePage } from './routes/GamePage';
@@ -30,6 +32,8 @@ export function App() {
           <Route path="/game/:gameId" element={<GamePage />} />
           <Route path="/s/:token" element={<SharedGamePage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/groups" element={<GroupsListPage />} />
+          <Route path="/groups/:groupId" element={<GroupPage />} />
           {import.meta.env.DEV && (
             <Route
               path="/gallery"

@@ -94,6 +94,7 @@ export async function ensureGameRowExists(
     buy_amount_minor: record.buyAmountMinor,
     chips_per_buy: record.chipsPerBuy,
     is_private: record.isPrivate ?? false,
+    group_id: record.groupId ?? null,
     status: state.status,
     host_id: hostUserId,
     created_by: hostUserId,

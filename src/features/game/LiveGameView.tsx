@@ -48,7 +48,9 @@ import {
 import { listRecentPlayers } from '@core/offline/recentPlayers';
 import { useGame } from '@core/offline/useGame';
 import { useSyncState } from '@core/offline/useSyncState';
+import { useAccountNames } from '../../hooks/useAccountNames';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
+import { useGroupMemberOptions } from '../../hooks/useGroupMemberOptions';
 import { useElapsedTime } from '../../hooks/useElapsedTime';
 import { useLiveGameSync } from '../../hooks/useLiveGameSync';
 import { useSession } from '../../hooks/useSession';
@@ -57,7 +59,6 @@ import { dedupeDisplayNames, firstBuyInTimestamp, renderPlayerName } from '@core
 import { add, formatChipValue, formatMoney, minor, sum, type Minor } from '@core/money';
 import { computePotStatus } from '@core/pot';
 import { getHostLastSyncedAt, handOverHost, takeOverHost } from '@data/hostControl';
-import { getProfilesPublic } from '@data/profiles';
 import { listPendingClaims } from '@data/claims';
 import { listPendingJoinRequests } from '@data/joinRequests';
 
@@ -87,6 +88,7 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
   const game = useGame(gameId);
   const recentNames =
     useLiveQuery(() => listRecentPlayers().then((players) => players.map((p) => p.name)), []) ?? [];
+  const groupMemberOptions = useGroupMemberOptions(game?.record?.groupId ?? null, session.cloudConfigured);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [actionsForPlayerId, setActionsForPlayerId] = useState<string | null>(null);
   const [cashPaidTarget, setCashPaidTarget] = useState<CashPaidTarget | null>(null);
@@ -102,7 +104,6 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
   const [handOverOpen, setHandOverOpen] = useState(false);
   const [takeOverOpen, setTakeOverOpen] = useState(false);
   const [hostLastSyncedAt, setHostLastSyncedAt] = useState<string | null>(null);
-  const [viewerNames, setViewerNames] = useState<ReadonlyMap<string, string>>(new Map());
   const [pendingCount, setPendingCount] = useState(0);
   const [takeoverAnnouncement, setTakeoverAnnouncement] = useState<string | null>(null);
 
@@ -115,22 +116,16 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
 
   const isHost = session.cloudConfigured && game?.state.hostId !== null && game?.state.hostId === session.user?.id;
   const viewerIds = game ? [...game.state.viewers] : [];
-  const viewerIdsKey = viewerIds.join(',');
+  const playerAccountIds = game
+    ? [...game.state.players.values()].flatMap((p) => (p.userId !== null ? [p.userId] : []))
+    : [];
+  // Every account-linked identity this screen might need to render a name for — a registered
+  // player (seated via a claim, an approved join request, or a group-member pick, docs/build/
+  // PLAN.md step 14) is exactly as unresolvable from local state as a viewer already was, since
+  // `renderPlayerName`'s account path (`core/players.ts`) needs a real lookup, not just an id.
+  const accountIdsToResolve = [...new Set([...viewerIds, ...playerAccountIds])];
+  const accountNames = useAccountNames(accountIdsToResolve, session.cloudConfigured);
   const seenHostTakeoverEventIds = useRef<Set<string> | null>(null);
-
-  useEffect(() => {
-    // An empty viewer list needs no fetch — `viewerNames` staying stale here is harmless,
-    // nothing renders a lookup for an id that isn't in `viewerIds` in the first place.
-    if (!session.cloudConfigured || viewerIds.length === 0) return;
-    let cancelled = false;
-    void getProfilesPublic(viewerIds).then((profiles) => {
-      if (!cancelled) setViewerNames(new Map(profiles.map((p) => [p.id, p.displayName])));
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.cloudConfigured, viewerIdsKey]);
 
   useEffect(() => {
     if (!isHost) return;
@@ -168,7 +163,9 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
     seenHostTakeoverEventIds.current = new Set(takeoverIds);
 
     const newHostPlayer = [...game.state.players.values()].find((p) => p.userId === newEvent.actorId);
-    const newHostName = newHostPlayer ? renderPlayerName(newHostPlayer) : viewerNames.get(newEvent.actorId);
+    const newHostName = newHostPlayer
+      ? renderPlayerName(newHostPlayer, (userId) => accountNames.get(userId))
+      : accountNames.get(newEvent.actorId);
     setTakeoverAnnouncement(
       t('hostControl.announcement', { name: newHostName ?? t('share.unknownViewer') }),
     );
@@ -183,9 +180,10 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
   const buyAmountMinor = minor(record.buyAmountMinor ?? 0);
   const chipsPerBuy = record.chipsPerBuy ?? 1;
 
+  const resolveAccountName = (userId: string): string | undefined => accountNames.get(userId);
   const activePlayers = [...state.players.values()].filter((p) => !p.isRemoved);
   const displayNames = dedupeDisplayNames(
-    activePlayers.map((p) => ({ id: p.id, name: renderPlayerName(p), order: p.seatOrder })),
+    activePlayers.map((p) => ({ id: p.id, name: renderPlayerName(p, resolveAccountName), order: p.seatOrder })),
   );
   const sortedPlayers = [...activePlayers].sort((a, b) => a.seatOrder - b.seatOrder);
   const actionsPlayer = actionsForPlayerId ? state.players.get(actionsForPlayerId) : undefined;
@@ -204,15 +202,15 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
     (activePlayers.some((p) => p.userId === currentUserId) || state.viewers.has(currentUserId));
   const currentHostPlayer = activePlayers.find((p) => p.userId === state.hostId);
   const currentHostName =
-    (state.hostId !== null ? viewerNames.get(state.hostId) : undefined) ??
-    (currentHostPlayer ? renderPlayerName(currentHostPlayer) : t('share.unknownViewer'));
+    (state.hostId !== null ? accountNames.get(state.hostId) : undefined) ??
+    (currentHostPlayer ? renderPlayerName(currentHostPlayer, resolveAccountName) : t('share.unknownViewer'));
   const handOverTargets = [
     ...activePlayers
       .filter((p) => p.userId !== null && p.userId !== state.hostId)
-      .map((p) => ({ userId: p.userId!, name: displayNames.get(p.id) ?? renderPlayerName(p) })),
+      .map((p) => ({ userId: p.userId!, name: displayNames.get(p.id) ?? renderPlayerName(p, resolveAccountName) })),
     ...[...state.viewers]
       .filter((id) => id !== state.hostId)
-      .map((id) => ({ userId: id, name: viewerNames.get(id) ?? t('share.unknownViewer') })),
+      .map((id) => ({ userId: id, name: accountNames.get(id) ?? t('share.unknownViewer') })),
   ];
 
   // Chip units, not money — how many chips are still uncounted across the
@@ -366,8 +364,9 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
       <AddPlayersSheet
         open={addSheetOpen}
         onClose={() => setAddSheetOpen(false)}
-        onCommit={(names) => void addPlayersToGame(gameId, names)}
+        onCommit={(names, picks) => void addPlayersToGame(gameId, names, picks)}
         recentNames={recentNames}
+        groupMembers={groupMemberOptions}
       />
 
       {actionsPlayer && (
@@ -603,7 +602,7 @@ export function LiveGameView({ gameId }: LiveGameViewProps) {
           gameId={gameId}
           hostUserId={currentUserId}
           viewerUserIds={viewerIds}
-          viewerNames={viewerNames}
+          viewerNames={accountNames}
           isFinished={false}
           liveStatus={{
             gameName: record.name ?? '',

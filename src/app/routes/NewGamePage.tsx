@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -9,9 +9,13 @@ import { SelectionChip } from '@components/SelectionChip';
 import { InfoExplainer } from '@components/InfoExplainer';
 import { AddPlayersSheet } from '@features/game/AddPlayersSheet';
 import { formatDateShort } from '@features/game/time';
-import { createGame } from '@core/offline/gameActions';
+import { createGame, type AccountPlayerPick } from '@core/offline/gameActions';
+import { getLastUsedGroupId, setLastUsedGroupId } from '@core/offline/lastUsedGroup';
 import { listRecentPlayers } from '@core/offline/recentPlayers';
 import { formatChipValue, formatMoney, fromMajor } from '@core/money';
+import { listMyGroups, type Group } from '@data/groups';
+import { useGroupMemberOptions } from '../../hooks/useGroupMemberOptions';
+import { useSession } from '../../hooks/useSession';
 
 const CURRENCY = 'ILS'; // inherited from the group; not user-visible in v1 (01-product-spec.md#61)
 const AMOUNT_PRESETS = [20, 50, 100];
@@ -19,6 +23,7 @@ const AMOUNT_PRESETS = [20, 50, 100];
 export function NewGamePage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const session = useSession();
   const locale = i18n.resolvedLanguage ?? 'he';
 
   const [name, setName] = useState(() =>
@@ -28,15 +33,39 @@ export function NewGamePage() {
   const [chipsPerBuy, setChipsPerBuy] = useState(100);
   const [isPrivate, setIsPrivate] = useState(false);
   const [playerNames, setPlayerNames] = useState<string[]>([]);
+  const [accountPlayers, setAccountPlayers] = useState<AccountPlayerPick[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [myGroups, setMyGroups] = useState<Group[]>([]);
+  const [groupId, setGroupId] = useState<string | null>(null);
 
   const recentNames = useLiveQuery(() => listRecentPlayers().then((r) => r.map((p) => p.name)), []) ?? [];
+  const groupMembers = useGroupMemberOptions(groupId, session.cloudConfigured);
+
+  useEffect(() => {
+    if (!session.cloudConfigured || !session.profile) return;
+    let cancelled = false;
+    void listMyGroups().then((groups) => {
+      if (cancelled) return;
+      setMyGroups(groups);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session.cloudConfigured, session.profile]);
+
+  useEffect(() => {
+    if (myGroups.length === 0) return;
+    void getLastUsedGroupId().then((id) => {
+      if (id !== null && myGroups.some((g) => g.id === id)) setGroupId(id);
+    });
+  }, [myGroups]);
 
   const safeChipsPerBuy = chipsPerBuy > 0 ? chipsPerBuy : 1;
   const buyAmountMinor = fromMajor(buyAmountMajor, CURRENCY);
   const chipValueLabel = formatChipValue(buyAmountMinor, safeChipsPerBuy, locale, CURRENCY);
   const canStart = buyAmountMajor > 0 && chipsPerBuy > 0 && !submitting;
+  const totalPlayerCount = playerNames.length + accountPlayers.length;
 
   async function handleStart() {
     if (!canStart) return;
@@ -47,8 +76,11 @@ export function NewGamePage() {
       chipsPerBuy,
       currencyCode: CURRENCY,
       isPrivate,
+      groupId,
       playerNames,
+      accountPlayers,
     });
+    if (groupId !== null) await setLastUsedGroupId(groupId);
     void navigate(`/game/${gameId}`);
   }
 
@@ -127,11 +159,32 @@ export function NewGamePage() {
         >
           <span className="text-body font-semibold">{t('newGame.players')}</span>
           <span className="text-body-sm text-fg-tertiary">
-            {playerNames.length > 0
-              ? t('home.playerCount', { count: playerNames.length })
+            {totalPlayerCount > 0
+              ? t('home.playerCount', { count: totalPlayerCount })
               : t('newGame.noPlayersYet')}
           </span>
         </button>
+
+        {myGroups.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="text-body-sm font-semibold text-fg-tertiary">{t('newGame.groupLabel')}</span>
+            <div className="flex flex-wrap gap-2">
+              <SelectionChip
+                label={t('newGame.noGroup')}
+                selected={groupId === null}
+                onClick={() => setGroupId(null)}
+              />
+              {myGroups.map((group) => (
+                <SelectionChip
+                  key={group.id}
+                  label={group.name}
+                  selected={groupId === group.id}
+                  onClick={() => setGroupId(group.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
@@ -156,8 +209,12 @@ export function NewGamePage() {
       <AddPlayersSheet
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
-        onCommit={(names) => setPlayerNames((prev) => [...prev, ...names])}
+        onCommit={(names, picks) => {
+          setPlayerNames((prev) => [...prev, ...names]);
+          setAccountPlayers((prev) => [...prev, ...picks]);
+        }}
         recentNames={recentNames}
+        groupMembers={groupMembers}
       />
     </AppShell>
   );

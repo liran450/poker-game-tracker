@@ -19,6 +19,8 @@ import {
   recomputeTransfers,
 } from '@core/offline/gameActions';
 import { useGame } from '@core/offline/useGame';
+import { useAccountNames } from '../../hooks/useAccountNames';
+import { useSession } from '../../hooks/useSession';
 import { formatFinalSettlementText, representativeShare } from './shareText';
 import { SettlementScreen } from './SettlementScreen';
 import type { TransferPartyOption } from './TransferPartyPicker';
@@ -30,7 +32,12 @@ export interface SettlementRouteProps {
 /** Wires the settlement/edit-mode screen to live game state and gameActions. */
 export function SettlementRoute({ gameId }: SettlementRouteProps) {
   const { i18n } = useTranslation();
+  const session = useSession();
   const game = useGame(gameId);
+  const accountIds = game
+    ? [...new Set([...game.state.players.values()].flatMap((p) => (p.userId !== null ? [p.userId] : [])))]
+    : [];
+  const accountNames = useAccountNames(accountIds, session.cloudConfigured);
 
   if (!game?.record) return null;
   const { record, state } = game;
@@ -42,7 +49,11 @@ export function SettlementRoute({ gameId }: SettlementRouteProps) {
 
   const activePlayers = [...state.players.values()].filter((p) => !p.isRemoved);
   const displayNames = dedupeDisplayNames(
-    activePlayers.map((p) => ({ id: p.id, name: renderPlayerName(p), order: p.seatOrder })),
+    activePlayers.map((p) => ({
+      id: p.id,
+      name: renderPlayerName(p, (userId) => accountNames.get(userId)),
+      order: p.seatOrder,
+    })),
   );
 
   const settlementPlayers: SettlementPlayerInput[] = activePlayers.map((p) => ({

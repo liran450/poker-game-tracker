@@ -7,6 +7,7 @@ import { db } from '@core/offline/db';
 import { fold } from '@core/events';
 import { loadGameEvents } from '@core/offline/outbox';
 import { NewGamePage } from './NewGamePage';
+import { SessionProvider } from '../../hooks/useSession';
 
 function GameRouteProbe() {
   const { gameId } = useParams();
@@ -15,12 +16,14 @@ function GameRouteProbe() {
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/new']}>
-      <Routes>
-        <Route path="/new" element={<NewGamePage />} />
-        <Route path="/game/:gameId" element={<GameRouteProbe />} />
-      </Routes>
-    </MemoryRouter>,
+    <SessionProvider>
+      <MemoryRouter initialEntries={['/new']}>
+        <Routes>
+          <Route path="/new" element={<NewGamePage />} />
+          <Route path="/game/:gameId" element={<GameRouteProbe />} />
+        </Routes>
+      </MemoryRouter>
+    </SessionProvider>,
   );
 }
 

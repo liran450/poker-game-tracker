@@ -18,14 +18,23 @@ import { getActorId } from './localIdentity';
 import { appendEvent, appendUndoEvent, loadGameEvents } from './outbox';
 import { recordPlayedNames } from './recentPlayers';
 
+/** A group member added by account rather than by free-text guest name (docs/build/PLAN.md step 14). */
+export interface AccountPlayerPick {
+  readonly userId: string;
+  readonly displayName: string;
+}
+
 export interface NewGameInput {
   readonly name: string;
   readonly buyAmountMinor: Minor;
   readonly chipsPerBuy: number;
   readonly currencyCode: string;
   readonly isPrivate: boolean;
+  readonly groupId?: string | null;
   /** Guest names, in the order they should be seated. */
   readonly playerNames: readonly string[];
+  /** Group members picked by account, seated after every guest name above. */
+  readonly accountPlayers?: readonly AccountPlayerPick[];
 }
 
 export interface CreatedGame {
@@ -47,6 +56,25 @@ async function appendPlayerAdded(
     undoneBy: null,
     type: 'player_added',
     payload: { userId: null, guestName: name.trim(), nickname: null, seatOrder },
+  });
+}
+
+/** The account-linked counterpart above — a group member added by id, not by free-text name. */
+async function appendAccountPlayerAdded(
+  gameId: string,
+  actorId: string,
+  pick: AccountPlayerPick,
+  seatOrder: number,
+): Promise<void> {
+  await appendEvent({
+    clientEventId: generateClientEventId(),
+    gameId,
+    playerId: crypto.randomUUID(),
+    actorId,
+    clientCreatedAt: nextTimestamp(),
+    undoneBy: null,
+    type: 'player_added',
+    payload: { userId: pick.userId, guestName: null, nickname: null, seatOrder },
   });
 }
 
@@ -73,12 +101,17 @@ export async function createGame(input: NewGameInput): Promise<CreatedGame> {
     chipsPerBuy: input.chipsPerBuy,
     currencyCode: input.currencyCode,
     isPrivate: input.isPrivate,
+    groupId: input.groupId ?? null,
   };
   await db.games.put(record);
 
   let seatOrder = 0;
   for (const name of input.playerNames) {
     await appendPlayerAdded(gameId, actorId, name, seatOrder);
+    seatOrder += 1;
+  }
+  for (const pick of input.accountPlayers ?? []) {
+    await appendAccountPlayerAdded(gameId, actorId, pick, seatOrder);
     seatOrder += 1;
   }
 
@@ -112,8 +145,12 @@ export async function createGame(input: NewGameInput): Promise<CreatedGame> {
 }
 
 /** Seats more players in an already-active game — late joiners (03-data-model.md#game_players). */
-export async function addPlayersToGame(gameId: string, names: readonly string[]): Promise<void> {
-  if (names.length === 0) return;
+export async function addPlayersToGame(
+  gameId: string,
+  names: readonly string[],
+  accountPlayers: readonly AccountPlayerPick[] = [],
+): Promise<void> {
+  if (names.length === 0 && accountPlayers.length === 0) return;
 
   const actorId = await getActorId();
   const state = fold(await loadGameEvents(gameId));
@@ -124,8 +161,12 @@ export async function addPlayersToGame(gameId: string, names: readonly string[])
     await appendPlayerAdded(gameId, actorId, name, nextSeatOrder);
     nextSeatOrder += 1;
   }
+  for (const pick of accountPlayers) {
+    await appendAccountPlayerAdded(gameId, actorId, pick, nextSeatOrder);
+    nextSeatOrder += 1;
+  }
 
-  await recordPlayedNames(names);
+  if (names.length > 0) await recordPlayedNames(names);
 }
 
 /** Soft-delete: kept in the log, excluded from math and the roster (03-data-model.md#game_players). */
