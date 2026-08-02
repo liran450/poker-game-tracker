@@ -1583,6 +1583,29 @@ being fixed. Use `execute_sql` (or equivalent direct SQL) for this kind of bookk
 correction instead, and reserve `apply_migration` for real DDL that should show up in the repo as a
 migration file.
 
+### `eslint-plugin-react-hooks`'s `set-state-in-effect` rule bans "reset state when a prop changes" as a `useEffect`
+**Step 7, found while fixing the shared-costs empty-state flow · 2026-08-02 · trap**
+
+Writing the obvious `useEffect(() => { if (open) setView(...); }, [open])` to reset
+`SharedCostsSheet`'s internal view when the sheet re-opens fails lint with `react-hooks/set-state-in-effect`
+("Calling setState synchronously within an effect can trigger cascading renders") — this ships with the
+current `eslint-plugin-react-hooks`, not a local rule. The fix is the pattern react.dev's own "You Might
+Not Need An Effect" names for exactly this — "adjusting state when a prop changes" — computed **during
+render**, not in an effect: track the previous value of the prop in its own `useState`, and if it
+differs from the current render's value, call `setState` right there in the render body (React
+re-renders immediately with the update before committing, no extra effect pass):
+```ts
+const [wasOpen, setWasOpen] = useState(open);
+if (open !== wasOpen) {
+  setWasOpen(open);
+  if (open) setView(/* recomputed from other props */);
+}
+```
+Pre-existing effects elsewhere in the codebase that reset state on open (e.g.
+`InviteMemberSheet`'s) don't trip this rule — they're wrapped in an inner `void (async () => {...})()`,
+which the rule's static analysis doesn't see through. Don't copy that shape for a new *synchronous*
+reset; it happens to dodge the rule rather than being the recommended pattern.
+
 **Going forward: any future migration applied through this tool needs an immediate follow-up**
 `update ... set version = '<filename's own version>' where name = '<filename stem>'`, via
 `execute_sql`, right after the `apply_migration` call — otherwise this exact drift reappears on the

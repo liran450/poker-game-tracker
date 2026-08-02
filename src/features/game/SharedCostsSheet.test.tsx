@@ -10,8 +10,52 @@ const players = [
 ];
 
 describe('<SharedCostsSheet>', () => {
-  it('shows the empty state with no costs', () => {
+  it('opens straight into the add form when there are no costs yet', () => {
     render(
+      <SharedCostsSheet
+        open
+        onClose={vi.fn()}
+        costs={[]}
+        players={players}
+        currency="ILS"
+        locale="he"
+        onAdd={vi.fn()}
+        onUpdate={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText('sharedCosts.labelField')).toBeInTheDocument();
+    expect(screen.queryByText('sharedCosts.empty')).toBeNull();
+    expect(screen.queryByText('sharedCosts.add')).toBeNull();
+  });
+
+  it('still shows the empty-list message if costs empties out while already open', () => {
+    const costs: SharedCostState[] = [
+      {
+        id: 'c1',
+        label: 'פיצה',
+        amountMinor: minor(12000),
+        paidByPlayerId: null,
+        splitMode: 'equal',
+        shares: new Map([['mor', minor(12000)]]),
+      },
+    ];
+    const { rerender } = render(
+      <SharedCostsSheet
+        open
+        onClose={vi.fn()}
+        costs={costs}
+        players={players}
+        currency="ILS"
+        locale="he"
+        onAdd={vi.fn()}
+        onUpdate={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('פיצה')).toBeInTheDocument();
+
+    rerender(
       <SharedCostsSheet
         open
         onClose={vi.fn()}
@@ -74,7 +118,6 @@ describe('<SharedCostsSheet>', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('sharedCosts.add'));
     fireEvent.change(screen.getByLabelText('sharedCosts.labelField'), { target: { value: 'פיצה' } });
     fireEvent.change(screen.getByLabelText('money.buyAmount'), { target: { value: '120' } });
     fireEvent.click(screen.getByText('ui.save'));
@@ -104,7 +147,6 @@ describe('<SharedCostsSheet>', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('sharedCosts.add'));
     fireEvent.change(screen.getByLabelText('sharedCosts.labelField'), { target: { value: 'פיצה' } });
     fireEvent.change(screen.getByLabelText('money.buyAmount'), { target: { value: '120' } });
     fireEvent.click(screen.getByText('sharedCosts.customSplit'));

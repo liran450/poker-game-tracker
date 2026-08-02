@@ -38,6 +38,13 @@ type View = { mode: 'list' } | { mode: 'form'; editingCostId: string | null };
  * split's shares are computed and stored once, at save time
  * (`splitWithResidue`) — not recomputed later against a changing roster,
  * matching the event log's append-only contract.
+ *
+ * Opening with an empty list skips straight to the add form instead of
+ * showing a list screen whose only content is an empty-state message and an
+ * "add" button — there's exactly one possible action, so the middle screen
+ * is pure friction. The list still exists and is shown once at least one
+ * shared cost exists, where it earns its place (reviewing/editing what's
+ * already there).
  */
 export function SharedCostsSheet({
   open,
@@ -51,7 +58,20 @@ export function SharedCostsSheet({
   onRemove,
 }: SharedCostsSheetProps) {
   const { t } = useTranslation();
-  const [view, setView] = useState<View>({ mode: 'list' });
+  const [view, setView] = useState<View>(() =>
+    costs.length === 0 ? { mode: 'form', editingCostId: null } : { mode: 'list' },
+  );
+
+  // "Adjusting state when a prop changes", computed during render rather than
+  // in an effect (react.dev/learn/you-might-not-need-an-effect): recompute
+  // only on the open transition, not on every `costs` change while already
+  // open — a mid-session count crossing zero shouldn't yank the user out of
+  // whatever they're looking at (see the dedicated test for that case).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setView(costs.length === 0 ? { mode: 'form', editingCostId: null } : { mode: 'list' });
+  }
 
   function handleClose(): void {
     setView({ mode: 'list' });

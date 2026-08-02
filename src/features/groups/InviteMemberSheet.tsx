@@ -27,6 +27,10 @@ export interface InviteMemberSheetProps {
  * pending invites listed below with a revoke. Membership only ever appears once the invitee
  * accepts on their own side (see the home screen's pending-invite card) — this sheet only ever
  * sends the invite.
+ *
+ * A search matching the signed-in user themselves is treated as a miss, same as an unknown
+ * username — there's no legitimate reason to invite yourself, and surfacing "already a member"
+ * for your own username read as a confusing dead end rather than an explanation.
  */
 export function InviteMemberSheet({ open, onClose, groupId, invitedBy, memberUserIds }: InviteMemberSheetProps) {
   const { t } = useTranslation();
@@ -65,7 +69,8 @@ export function InviteMemberSheet({ open, onClose, groupId, invitedBy, memberUse
     setError(null);
     setBusy(true);
     try {
-      setResult(await findUserByUsername(trimmed));
+      const found = await findUserByUsername(trimmed);
+      setResult(found && found.id !== invitedBy ? found : null);
       setSearched(true);
     } catch {
       setError(t('groups.genericError'));
