@@ -1606,6 +1606,37 @@ Pre-existing effects elsewhere in the codebase that reset state on open (e.g.
 which the rule's static analysis doesn't see through. Don't copy that shape for a new *synchronous*
 reset; it happens to dodge the rule rather than being the recommended pattern.
 
+### The not-found flash on sign-in survived the first fix — `session.loading` isn't the right gate
+**Step 12/17, found by the repository owner testing Google sign-in on a real device · 2026-08-02 · trap**
+
+The first attempt at hiding the not-found flash (see the entry above, "Magic-link/OAuth redirect
+built from `window.location.href`...") gated on `useSession`'s `loading` flag: hide routes while
+`hadAuthCallback && session.loading`. That flag can flip to `false` a tick before `supabase-js`
+actually finishes its own `history.replaceState` cleanup of the URL hash — internal ordering this
+codebase doesn't control and shouldn't assume. The gap is short but real: confirmed still flashing
+on a real Google sign-in after the first fix shipped. `replaceState` fires no event (`hashchange`
+specifically does not fire for it), so there's nothing to `await` or subscribe to. Fixed by polling
+`window.location.hash` directly via `requestAnimationFrame` until it no longer matches
+`looksLikeAuthCallback`, with a 4s safety timeout — authoritative because it checks the actual thing
+the bug is about (a stale hash) instead of an indirect signal that happens to usually correlate with
+it. Watch for this shape generally: a loading flag from one system is not proof that a *different*
+system's async side effect (here, another library's own URL cleanup) has completed too.
+
+### Google's OAuth consent screen shows the Supabase project domain, not the app name — no code fix exists
+**Step 12, found by the repository owner setting up Google sign-in · 2026-08-02 · design constraint**
+
+Google's "Sign in to continue to ___" consent screen shows `axsftugpsysoxersudwr.supabase.co`
+(the raw Supabase project domain), not this app's name, however the Google Cloud "OAuth consent
+screen" app name is configured. This is because the actual OAuth redirect URI Google sees is
+Supabase's own callback endpoint (`.../auth/v1/callback`) — Supabase's hosted GoTrue service is the
+real OAuth client, not this app directly — and Google shows the literal domain that will receive the
+token as an anti-phishing measure whenever that domain isn't independently verified as belonging to
+the named app. **The only real fix is Supabase's Custom Domains feature** (map a domain you own to
+the Supabase project, so the callback becomes `https://auth.yourdomain.com/...` and Google shows
+that instead) — which is a **paid, Pro-tier feature**, directly contradicting `CLAUDE.md`'s
+committed free-tier constraint, and would also need a purchased domain. Decided to leave this as-is:
+cosmetic only, and every user of this app already knows it's a homemade tool going through Supabase.
+
 **Going forward: any future migration applied through this tool needs an immediate follow-up**
 `update ... set version = '<filename's own version>' where name = '<filename stem>'`, via
 `execute_sql`, right after the `apply_migration` call — otherwise this exact drift reappears on the
