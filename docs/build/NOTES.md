@@ -1637,6 +1637,26 @@ that instead) — which is a **paid, Pro-tier feature**, directly contradicting 
 committed free-tier constraint, and would also need a purchased domain. Decided to leave this as-is:
 cosmetic only, and every user of this app already knows it's a homemade tool going through Supabase.
 
+### `npm run verify` passing locally does not mean CI's deploy gate passes — `e2e` is separate, and CI runs it
+**Step 17, found by the repository owner noticing failed deploys · 2026-08-02 · trap**
+
+The shared-costs empty-state change (skip straight to the add form instead of a list screen — see
+the `SharedCostsSheet` entries above) shipped across two PRs (#22, #23) with `npm run verify` green
+both times, and both deploys **failed anyway** — `deploy.yml`'s `deploy` job `needs: [verify,
+db-tests]`, and its `verify` job runs `npm run e2e` as its own step, after `npm run verify`.
+`CLAUDE.md` itself says `e2e` is "never part of verify, same as `test:db`" — true, but that only
+describes the local script; it doesn't mean CI skips it. `e2e/full-game.spec.ts` still clicked a
+`"+ הוצאה משותפת"` button that only existed in the old two-screen flow, so every CI run since PR #22
+failed at that step, `deploy` never ran (its `needs:` was unmet), and **the live site stayed on
+whatever PR #21 shipped** for two full merge cycles while the chat conversation kept describing
+fixes as "deployed" — they were merged to `main`, not deployed. Neither PR's author (this session)
+ran `npm run e2e` locally before pushing, only `npm run verify`.
+
+**Going forward:** any change to a flow `e2e/*.spec.ts` drives — even a change that's "just" UX, not
+logic — needs `npm run e2e` run locally before pushing, not just `npm run verify`. And after pushing
+anything meant to reach production, check the actual `deploy` job's conclusion (not just `verify`'s)
+before telling anyone a fix is live — a green `verify` run is necessary but not sufficient.
+
 **Going forward: any future migration applied through this tool needs an immediate follow-up**
 `update ... set version = '<filename's own version>' where name = '<filename stem>'`, via
 `execute_sql`, right after the `apply_migration` call — otherwise this exact drift reappears on the
