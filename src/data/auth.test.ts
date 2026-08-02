@@ -75,18 +75,44 @@ describe('signInWithGoogle', () => {
     );
   });
 
-  it('requests the google provider with a redirect back to the current page', async () => {
+  it('requests the google provider with a redirect to the origin, not the current hash route', async () => {
     const fake = new FakeAuthClient();
     await signInWithGoogle(client(fake));
-    expect(fake.oauthCalls).toEqual([{ provider: 'google', redirectTo: window.location.href }]);
+    expect(fake.oauthCalls).toEqual([
+      { provider: 'google', redirectTo: window.location.origin + window.location.pathname },
+    ]);
+  });
+
+  it('strips an active hash route out of the redirect URL', async () => {
+    const fake = new FakeAuthClient();
+    window.location.hash = '#/account';
+    try {
+      await signInWithGoogle(client(fake));
+      expect(fake.oauthCalls[0]?.redirectTo).not.toContain('#');
+    } finally {
+      window.location.hash = '';
+    }
   });
 });
 
 describe('signInWithMagicLink', () => {
-  it('sends a trimmed email through signInWithOtp', async () => {
+  it('sends a trimmed email through signInWithOtp, redirecting to the origin', async () => {
     const fake = new FakeAuthClient();
     await signInWithMagicLink('  dana@example.com  ', client(fake));
-    expect(fake.otpCalls).toEqual([{ email: 'dana@example.com', redirectTo: window.location.href }]);
+    expect(fake.otpCalls).toEqual([
+      { email: 'dana@example.com', redirectTo: window.location.origin + window.location.pathname },
+    ]);
+  });
+
+  it('strips an active hash route out of the redirect URL', async () => {
+    const fake = new FakeAuthClient();
+    window.location.hash = '#/account';
+    try {
+      await signInWithMagicLink('dana@example.com', client(fake));
+      expect(fake.otpCalls[0]?.redirectTo).not.toContain('#');
+    } finally {
+      window.location.hash = '';
+    }
   });
 });
 

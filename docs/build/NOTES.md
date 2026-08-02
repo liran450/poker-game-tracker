@@ -1587,3 +1587,27 @@ migration file.
 `update ... set version = '<filename's own version>' where name = '<filename stem>'`, via
 `execute_sql`, right after the `apply_migration` call — otherwise this exact drift reappears on the
 very next migration, silently, until something diffs the ledger again.
+
+### Magic-link/OAuth redirect built from `window.location.href` collides with the hash router
+**Step 12, found by the repository owner testing sign-in on a real device · 2026-08-02 · trap**
+
+`signInWithMagicLink`/`signInWithGoogle` (`src/data/auth.ts`) passed `window.location.href` as
+`emailRedirectTo`/`redirectTo`. On this app that value always already contains a `#/...` hash route
+(hash routing — GitHub Pages has no SPA fallback). Supabase appends the session token back onto the
+redirect URL as its own `#access_token=...&refresh_token=...&type=magiclink` fragment — but a URL
+has only one fragment delimiter, so the result was two `#` characters glued together
+(`.../#/account#access_token=...`). `supabase-js`'s URL parser reads everything after the *first*
+`#` as one string and splits it on `&`/`=`; the leading `/account#access_token` became a single
+mangled key, so `access_token` never parsed out. `detectSessionInUrl` silently found nothing, no
+session was ever set, and clicking a real magic-link email just bounced back to the sign-in form —
+invisible until tested against a real device, exactly the gap flagged as outstanding across steps
+12–17's checkpoints.
+
+**Fix:** a new `authRedirectUrl()` helper returns `window.location.origin + window.location.pathname`
+— origin and path only, no hash and no query string — so Supabase's appended token fragment is the
+URL's only `#` and parses correctly. The user lands on the app's root after a successful sign-in
+(supabase-js strips its own hash via `replaceState` once the token is consumed, which the hash
+router then reads as `/`), not back on whatever screen they started from — an accepted, minor UX
+cost, not a bug. `Google` sign-in had the identical bug, fixed the same way, though it wasn't yet
+configured/tested. Regression-tested directly: `auth.test.ts` sets `window.location.hash` before
+calling each sign-in function and asserts the redirect URL passed to the client contains no `#`.
