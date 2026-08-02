@@ -71,9 +71,10 @@ async function playFullGame(page: Page): Promise<void> {
   }
 
   // ---- A shared cost, split equally among everyone ----
+  // Opening "הוצאות משותפות" with no shared costs yet goes straight to the
+  // add form (no intermediate list screen to tap "+" on first).
   await page.getByRole('button', { name: 'אפשרויות משחק' }).click();
   await page.getByRole('button', { name: 'הוצאות משותפות' }).click();
-  await page.getByRole('button', { name: '+ הוצאה משותפת' }).click();
   await page.getByPlaceholder('שם ההוצאה').fill('פיצה');
   await page.getByPlaceholder('סכום').fill('60');
   await page.getByRole('button', { name: 'שמירה' }).click();
