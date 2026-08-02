@@ -71,6 +71,24 @@ describe('<InviteMemberSheet>', () => {
     expect(screen.queryByText('groups.invite.sendInvite')).toBeNull();
   });
 
+  it('treats a search matching yourself as not-found, not "already a member"', async () => {
+    groupsMocks.findUserByUsername.mockResolvedValue({
+      id: 'u1',
+      username: 'liran',
+      displayName: 'לירן',
+      avatarUrl: null,
+    });
+    render(
+      <InviteMemberSheet open onClose={() => {}} groupId="g1" invitedBy="u1" memberUserIds={['u1']} />,
+    );
+
+    await userEvent.type(screen.getByRole('textbox'), 'liran');
+    await userEvent.click(screen.getByText('groups.invite.search'));
+
+    await waitFor(() => expect(screen.getByText('groups.invite.notFound')).toBeDefined());
+    expect(screen.queryByText('groups.invite.alreadyMember')).toBeNull();
+  });
+
   it('lists pending invites with a revoke button', async () => {
     groupsMocks.listPendingInvitesForGroup.mockResolvedValue([
       {

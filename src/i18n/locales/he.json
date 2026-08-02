@@ -26,7 +26,8 @@
     "emailPlaceholder": "you@example.com",
     "sendMagicLink": "שליחת קישור כניסה",
     "magicLinkSent": "קישור כניסה נשלח ל{{email}}. בדקו את תיבת הדואר.",
-    "genericError": "משהו השתבש. נסו שוב."
+    "genericError": "משהו השתבש. נסו שוב.",
+    "signingIn": "מתחברים…"
   },
   "profileSetup": {
     "title": "השלמת פרופיל",
