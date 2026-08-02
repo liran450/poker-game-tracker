@@ -38,6 +38,20 @@ function toAppUser(user: { id: string; email?: string | null } | null | undefine
   return { id: user.id, email: user.email ?? null };
 }
 
+/**
+ * `window.location.href` on this app always already contains a `#/...` hash
+ * route (hash routing — CLAUDE.md, GitHub Pages has no SPA fallback). Handing
+ * that straight to Supabase as the redirect target means the session token
+ * it appends on return lands as a *second* `#` in the URL; only the first `#`
+ * in a URL starts the fragment, so `access_token` ends up merged into the
+ * route path instead of parsing as its own key, and `detectSessionInUrl`
+ * silently finds nothing. Stripping the hash (and any query string) leaves
+ * Supabase's own token fragment as the URL's only `#`, which it can parse.
+ */
+function authRedirectUrl(): string {
+  return window.location.origin + window.location.pathname;
+}
+
 /** `null` when cloud sync isn't configured — offline-first has no step-12 exception, never throws. */
 export async function getCurrentUser(client: SupabaseClient | null = supabase): Promise<AppUser | null> {
   if (!client) return null;
@@ -60,11 +74,11 @@ export function onAuthUserChange(
   return () => subscription.unsubscribe();
 }
 
-/** One tap — redirects back to wherever the user currently is (the hash route survives the round trip). */
+/** One tap — redirects back to the app's origin (see `authRedirectUrl`, not the current hash route). */
 export async function signInWithGoogle(client: SupabaseClient = requireClient()): Promise<void> {
   const { error } = await client.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.href },
+    options: { redirectTo: authRedirectUrl() },
   });
   if (error) throw error;
 }
@@ -75,7 +89,7 @@ export async function signInWithMagicLink(
 ): Promise<void> {
   const { error } = await client.auth.signInWithOtp({
     email: email.trim(),
-    options: { emailRedirectTo: window.location.href },
+    options: { emailRedirectTo: authRedirectUrl() },
   });
   if (error) throw error;
 }
